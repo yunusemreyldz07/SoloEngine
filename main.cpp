@@ -95,6 +95,8 @@ public:
     bool blackCanCastleKingSide;
     bool blackCanCastleQueenSide;
     
+    int whiteKingRow, whiteKingCol;
+    int blackKingRow, blackKingCol;
     // -1 if no en passant available
     int enPassantCol; 
 
@@ -114,6 +116,8 @@ public:
         blackCanCastleQueenSide = true;
         isWhiteTurn = true;
         enPassantCol = -1;
+        whiteKingRow = 7; whiteKingCol = 4;
+        blackKingRow = 0; blackKingCol = 4;
     }
     
     void makeMove(Move& move) {
@@ -206,6 +210,14 @@ public:
         if (move.capturedPiece == -rook && move.toRow == 0 && move.toCol == 0) {
             blackCanCastleQueenSide = false;
         }
+        if (piece == 6) {
+            whiteKingRow = move.toRow;
+            whiteKingCol = move.toCol;
+        }
+        if (piece == -6) {
+            blackKingRow = move.toRow;
+            blackKingCol = move.toCol;
+        }
     }
     
     void unmakeMove(Move& move) {
@@ -241,6 +253,14 @@ public:
         blackCanCastleKingSide = move.prevB_KingSide;
         blackCanCastleQueenSide = move.prevB_QueenSide;
         enPassantCol = move.prevEnPassantCol;
+        if (piece == 6) {
+            whiteKingRow = move.fromRow;
+            whiteKingCol = move.fromCol;
+        }
+        if (piece == -6) {
+            blackKingRow = move.fromRow;
+            blackKingCol = move.fromCol;
+        }
     }
 };
 
@@ -1233,14 +1253,9 @@ int quiescence(Board& board, int alpha, int beta, int ply, vector<uint64_t>& his
         // Reject illegal moves that leave our own king in check.
         bool sideJustMovedWasWhite = !board.isWhiteTurn;
         int kingPiece = sideJustMovedWasWhite ? 6 : -6;
-        int kingRow = -1, kingCol = -1;
-        for (int r = 0; r < 8; r++) {
-            for (int c = 0; c < 8; c++) {
-                if (board.squares[r][c] == kingPiece) { kingRow = r; kingCol = c; break; }
-            }
-            if (kingRow != -1) break;
-        }
-        if (kingRow == -1 || is_square_attacked(board, kingRow, kingCol, board.isWhiteTurn)) {
+        int kingRow = sideJustMovedWasWhite ? board.whiteKingRow : board.blackKingRow;
+        int kingCol = sideJustMovedWasWhite ? board.whiteKingCol : board.blackKingCol;
+        if (is_square_attacked(board, kingRow, kingCol, board.isWhiteTurn)) {
             history.pop_back();
             board.unmakeMove(move);
             continue;
@@ -1280,7 +1295,8 @@ int minimax(Board& board, int depth, int alpha, int beta, int ply, vector<uint64
 
     constexpr int MATE_SCORE = 100000;
     int legalMoveCount = 0;
-    
+    int kingRow = whiteToMove ? board.whiteKingRow : board.blackKingRow;
+    int kingCol = whiteToMove ? board.whiteKingCol : board.blackKingCol;
     if (whiteToMove) {
         int maxEval = -1000000000;
         for (Move& move : possibleMoves) {
@@ -1289,15 +1305,7 @@ int minimax(Board& board, int depth, int alpha, int beta, int ply, vector<uint64
             history.push_back(position_key(board));
 
             int kingPiece = 6;
-            int kingRow = -1, kingCol = -1;
             
-            // Find king position
-            for(int r=0; r<8; r++) {
-                for(int c=0; c<8; c++) {
-                    if(board.squares[r][c] == kingPiece) { kingRow=r; kingCol=c; break; }
-                }
-                if(kingRow != -1) break;
-            }
             
             if (is_square_attacked(board, kingRow, kingCol, false)) {
                 history.pop_back();
@@ -1319,10 +1327,6 @@ int minimax(Board& board, int depth, int alpha, int beta, int ply, vector<uint64
         // No legal moves means Checkmate or Stalemate
         if (legalMoveCount == 0) {
             // Is our king in check
-             int kingPiece = 6;
-             int kingRow = -1, kingCol = -1;
-             for(int r=0; r<8; r++) { for(int c=0; c<8; c++) { if(board.squares[r][c]==kingPiece) {kingRow=r; kingCol=c;} } }
-             
                if(is_square_attacked(board, kingRow, kingCol, false)) return -MATE_SCORE + ply; // checkmated: delay if possible
              else return 0; // Stalemate
         }
@@ -1334,11 +1338,6 @@ int minimax(Board& board, int depth, int alpha, int beta, int ply, vector<uint64
             
             board.makeMove(move);
             history.push_back(position_key(board));
-            
-
-            int kingPiece = -6;
-            int kingRow = -1, kingCol = -1;
-            for(int r=0; r<8; r++) { for(int c=0; c<8; c++) { if(board.squares[r][c]==kingPiece) {kingRow=r; kingCol=c;} } }
             
             // After a black move, the black king must not be attacked by white.
             if (is_square_attacked(board, kingRow, kingCol, true)) {
@@ -1359,10 +1358,6 @@ int minimax(Board& board, int depth, int alpha, int beta, int ply, vector<uint64
         }
         
         if (legalMoveCount == 0) {
-             int kingPiece = -6;
-             int kingRow = -1, kingCol = -1;
-             for(int r=0; r<8; r++) { for(int c=0; c<8; c++) { if(board.squares[r][c]==kingPiece) {kingRow=r; kingCol=c;} } }
-             
              if(is_square_attacked(board, kingRow, kingCol, true)) return MATE_SCORE - ply; // black checkmated: prefer faster
              else return 0;
         }
@@ -1373,7 +1368,8 @@ int minimax(Board& board, int depth, int alpha, int beta, int ply, vector<uint64
 Move getBestMove(Board& board, int depth, const vector<uint64_t>& baseHistory) {
     bool isWhite = board.isWhiteTurn;
     vector<Move> possibleMoves = get_all_moves(board, isWhite);
-    
+    int kingRow = isWhite ? board.whiteKingRow : board.blackKingRow;
+    int kingCol = isWhite ? board.whiteKingCol : board.blackKingCol;
     std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
         return scoreMove(board, a) > scoreMove(board, b);
     });
@@ -1389,10 +1385,7 @@ Move getBestMove(Board& board, int depth, const vector<uint64_t>& baseHistory) {
         board.makeMove(move);
         history.push_back(position_key(board));
         
-        int kingPiece = isWhite ? 6 : -6;
-        int kingRow = -1, kingCol = -1;
-        for(int r=0; r<8; r++) { for(int c=0; c<8; c++) { if(board.squares[r][c]==kingPiece) {kingRow=r; kingCol=c;} } }
-        
+        // Reject illegal moves that leave our own king in check.       
         if (is_square_attacked(board, kingRow, kingCol, !isWhite)) {
             history.pop_back();
             board.unmakeMove(move);
