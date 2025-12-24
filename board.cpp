@@ -692,6 +692,36 @@ uint64_t position_key(const Board& board) {
     return h;
 }
 
+// Transposition Table Definition
+std::unordered_map<uint64_t, TTEntry> transpositionTable;
+
+void storeInTT(uint64_t key, int score, int depth, TTFlag flag, Move bestMove, 
+               std::unordered_map<uint64_t, TTEntry>& table) {
+    TTEntry entry;
+    entry.hash = key;
+    entry.score = score;
+    entry.depth = depth;
+    entry.flag = flag;
+    entry.bestMove = bestMove;
+    table[key] = entry;  // Insert or update the entry
+}
+
+TTEntry* probeTranspositionTable(uint64_t key, std::unordered_map<uint64_t, TTEntry>& table) {
+    auto it = table.find(key);
+    if (it != table.end() && it->second.hash == key) {
+        return &it->second;  // Found, return pointer
+    }
+    return nullptr;  // Not found
+}
+
+Move isInTranspositionTable(uint64_t key, const std::unordered_map<uint64_t, TTEntry>& table) {
+    auto it = table.find(key);
+    if (it != table.end()) {
+        return it->second.bestMove;
+    }
+    return Move();
+}
+
 bool is_threefold_repetition(const std::vector<uint64_t>& history) {
     if (history.empty()) return false;
     uint64_t current = history.back();

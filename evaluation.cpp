@@ -4,17 +4,6 @@
 
 constexpr int PIECE_VALUES[] = {0, 100, 350, 350, 525, 1000, 20000};
 
-constexpr int SquareColor[8][8] = {
-{0, 1, 0, 1, 0, 1, 0, 1}, // First row
-{1, 0, 1, 0, 1, 0, 1, 0}, // Second row
-{0, 1, 0, 1, 0, 1, 0, 1}, // Third row
-{1, 0, 1, 0, 1, 0, 1, 0}, // Fourth row
-{0, 1, 0, 1, 0, 1, 0, 1}, // Fifth row
-{1, 0, 1, 0, 1, 0, 1, 0}, // Sixth row
-{0, 1, 0, 1, 0, 1, 0, 1}, // Seventh row
-{1, 0, 1, 0, 1, 0, 1, 0}  // Eighth row (Actually first row for white)
-};
-
 constexpr int pawn_pst[8][8] = {
     {0,  0,  0,  0,  0,  0,  0,  0},
     {50, 50, 50, 50, 50, 50, 50, 50},

@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 
 // Piece constants
 // Convention: empty = 0, white pieces are positive, black pieces are negative.
@@ -97,5 +98,28 @@ const Zobrist& zobrist();
 int piece_to_zobrist_index(int piece);
 uint64_t position_key(const Board& board);
 bool is_threefold_repetition(const std::vector<uint64_t>& history);
+
+enum TTFlag {
+    EXACT,      // Exact score
+    ALPHA,      // Upper bound (fail-low)
+    BETA        // Lower bound (fail-high)
+};
+/*
+By the way, the concept of these flags is to indicate the type of score stored in the transposition table entry.
+EXACT means the score is precise, ALPHA indicates the score is an upper bound (the true score is less than or equal to this), and BETA indicates the score is a lower bound (the true score is greater than or equal to this).
+It is like an exam. Alpha is when you know you did at most 70 points (you could have done less), Beta is when you know you did at least 70 points (you could have done more), and Exact is when you know you did exactly 70 points.
+*/
+
+struct TTEntry {
+    uint64_t hash; // Position hash key
+    int depth; // Search depth at which this entry was stored
+    int score; // Evaluation score
+    TTFlag flag; // Type of score
+    Move bestMove; // Best move found
+};
+TTEntry* probeTranspositionTable(uint64_t key, std::unordered_map<uint64_t, TTEntry>& table);
+void storeInTT(uint64_t key, int score, int depth, TTFlag flag, Move bestMove, std::unordered_map<uint64_t, TTEntry>& table);
+extern std::unordered_map<uint64_t, TTEntry> transpositionTable;
+Move isInTranspositionTable(uint64_t key, const std::unordered_map<uint64_t, Move>& table);
 
 #endif

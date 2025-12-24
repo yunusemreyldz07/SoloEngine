@@ -47,7 +47,7 @@ int main() {
         }
         
         else if (line.substr(0, 2) == "go") {
-            int depth = 4;
+            int depth = 6;
             {
                 std::stringstream ss(line);
                 std::string token;
@@ -59,7 +59,10 @@ int main() {
                     }
                 }
             }
-
+            // Before every move
+            if (transpositionTable.size() > 10000000) {  // 10 million entries
+                transpositionTable.clear();  // Clear
+            }
             Move best = getBestMove(board, depth, gameHistory);
             
             std::cout << "bestmove " << columns[best.fromCol] << (8 - best.fromRow) 

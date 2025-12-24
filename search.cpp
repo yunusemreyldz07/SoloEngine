@@ -1,5 +1,6 @@
 #include "search.h"
 #include "evaluation.h"
+#include "board.h"
 #include <algorithm>
 #include <limits>
 #include <cstdlib>
@@ -90,6 +91,20 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     if (depth == 0) {
         return quiescence(board, alpha, beta, ply, history);
     }
+    uint64_t currentHash = position_key(board);
+
+    TTEntry* ttEntry = probeTranspositionTable(currentHash, transpositionTable);
+    if (ttEntry != nullptr && ttEntry->depth >= depth) {
+        if (ttEntry->flag == EXACT) {
+            return ttEntry->score;  // Exact score
+        }
+        if (ttEntry->flag == ALPHA && ttEntry->score <= alpha) {
+            return alpha;
+        }
+        if (ttEntry->flag == BETA && ttEntry->score >= beta) {
+            return beta;
+        }
+    }
 
     bool whiteToMove = board.isWhiteTurn;
     std::vector<Move> possibleMoves = get_all_moves(board, whiteToMove);
@@ -99,8 +114,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     });
 
     constexpr int MATE_SCORE = 100000;
+    const int alphaOrig = alpha;
     int legalMoveCount = 0;
     int maxEval = std::numeric_limits<int>::min() / 2;
+    Move bestMove{};
 
     for (Move& move : possibleMoves) { // Moves that leave king in check are skipped
         board.makeMove(move);
@@ -119,7 +136,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         history.pop_back();
         board.unmakeMove(move);
 
-        maxEval = std::max(maxEval, eval);
+        if (eval > maxEval) {
+            maxEval = eval;
+            bestMove = move;
+        }
         alpha = std::max(alpha, eval);
         if (beta <= alpha) break; // beta cutoff
     }
@@ -133,6 +153,17 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             return 0;
         }
     }
+    TTFlag flag;
+    if (maxEval <= alphaOrig) {
+        flag = ALPHA;  // Fail-low
+    } else if (maxEval >= beta) {
+        flag = BETA;   // Fail-high
+    } else {
+        flag = EXACT;  // PV node
+    }
+    
+    storeInTT(currentHash, maxEval, depth, flag, bestMove, transpositionTable);
+    
     return maxEval;
 }
 
