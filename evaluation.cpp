@@ -2,9 +2,20 @@
 #include <cmath>
 #include "board.h"
 
-const int PIECE_VALUES[] = {0, 100, 350, 350, 525, 1000, 20000};
+constexpr int PIECE_VALUES[] = {0, 100, 350, 350, 525, 1000, 20000};
 
-const int pawn_pst[8][8] = {
+constexpr int SquareColor[8][8] = {
+{0, 1, 0, 1, 0, 1, 0, 1}, // First row
+{1, 0, 1, 0, 1, 0, 1, 0}, // Second row
+{0, 1, 0, 1, 0, 1, 0, 1}, // Third row
+{1, 0, 1, 0, 1, 0, 1, 0}, // Fourth row
+{0, 1, 0, 1, 0, 1, 0, 1}, // Fifth row
+{1, 0, 1, 0, 1, 0, 1, 0}, // Sixth row
+{0, 1, 0, 1, 0, 1, 0, 1}, // Seventh row
+{1, 0, 1, 0, 1, 0, 1, 0}  // Eighth row (Actually first row for white)
+};
+
+constexpr int pawn_pst[8][8] = {
     {0,  0,  0,  0,  0,  0,  0,  0},
     {50, 50, 50, 50, 50, 50, 50, 50},
     {10, 10, 20, 30, 30, 20, 10, 10},
@@ -15,7 +26,7 @@ const int pawn_pst[8][8] = {
     {0,  0,  0,  0,  0,  0,  0,  0}
 };
 
-const int knight_pst[8][8] = {
+constexpr int knight_pst[8][8] = {
     {-50,-40,-30,-30,-30,-30,-40,-50},
     {-40,-20,  0,  0,  0,  0,-20,-40},
     {-30,  0, 10, 15, 15, 10,  0,-30},
@@ -26,7 +37,7 @@ const int knight_pst[8][8] = {
     {-50,-40,-30,-30,-30,-30,-40,-50}
 };
 
-const int bishop_pst[8][8] = {
+constexpr int bishop_pst[8][8] = {
     {-20,-10,-10,-10,-10,-10,-10,-20},
     {-10,  0,  0,  0,  0,  0,  0,-10},
     {-10,  0,  5, 10, 10,  5,  0,-10},
@@ -37,7 +48,7 @@ const int bishop_pst[8][8] = {
     {-20,-10,-10,-10,-10,-10,-10,-20}
 };
 
-const int rook_pst[8][8] = {
+constexpr int rook_pst[8][8] = {
     {0,  0,  0,  0,  0,  0,  0,  0},
     {5, 10, 10, 10, 10, 10, 10,  5},
     {-5, 0, 0, 0, 0, 0, 0, -5},
@@ -48,7 +59,7 @@ const int rook_pst[8][8] = {
     {0,  0,  0,  5,  5,  0,  0,  0}
 };
 
-const int queen_pst[8][8] = {
+constexpr int queen_pst[8][8] = {
     {-20,-10,-10, -5, -5,-10,-10,-20},
     {-10,  0,  0,  0,  0,  0,  0,-10},
     {-10,  0,  5,  5,  5,  5,  0,-10},
@@ -59,7 +70,7 @@ const int queen_pst[8][8] = {
     {-20,-10,-10, -5, -5,-10,-10,-20}
 };
 
-const int mg_king_pst[8][8] = {
+constexpr int mg_king_pst[8][8] = {
     {-30,-40,-40,-50,-50,-40,-40,-30},
     {-30,-40,-40,-50,-50,-40,-40,-30},
     {-30,-40,-40,-50,-50,-40,-40,-30},
@@ -70,7 +81,7 @@ const int mg_king_pst[8][8] = {
     {20, 30, 10,  0,  0, 10, 30, 20}
 };
 
-const int eg_king_pst[8][8] = {
+constexpr int eg_king_pst[8][8] = {
     {-50,-40,-30,-20,-20,-30,-40,-50},
     {-30,-20,-10,  0,  0,-10,-20,-30},
     {-30,-10, 20, 30, 30, 20,-10,-30},
@@ -137,6 +148,10 @@ bool is_endgame(const Board& board) {
 int evaulate_board(const Board& board) {
     int score = 0;
     const bool endgame = is_endgame(board);
+    int whitesBlackBishop = 0;
+    int whitesWhiteBishop = 0;
+    int blacksBlackBishop = 0;
+    int blacksWhiteBishop = 0;
 
     for (int r = 0; r < 8; r++) {
         for (int c = 0; c < 8; c++) {
@@ -158,8 +173,20 @@ int evaulate_board(const Board& board) {
                     score += (p > 0) ? knight_pst[r][c] : -knight_pst[pr][c];
                     break;
                 case bishop:
-                    score += (p > 0) ? bishop_pst[r][c] : -bishop_pst[pr][c];
+                {
+                    bool isLightSquare = ((r + c) % 2 == 0) ? true : false; 
+                    if (p > 0) {
+                        if (isLightSquare) whitesWhiteBishop++;
+                        else whitesBlackBishop++;
+                        score += bishop_pst[r][c];
+                    } 
+                    else {
+                        if (isLightSquare) blacksWhiteBishop++;
+                        else blacksBlackBishop++;
+                        score -= bishop_pst[pr][c];
+                    }
                     break;
+                }
                 case rook:
                     score += (p > 0) ? rook_pst[r][c] : -rook_pst[pr][c];
                     break;
@@ -174,6 +201,12 @@ int evaulate_board(const Board& board) {
                     break;
             }
         }
+    }
+    if (whitesWhiteBishop >= 1 && whitesBlackBishop >= 1) {
+        score += 60 ? is_endgame(board) : 30;
+    }
+    if (blacksWhiteBishop >= 1 && blacksBlackBishop >= 1) {
+        score -= 60 ? is_endgame(board) : 30;
     }
 
     return score;

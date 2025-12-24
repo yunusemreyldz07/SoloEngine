@@ -136,8 +136,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     return maxEval;
 }
 
-
-Move getBestMove(Board& board, int depth, const std::vector<uint64_t>& baseHistory) {
+// Iterative deepening is being added right now
+Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHistory) {
     bool isWhite = board.isWhiteTurn;
     std::vector<Move> possibleMoves = get_all_moves(board, isWhite);
     int kingRow = isWhite ? board.whiteKingRow : board.blackKingRow;
@@ -147,33 +147,55 @@ Move getBestMove(Board& board, int depth, const std::vector<uint64_t>& baseHisto
     });
     
     Move bestMove;
-    int bestValue = isWhite ? std::numeric_limits<int>::min() / 2 : std::numeric_limits<int>::max() / 2;
     if(!possibleMoves.empty()) bestMove = possibleMoves[0]; 
 
     std::vector<uint64_t> history = baseHistory;
     if (history.empty()) history.push_back(position_key(board));
 
-    for (Move move : possibleMoves) {
-        board.makeMove(move);
-        history.push_back(position_key(board));
+    Move overallBestMove;
+    
+    for (int depth = 1; depth <= maxDepth; depth++) {
+        int bestValue = std::numeric_limits<int>::min() / 2; 
+        int alpha = -2000000000;
+        int beta = 2000000000;
+        // (PV move ordering)
+        if (depth > 1 && (overallBestMove.fromRow != 0 || overallBestMove.fromCol != 0 || 
+                          overallBestMove.toRow != 0 || overallBestMove.toCol != 0)) {
+            std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
+                bool aIsPV = (a.fromRow == overallBestMove.fromRow && a.fromCol == overallBestMove.fromCol && a.toRow == overallBestMove.toRow && a.toCol == overallBestMove.toCol);
+                bool bIsPV = (b.fromRow == overallBestMove.fromRow && b.fromCol == overallBestMove.fromCol && b.toRow == overallBestMove.toRow && b.toCol == overallBestMove.toCol);
+                if (aIsPV) return true;
+                if (bIsPV) return false;
+                return scoreMove(board, a) > scoreMove(board, b);
+            });
+        }
+        for (Move move : possibleMoves) {
+            
+            board.makeMove(move);
+            history.push_back(position_key(board));
 
-        int newKingRow = isWhite ? board.whiteKingRow : board.blackKingRow;
-        int newKingCol = isWhite ? board.whiteKingCol : board.blackKingCol;
-        if (is_square_attacked(board, newKingRow, newKingCol, !isWhite)) {
+            int newKingRow = isWhite ? board.whiteKingRow : board.blackKingRow;
+            int newKingCol = isWhite ? board.whiteKingCol : board.blackKingCol;
+            if (is_square_attacked(board, newKingRow, newKingCol, !isWhite)) {
+                history.pop_back();
+                board.unmakeMove(move);
+                continue;
+            }
+
+            int val = -negamax(board, depth - 1, -beta, -alpha, 1, history);
             history.pop_back();
             board.unmakeMove(move);
-            continue;
+            
+            if (val > bestValue) {
+            bestValue = val;
+            overallBestMove = move;
+            if (bestValue > alpha) {
+                alpha = bestValue;
+            }
+            std::cout << "info score cp " << bestValue << " depth " << depth << std::endl;
+            }
         }
-
-        int val = -negamax(board, depth - 1, -2000000000, 2000000000, 1, history);
-        history.pop_back();
-        board.unmakeMove(move);
-        
-        if (val > bestValue) {
-        bestValue = val;
-        bestMove = move;
-        std::cout << "info score cp " << bestValue << " depth " << depth << std::endl;
-        }
+        bestMove = overallBestMove;
     }
     return bestMove;
 }
