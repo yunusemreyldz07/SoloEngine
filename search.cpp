@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <limits>
 #include <cstdlib>
-
+#include <iostream>
 int scoreMove(const Board& board, const Move& move) {
     if (move.capturedPiece != 0 || move.isEnPassant) {
         int victimPiece = move.isEnPassant ? pawn : std::abs(move.capturedPiece);
@@ -31,15 +31,19 @@ int quiescence(Board& board, int alpha, int beta, int ply, std::vector<uint64_t>
         return repetition_draw_score(board);
     }
 
-    bool whiteToMove = board.isWhiteTurn;
+    // Stand-pat evaluation: current position score from current player's perspective
     int standPat = evaulate_board(board);
+    
+    // In negamax, we need to negate the evaluation if it's black's turn
+    if (!board.isWhiteTurn) {
+        standPat = -standPat;
+    }
 
-    if (whiteToMove) {
-        if (standPat >= beta) return beta;
-        if (standPat > alpha) alpha = standPat;
-    } else {
-        if (standPat <= alpha) return alpha;
-        if (standPat < beta) beta = standPat;
+    if (standPat >= beta) {
+        return beta;
+    }
+    if (standPat > alpha) {
+        alpha = standPat;
     }
 
     std::vector<Move> moves = get_capture_moves(board);
@@ -48,11 +52,10 @@ int quiescence(Board& board, int alpha, int beta, int ply, std::vector<uint64_t>
     });
 
     for (Move& move : moves) {
-
         board.makeMove(move);
         history.push_back(position_key(board));
 
-        // Reject illegal moves that leave our own king in check.
+        // Reject illegal moves that leave our own king in check
         bool sideJustMovedWasWhite = !board.isWhiteTurn;
         int kingRow = sideJustMovedWasWhite ? board.whiteKingRow : board.blackKingRow;
         int kingCol = sideJustMovedWasWhite ? board.whiteKingCol : board.blackKingCol;
@@ -62,23 +65,24 @@ int quiescence(Board& board, int alpha, int beta, int ply, std::vector<uint64_t>
             continue;
         }
 
-        int score = quiescence(board, alpha, beta, ply + 1, history);
+        // Negamax: negate the score from opponent's perspective
+        int score = -quiescence(board, -beta, -alpha, ply + 1, history);
         history.pop_back();
         board.unmakeMove(move);
 
-        if (whiteToMove) {
-            if (score > alpha) alpha = score;
-        } else {
-            if (score < beta) beta = score;
+        if (score >= beta) {
+            return beta;
         }
-
-        if (alpha >= beta) break;
+        if (score > alpha) {
+            alpha = score;
+        }
     }
 
-    return whiteToMove ? alpha : beta;
+    return alpha;
 }
 
-int minimax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history) {
+// Replacing minimax with negamax version for simplicity
+int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history) {
     if (is_threefold_repetition(history)) {
         return repetition_draw_score(board);
     }
@@ -96,78 +100,42 @@ int minimax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     constexpr int MATE_SCORE = 100000;
     int legalMoveCount = 0;
+    int maxEval = std::numeric_limits<int>::min() / 2;
 
-    if (whiteToMove) {
-        int maxEval = std::numeric_limits<int>::min() / 2;
-        for (Move& move : possibleMoves) {
-            board.makeMove(move);
-            history.push_back(position_key(board));
+    for (Move& move : possibleMoves) { // Moves that leave king in check are skipped
+        board.makeMove(move);
+        history.push_back(position_key(board));
 
-            int kingRow = board.whiteKingRow;
-            int kingCol = board.whiteKingCol;
-            if (is_square_attacked(board, kingRow, kingCol, false)) {
-                history.pop_back();
-                board.unmakeMove(move);
-                continue;
-            }
-
-            legalMoveCount++;
-            int eval = minimax(board, depth - 1, alpha, beta, ply + 1, history);
+        int kingRow = whiteToMove ? board.whiteKingRow : board.blackKingRow;
+        int kingCol = whiteToMove ? board.whiteKingCol : board.blackKingCol;
+        if (is_square_attacked(board, kingRow, kingCol, !whiteToMove)) {
             history.pop_back();
             board.unmakeMove(move);
-
-            maxEval = std::max(maxEval, eval);
-            alpha = std::max(alpha, eval);
-            if (beta <= alpha) break; // beta cutoff
+            continue;
         }
 
-        if (legalMoveCount == 0) {
-            int kingRow = board.whiteKingRow;
-            int kingCol = board.whiteKingCol;
-            if (is_square_attacked(board, kingRow, kingCol, false)) {
-                return -MATE_SCORE + ply;
-            } else {
-                return 0;
-            }
-        }
-        return maxEval;
+        legalMoveCount++;
+        int eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history);
+        history.pop_back();
+        board.unmakeMove(move);
 
-    } else {
-        int minEval = std::numeric_limits<int>::max() / 2;
-        for (Move& move : possibleMoves) {
-            board.makeMove(move);
-            history.push_back(position_key(board));
-
-            int kingRow = board.blackKingRow;
-            int kingCol = board.blackKingCol;
-            if (is_square_attacked(board, kingRow, kingCol, true)) {
-                history.pop_back();
-                board.unmakeMove(move);
-                continue;
-            }
-
-            legalMoveCount++;
-            int eval = minimax(board, depth - 1, alpha, beta, ply + 1, history);
-            history.pop_back();
-            board.unmakeMove(move);
-
-            minEval = std::min(minEval, eval);
-            beta = std::min(beta, eval);
-            if (beta <= alpha) break; // alpha cutoff
-        }
-
-        if (legalMoveCount == 0) {
-            int kingRow = board.blackKingRow;
-            int kingCol = board.blackKingCol;
-            if (is_square_attacked(board, kingRow, kingCol, true)) {
-                return MATE_SCORE - ply;
-            } else {
-                return 0;
-            }
-        }
-        return minEval;
+        maxEval = std::max(maxEval, eval);
+        alpha = std::max(alpha, eval);
+        if (beta <= alpha) break; // beta cutoff
     }
+
+    if (legalMoveCount == 0) {
+        int kingRow = whiteToMove ? board.whiteKingRow : board.blackKingRow;
+        int kingCol = whiteToMove ? board.whiteKingCol : board.blackKingCol;
+        if (is_square_attacked(board, kingRow, kingCol, !whiteToMove)) {
+            return -MATE_SCORE + ply;
+        } else {
+            return 0;
+        }
+    }
+    return maxEval;
 }
+
 
 Move getBestMove(Board& board, int depth, const std::vector<uint64_t>& baseHistory) {
     bool isWhite = board.isWhiteTurn;
@@ -197,20 +165,14 @@ Move getBestMove(Board& board, int depth, const std::vector<uint64_t>& baseHisto
             continue;
         }
 
-        int val = minimax(board, depth - 1, -2000000000, 2000000000, 1, history);
+        int val = -negamax(board, depth - 1, -2000000000, 2000000000, 1, history);
         history.pop_back();
         board.unmakeMove(move);
         
-        if (isWhite) {
-            if (val > bestValue) {
-                bestValue = val;
-                bestMove = move;
-            }
-        } else {
-            if (val < bestValue) {
-                bestValue = val;
-                bestMove = move;
-            }
+        if (val > bestValue) {
+        bestValue = val;
+        bestMove = move;
+        std::cout << "info score cp " << bestValue << " depth " << depth << std::endl;
         }
     }
     return bestMove;
