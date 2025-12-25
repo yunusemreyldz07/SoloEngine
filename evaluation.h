@@ -17,7 +17,7 @@ extern const int eg_king_pst[8][8];
 
 // Evaluation functions
 bool is_endgame(const Board& board);
-int evaulate_board(const Board& board);
+int evaluate_board(const Board& board);
 int repetition_draw_score(const Board& board);
 
 #endif
