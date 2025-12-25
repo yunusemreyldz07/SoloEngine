@@ -134,7 +134,7 @@ bool is_endgame(const Board& board) {
     return true;
 }
 
-int evaulate_board(const Board& board) {
+int evaluate_board(const Board& board) {
     int score = 0;
     const bool endgame = is_endgame(board);
     int whitesBlackBishop = 0;
@@ -190,24 +190,34 @@ int evaulate_board(const Board& board) {
                     }
                     bool passed = true;
                     int direction = (p > 0) ? -1 : 1;
-                    int startRank = (p > 0) ? r : r;
-                    
-                    // Does it have opposing pawns ahead on adjacent files
-                    for (int checkCol = std::max(0, c-1); checkCol <= std::min(7, c+1); checkCol++) {
-                        for (int rr = startRank; rr >= 0 && rr < 8; rr += direction) {
-                            if (rr == r && checkCol == c) continue;
+
+                    // Opposing pawns ahead on adjacent files block passed-pawn status.
+                    for (int checkCol = std::max(0, c - 1); checkCol <= std::min(7, c + 1); checkCol++) {
+                        for (int rr = r + direction; rr >= 0 && rr < 8; rr += direction) {
                             int checkPiece = board.squares[rr][checkCol];
-                            if (checkPiece == -p) { // Opponent's pawn
+                            if (checkPiece == -p) { // opponent pawn
                                 passed = false;
                                 break;
                             }
                         }
                         if (!passed) break;
                     }
-                    
+
+                    // If any piece blocks the path on this file, dampen the bonus.
+                    bool path_blocked = false;
+                    for (int rr = r + direction; rr >= 0 && rr < 8; rr += direction) {
+                        if (board.squares[rr][c] != 0) {
+                            path_blocked = true;
+                            break;
+                        }
+                    }
+
                     if (passed) {
                         int rank = (p > 0) ? (7 - r) : r;
-                        int bonus = rank * rank * 10; // for example, rank 6 pawn gets 360
+                        int bonus = rank * rank * 8; // softer growth to avoid over-valuing stuck pawns
+                        if (path_blocked) {
+                            bonus /= 4; // heavily discount if it cannot currently advance
+                        }
                         score += (p > 0) ? bonus : -bonus;
                     }
                     break;
@@ -276,18 +286,79 @@ int evaulate_board(const Board& board) {
             }
         }
     }
+
+    // protect the pawns in front of the king
+    if (!endgame) {
+        int wKingFile = board.whiteKingCol;
+        int pawnShield = 0;
+        
+        // count pawns in front of the white king
+        for (int dc = -1; dc <= 1; dc++) {
+            int c = wKingFile + dc;
+            if (c < 0 || c >= 8) continue;
+            
+            // 2nd and 3rd ranks have pawns?
+            if (board.squares[6][c] == pawn) pawnShield += 20; // Right in front
+            else if (board.squares[5][c] == pawn) pawnShield += 10; // One square ahead
+        }
+        
+        score += pawnShield;
+        
+        // Same for black king
+        int bKingFile = board.blackKingCol;
+        int blackPawnShield = 0;
+        for (int dc = -1; dc <= 1; dc++) {
+            int c = bKingFile + dc;
+            if (c < 0 || c >= 8) continue;
+            if (board.squares[1][c] == -pawn) blackPawnShield += 20;
+            else if (board.squares[2][c] == -pawn) blackPawnShield += 10;
+        }
+        
+        score -= blackPawnShield;
+    }
+
     if (whitesWhiteBishop >= 1 && whitesBlackBishop >= 1) {
-        score += 60 ? is_endgame(board) : 30;
+        score += is_endgame(board) ? 60 : 30;
     }
     if (blacksWhiteBishop >= 1 && blacksBlackBishop >= 1) {
-        score -= 60 ? is_endgame(board) : 30;
+        score -= is_endgame(board) ? 60 : 30;
     }
 
     return score;
+
+    // Mobility bonus
+    int whiteMobility = 0;
+    int blackMobility = 0;
+
+    for (int r = 0; r < 8; r++) {
+        for (int c = 0; c < 8; c++) {
+            int p = board.squares[r][c];
+            if (p == 0) continue;
+            
+            int absPiece = abs_int(p);
+            if (absPiece == pawn || absPiece == king) continue; // Skip pawns/king
+            
+            std::vector<Move> moves;
+            switch (absPiece) {
+                case knight: moves = generate_knight_moves(board, r, c); break;
+                case bishop: moves = generate_bishop_moves(board, r, c); break;
+                case rook: moves = generate_rook_moves(board, r, c); break;
+                case queen: moves = generate_queen_moves(board, r, c); break;
+            }
+            
+            if (p > 0) {
+                whiteMobility += moves.size();
+            } else {
+                blackMobility += moves.size();
+            }
+        }
+    }
+
+    score += (whiteMobility - blackMobility) * 3; // every extra move is worth 3 centipawns
 }
 
 int repetition_draw_score(const Board& board) {
-    int standPat = evaulate_board(board);
+    int standPat = evaluate_board(board);
     if (standPat > 0) return standPat / 2;
     return 0;
 }

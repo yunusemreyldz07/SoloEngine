@@ -60,6 +60,7 @@ public:
     int enPassantCol;
 
     Board();
+    void loadFromFEN(const std::string& fen);
     void resetBoard();
     void makeMove(Move& move);
     void unmakeMove(Move& move);
@@ -121,5 +122,6 @@ TTEntry* probeTranspositionTable(uint64_t key, std::unordered_map<uint64_t, TTEn
 void storeInTT(uint64_t key, int score, int depth, TTFlag flag, Move bestMove, std::unordered_map<uint64_t, TTEntry>& table);
 extern std::unordered_map<uint64_t, TTEntry> transpositionTable;
 Move isInTranspositionTable(uint64_t key, const std::unordered_map<uint64_t, Move>& table);
+
 
 #endif

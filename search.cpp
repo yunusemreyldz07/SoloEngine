@@ -58,7 +58,7 @@ int quiescence(Board& board, int alpha, int beta, int ply, std::vector<uint64_t>
     }
 
     // Stand-pat evaluation: current position score from current player's perspective
-    int standPat = evaulate_board(board);
+    int standPat = evaluate_board(board);
     
     // In negamax, we need to negate the evaluation if it's black's turn
     if (!board.isWhiteTurn) {
@@ -78,6 +78,10 @@ int quiescence(Board& board, int alpha, int beta, int ply, std::vector<uint64_t>
     });
 
     for (Move& move : moves) {
+        int victimValue = move.isEnPassant ? 100 : PIECE_VALUES[abs(move.capturedPiece)];
+        if (standPat + victimValue + 200 < alpha) {
+            continue; // not worth calculating
+        }
         board.makeMove(move);
         history.push_back(position_key(board));
 
@@ -157,6 +161,18 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
 
         legalMoveCount++;
+        bool inCheck = is_square_attacked(board, board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow, board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol, !board.isWhiteTurn);
+        if (depth <= 2 && !inCheck && move.capturedPiece == 0) {
+            int eval = evaluate_board(board);
+            if (!board.isWhiteTurn) eval = -eval;
+
+            int margin = (depth == 1) ? 300 : 500;
+            if (eval + margin < alpha) {
+                    history.pop_back();
+                    board.unmakeMove(move);
+                    continue;
+            }
+        }
         int eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history);
         history.pop_back();
         board.unmakeMove(move);
@@ -203,55 +219,71 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 }
 
 int calculateTime(const Board& board, int wtime, int btime, int winc, int binc) {
-
-    // Süre bilgisi yoksa konservatif bir varsayılan kullan
     if (wtime < 0 || btime < 0) {
-        return 2000; // 2 saniye
+        return 2000;
     }
     
-    int baseTime = board.isWhiteTurn ? wtime : btime;   // ms
-    int increment = board.isWhiteTurn ? winc : binc;    // ms
+    int myTime = board.isWhiteTurn ? wtime : btime;
+    int oppTime = board.isWhiteTurn ? btime : wtime;
+    int increment = board.isWhiteTurn ? winc : binc;
 
-    // İki parçalı strateji: (1) increment'in çoğu + (2) kalan süreden küçük pay
-    double incPart = (increment > 0) ? increment * 0.80 : 0.0;
+    int movesToGo = 30; 
+    double timeFactor = 1.0;
+    
 
-    int divisor;
-    if (baseTime > 180000) {          // 3+ dakika
-        divisor = 30;                 // ~%3.3
-    } else if (baseTime > 120000) {   // 2-3 dk
-        divisor = 26;                 // ~%3.8
-    } else if (baseTime > 60000) {    // 1-2 dk
-        divisor = 20;                 // %5
-    } else if (baseTime > 30000) {    // 30-60 sn
-        divisor = 14;                 // ~%7
-    } else if (baseTime > 15000) {    // 15-30 sn
-        divisor = 10;                 // 10%
-    } else if (baseTime > 8000) {     // 8-15 sn
-        divisor = 8;                  // 12.5%
-    } else {                          // <8 sn, acil
-        divisor = 6;                  // ~16%
-    }
-    double posPart = static_cast<double>(baseTime) / divisor;
-
-    int allocatedTime = static_cast<int>(incPart + posPart);
-
-    // Sert üst limitler: kalan sürenin en fazla %20'si, increment varsa en fazla 3x increment
-    int capRemaining = baseTime / 5; // %20
-    int capIncrement = (increment > 0) ? (increment * 3) : capRemaining;
-    int maxTime = std::min(capRemaining, capIncrement);
-
-    // Güvenlik tamponu: asla kalan süreden 800 ms'den fazla marj bırakmadan harcama
-    if (baseTime > 1200) {
-        maxTime = std::min(maxTime, baseTime - 800);
-    } else if (baseTime > 300) {
-        maxTime = std::min(maxTime, baseTime - 200);
+    if (myTime > oppTime * 2) {
+        timeFactor = 1.3;
+        movesToGo = 35;
+    } else if (myTime < oppTime / 2) {
+        timeFactor = 0.7;
+        movesToGo = 25;
     }
 
-    // Alt ve üst sınırlar
-    allocatedTime = std::max(allocatedTime, 400);      // en az 0.4 sn
-    allocatedTime = std::min(allocatedTime, maxTime);  // dinamik üst limit
-    allocatedTime = std::min(allocatedTime, 15000);    // mutlak üst limit 15 sn
+    int pieceCount = 0;
+    for (int r = 0; r < 8; r++) {
+        for (int c = 0; c < 8; c++) {
+            if (board.squares[r][c] != 0) pieceCount++;
+        }
+    }
+    
+    if (pieceCount <= 10) {
+        timeFactor *= 1.2;
+        movesToGo = 20;
+    } else if (pieceCount >= 28) {
+        timeFactor *= 0.8;
+        movesToGo = 40;
+    }
 
+    bool inCheck = is_square_attacked(
+        board,
+        board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow,
+        board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol,
+        !board.isWhiteTurn
+    );
+    if (inCheck) {
+        timeFactor *= 1.15;
+    }
+    
+    
+    double baseTime = static_cast<double>(myTime) / movesToGo;
+    double incBonus = increment * 0.75; 
+    
+    int allocatedTime = static_cast<int>((baseTime + incBonus) * timeFactor);
+    
+    
+    int minTime = std::max(100, increment / 2); 
+    int maxTime = myTime / 5;
+    
+
+    if (myTime < 5000) {
+        maxTime = myTime / 10;
+        minTime = 50;
+    } else if (myTime < 15000) { 
+        maxTime = myTime / 8;
+    }
+    
+    allocatedTime = std::max(minTime, std::min(allocatedTime, maxTime));
+    
     return allocatedTime;
 }
 
@@ -259,8 +291,6 @@ int calculateTime(const Board& board, int wtime, int btime, int winc, int binc) 
 Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHistory, int wtime, int btime, int winc, int binc) {
     bool isWhite = board.isWhiteTurn;
     std::vector<Move> possibleMoves = get_all_moves(board, isWhite);
-    int kingRow = isWhite ? board.whiteKingRow : board.blackKingRow;
-    int kingCol = isWhite ? board.whiteKingCol : board.blackKingCol;
     std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
         return scoreMove(board, a, /*ply*/ 0) > scoreMove(board, b, /*ply*/ 0);
     });
@@ -273,11 +303,15 @@ Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHi
 
     Move overallBestMove;
     auto startTime = std::chrono::steady_clock::now();
-    int allocatedTime = calculateTime(board, wtime, btime, winc, binc);
+    const bool timeLimited = (wtime >= 0 && btime >= 0);
+    int allocatedTime = timeLimited ? calculateTime(board, wtime, btime, winc, binc)
+                                    : std::numeric_limits<int>::max() / 4; // effectively no limit in depth mode
     for (int depth = 1; depth <= maxDepth; depth++) {
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count();
-        if (elapsed > allocatedTime) break;
+        if (timeLimited) {
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count();
+            if (elapsed > allocatedTime) break;
+        }
         int bestValue = std::numeric_limits<int>::min() / 2; 
         int alpha = -2000000000;
         int beta = 2000000000;
@@ -319,19 +353,23 @@ Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHi
             }
 
             // Zaman koruması: tahsis edilen sürenin %120'sini geçerse dur
-            auto nowInner = std::chrono::steady_clock::now();
-            auto elapsedInner = std::chrono::duration_cast<std::chrono::milliseconds>(nowInner - startTime).count();
-            if (elapsedInner > static_cast<long long>(allocatedTime * 1.2)) {
-                break;
+            if (timeLimited) {
+                auto nowInner = std::chrono::steady_clock::now();
+                auto elapsedInner = std::chrono::duration_cast<std::chrono::milliseconds>(nowInner - startTime).count();
+                if (elapsedInner > static_cast<long long>(allocatedTime * 1.2)) {
+                    break;
+                }
             }
         }
         bestMove = overallBestMove;
 
         // Derinlik sonunda da kontrol et: tahsis edilen süreyi aşıyorsak çık
-        auto nowAfterDepth = std::chrono::steady_clock::now();
-        auto elapsedAfterDepth = std::chrono::duration_cast<std::chrono::milliseconds>(nowAfterDepth - startTime).count();
-        if (elapsedAfterDepth > static_cast<long long>(allocatedTime * 1.2)) {
-            break;
+        if (timeLimited) {
+            auto nowAfterDepth = std::chrono::steady_clock::now();
+            auto elapsedAfterDepth = std::chrono::duration_cast<std::chrono::milliseconds>(nowAfterDepth - startTime).count();
+            if (elapsedAfterDepth > static_cast<long long>(allocatedTime * 1.2)) {
+                break;
+            }
         }
     }
     return bestMove;

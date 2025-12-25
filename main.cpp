@@ -20,14 +20,27 @@ int main() {
             std::cout << "uciok" << std::endl;
         }
         
-        // 2. "isready" gelirse
+
         else if (line == "isready") {
             std::cout << "readyok" << std::endl;
         }
         
-        // 3. POZİSYON GÜNCELLEME (Örn: "position startpos moves e2e4 e7e5")
         else if (line.substr(0, 8) == "position") {
-            board.resetBoard(); // Tahtayı sıfırla
+            if (line.find("startpos") != std::string::npos) {
+                board.resetBoard();
+            }
+            else if (line.find("fen") != std::string::npos) {
+                // "position fen rnbqkbnr/... w KQkq - 0 1 moves e2e4"
+                size_t fenStart = line.find("fen") + 4;
+                size_t movesPos = line.find("moves");
+                std::string fenStr;
+                if (movesPos != std::string::npos) {
+                    fenStr = line.substr(fenStart, movesPos - fenStart);
+                } else {
+                    fenStr = line.substr(fenStart);
+                }
+                board.loadFromFEN(fenStr);
+            }
             gameHistory.clear();
             gameHistory.push_back(position_key(board));
             

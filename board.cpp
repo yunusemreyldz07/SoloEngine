@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <sstream>
 
 // Piece encoding (constants declared in board.h)
 
@@ -214,7 +215,74 @@ void Board::unmakeMove(Move& move) {
     }
 }
 
-// Şimdi tüm move generation fonksiyonlarını buraya kopyala
+void Board::loadFromFEN(const std::string& fen) {
+    // clear board
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            squares[i][j] = 0;
+        }
+    }
+    
+    // example fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    std::istringstream ss(fen);
+    std::string position, turn, castling, enPassant;
+    ss >> position >> turn >> castling >> enPassant;
+    
+    // placing pieces
+    int row = 0, col = 0;
+    for (char c : position) {
+        if (c == '/') {
+            row++;
+            col = 0;
+        } else if (c >= '1' && c <= '8') {
+            col += (c - '0'); // empty squares
+        } else {
+            int piece = 0;
+            switch (std::tolower(c)) {
+                case 'p': piece = pawn; break;
+                case 'n': piece = knight; break;
+                case 'b': piece = bishop; break;
+                case 'r': piece = rook; break;
+                case 'q': piece = queen; break;
+                case 'k': piece = king; break;
+            }
+            if (std::isupper(c)) {
+                squares[row][col] = piece; // white
+            } else {
+                squares[row][col] = -piece; // black
+            }
+            
+            // Find king positions
+            if (piece == king) {
+                if (std::isupper(c)) {
+                    whiteKingRow = row;
+                    whiteKingCol = col;
+                } else {
+                    blackKingRow = row;
+                    blackKingCol = col;
+                }
+            }
+            col++;
+        }
+    }
+    
+    // Turn
+    isWhiteTurn = (turn == "w");
+    
+    // Castling rights
+    whiteCanCastleKingSide = (castling.find('K') != std::string::npos);
+    whiteCanCastleQueenSide = (castling.find('Q') != std::string::npos);
+    blackCanCastleKingSide = (castling.find('k') != std::string::npos);
+    blackCanCastleQueenSide = (castling.find('q') != std::string::npos);
+    
+    // En passant
+    if (enPassant != "-") {
+        enPassantCol = enPassant[0] - 'a';
+    } else {
+        enPassantCol = -1;
+    }
+}
+
 std::vector<Move> generate_pawn_moves(const Board& board, int row, int col) {
     std::vector<Move> moves;
     int piece = board.squares[row][col];
@@ -391,7 +459,6 @@ std::vector<Move> generate_king_moves(const Board& board, int row, int col) {
 std::vector<Move> generate_bishop_moves(const Board& board, int row, int col) {
     int piece = board.squares[row][col];
     int color = (piece > 0) ? 1 : -1; // 1 for white, -1 for black
-    int moveCount = 0;
     std::vector<Move> moves;
     for (int d = 0; d < 4; ++d) {
         int r = row + bishop_directions[d][0];
@@ -416,7 +483,6 @@ std::vector<Move> generate_bishop_moves(const Board& board, int row, int col) {
 std::vector<Move> generate_rook_moves(const Board& board, int row, int col) {
     int piece = board.squares[row][col];
     int color = (piece > 0) ? 1 : -1; // 1 for white, -1 for black
-    int moveCount = 0;
     std::vector<Move> moves;
 
     for (int d = 0; d < 4; ++d) {
