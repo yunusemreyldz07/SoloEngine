@@ -7,6 +7,10 @@
 #include <cstdlib>
 #include <iostream>
 
+static std::chrono::steady_clock::time_point gSearchStart;
+static int gTimeLimitMs = std::numeric_limits<int>::max();
+static bool gTimeLimited = false;
+
 static const char columns[] = "abcdefgh";
 
 Move killerMove[2][100];
@@ -75,6 +79,15 @@ static std::string move_to_uci(const Move& m) {
 }
 
 int quiescence(Board& board, int alpha, int beta, int ply, std::vector<uint64_t>& history) {
+    if (gTimeLimited) {
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - gSearchStart).count();
+        if (elapsed >= gTimeLimitMs) {
+            int standPat = evaluate_board(board);
+            if (!board.isWhiteTurn) standPat = -standPat;
+            return standPat;
+        }
+    }
+
     if (is_threefold_repetition(history)) {
         return repetition_draw_score(board);
     }
@@ -135,6 +148,16 @@ int quiescence(Board& board, int alpha, int beta, int ply, std::vector<uint64_t>
 
 // Replacing minimax with negamax version for simplicity
 int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine) {
+    if (gTimeLimited) {
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - gSearchStart).count();
+        if (elapsed >= gTimeLimitMs) {
+            pvLine.clear();
+            int standPat = evaluate_board(board);
+            if (!board.isWhiteTurn) standPat = -standPat;
+            return standPat;
+        }
+    }
+
     if (is_threefold_repetition(history)) {
         return repetition_draw_score(board);
     }
@@ -243,78 +266,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     return maxEval;
 }
 
-int calculateTime(const Board& board, int wtime, int btime, int winc, int binc) {
-    // All times are milliseconds (lichess protocol). Be conservative near flag, allow more when safe.
-    if (wtime < 0 || btime < 0) {
-        return 1500;
-    }
-
-    int myTime = board.isWhiteTurn ? wtime : btime;
-    int oppTime = board.isWhiteTurn ? btime : wtime;
-    int increment = board.isWhiteTurn ? winc : binc;
-
-    // Emergency: low on time, think very fast.
-    if (myTime <= 2000) {
-        return std::max(80, myTime / 4);
-    }
-
-    int movesToGo = 40; // default a bit larger so each move gets less time
-    double timeFactor = 1.0;
-
-    // If far ahead on clock, use a bit more; if behind, tighten.
-    if (myTime > oppTime * 2) {
-        timeFactor = 1.25;
-        movesToGo = 45;
-    } else if (myTime < oppTime / 2) {
-        timeFactor = 0.8;
-        movesToGo = 35;
-    }
-
-    // Game phase adjustment.
-    int pieceCount = 0;
-    for (int r = 0; r < 8; r++) {
-        for (int c = 0; c < 8; c++) {
-            if (board.squares[r][c] != 0) pieceCount++;
-        }
-    }
-    if (pieceCount <= 10) {
-        timeFactor *= 1.15;
-        movesToGo = std::max(25, movesToGo - 10);
-    } else if (pieceCount >= 28) {
-        timeFactor *= 0.85;
-        movesToGo = std::min(50, movesToGo + 5);
-    }
-
-    bool inCheck = is_square_attacked(
-        board,
-        board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow,
-        board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol,
-        !board.isWhiteTurn
-    );
-    if (inCheck) {
-        timeFactor *= 1.2;
-        movesToGo = std::max(25, movesToGo - 5);
-    }
-
-    double baseTime = static_cast<double>(myTime) / movesToGo;
-    double incBonus = increment * 0.6;
-
-    int allocatedTime = static_cast<int>((baseTime + incBonus) * timeFactor);
-
-    int minTime = std::max(80, increment / 2);
-    int maxTime = myTime / 8; // keep 12.5% max to avoid flagging
-
-    if (myTime < 15000) {
-        maxTime = myTime / 10;
-        minTime = 70;
-    }
-
-    allocatedTime = std::max(minTime, std::min(allocatedTime, maxTime));
-    return allocatedTime;
-}
-
-// Iterative deepening is being added right now
-Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHistory, int wtime, int btime, int winc, int binc) {
+// Iterative deepening with optional movetime limit
+Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHistory, int movetimeMs) {
     bool isWhite = board.isWhiteTurn;
     std::vector<Move> possibleMoves = get_all_moves(board, isWhite);
     std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
@@ -329,15 +282,18 @@ Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHi
 
     Move overallBestMove;
     std::vector<Move> bestPv;
-    auto startTime = std::chrono::steady_clock::now();
-    const bool timeLimited = (wtime >= 0 && btime >= 0);
-    int allocatedTime = timeLimited ? calculateTime(board, wtime, btime, winc, binc)
-                                    : std::numeric_limits<int>::max() / 4; // effectively no limit in depth mode
-    for (int depth = 1; depth <= maxDepth; depth++) {
+    gSearchStart = std::chrono::steady_clock::now();
+    gTimeLimited = (movetimeMs > 0);
+    gTimeLimitMs = gTimeLimited ? movetimeMs : std::numeric_limits<int>::max();
+
+    const bool timeLimited = gTimeLimited;
+    const int effectiveMaxDepth = timeLimited ? 128 : maxDepth; // large depth cap when time-limited
+    const int allocatedTime = gTimeLimitMs;
+    for (int depth = 1; depth <= effectiveMaxDepth; depth++) {
         if (timeLimited) {
             auto now = std::chrono::steady_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count();
-            if (elapsed > allocatedTime) break;
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - gSearchStart).count();
+            if (elapsed >= allocatedTime) break;
         }
         int bestValue = std::numeric_limits<int>::min() / 2; 
         int alpha = -2000000000;
@@ -390,22 +346,20 @@ Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHi
             std::cout << std::endl;
             }
 
-            // Zaman koruması: tahsis edilen sürenin %120'sini geçerse dur
             if (timeLimited) {
                 auto nowInner = std::chrono::steady_clock::now();
-                auto elapsedInner = std::chrono::duration_cast<std::chrono::milliseconds>(nowInner - startTime).count();
-                if (elapsedInner > static_cast<long long>(allocatedTime * 1.2)) {
+                auto elapsedInner = std::chrono::duration_cast<std::chrono::milliseconds>(nowInner - gSearchStart).count();
+                if (elapsedInner >= allocatedTime) {
                     break;
                 }
             }
         }
         bestMove = overallBestMove;
 
-        // Derinlik sonunda da kontrol et: tahsis edilen süreyi aşıyorsak çık
         if (timeLimited) {
             auto nowAfterDepth = std::chrono::steady_clock::now();
-            auto elapsedAfterDepth = std::chrono::duration_cast<std::chrono::milliseconds>(nowAfterDepth - startTime).count();
-            if (elapsedAfterDepth > static_cast<long long>(allocatedTime * 1.2)) {
+            auto elapsedAfterDepth = std::chrono::duration_cast<std::chrono::milliseconds>(nowAfterDepth - gSearchStart).count();
+            if (elapsedAfterDepth >= allocatedTime) {
                 break;
             }
         }

@@ -14,6 +14,9 @@ int scoreMove(const Board& board, const Move& move, int ply);
 // Search functions (PV enabled)
 int quiescence(Board& board, int alpha, int beta, int ply, std::vector<uint64_t>& history);
 int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine);
-Move getBestMove(Board& board, int depth, const std::vector<uint64_t>& baseHistory, int wtime, int btime, int winc, int binc);
+
+// movetimeMs > 0: time-limited, effectively unlimited depth (search until time runs out).
+// movetimeMs <= 0: depth-limited, no time limit.
+Move getBestMove(Board& board, int depth, const std::vector<uint64_t>& baseHistory, int movetimeMs = -1);
 
 #endif
