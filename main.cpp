@@ -48,6 +48,10 @@ int main() {
         
         else if (line.substr(0, 2) == "go") {
             int depth = 6;
+            int wtime = -1;
+            int btime = -1;
+            int winc = 0;
+            int binc = 0;
             {
                 std::stringstream ss(line);
                 std::string token;
@@ -57,13 +61,25 @@ int main() {
                         int parsed = 0;
                         if (ss >> parsed) depth = parsed;
                     }
+                    else if (token == "wtime") {
+                        ss >> wtime;
+                    }
+                    else if (token == "btime") {
+                        ss >> btime;
+                    }
+                    else if (token == "winc") {
+                        ss >> winc;
+                    }
+                    else if (token == "binc") {
+                        ss >> binc;
+                    }
                 }
             }
             // Before every move
             if (transpositionTable.size() > 10000000) {  // 10 million entries
                 transpositionTable.clear();  // Clear
             }
-            Move best = getBestMove(board, depth, gameHistory);
+            Move best = getBestMove(board, depth, gameHistory, wtime, btime, winc, binc);
             
             std::cout << "bestmove " << columns[best.fromCol] << (8 - best.fromRow) 
                  << columns[best.toCol] << (8 - best.toRow);
