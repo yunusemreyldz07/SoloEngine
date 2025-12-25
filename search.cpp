@@ -47,7 +47,9 @@ int scoreMove(const Board& board, const Move& move, int ply) {
     }
 
     if (move.isCastling) {
-        moveScore += 5000;
+        // Castling is good for king safety, but keep the bonus modest so we don't prefer it over
+        // urgent defensive moves (like saving a hanging piece) at shallow depth.
+        moveScore += 500;
         return moveScore;
     }
 
@@ -188,17 +190,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
         legalMoveCount++;
         bool inCheck = is_square_attacked(board, board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow, board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol, !board.isWhiteTurn);
-        if (depth <= 2 && !inCheck && move.capturedPiece == 0) {
-            int eval = evaluate_board(board);
-            if (!board.isWhiteTurn) eval = -eval;
 
-            int margin = (depth == 1) ? 300 : 500;
-            if (eval + margin < alpha) {
-                    history.pop_back();
-                    board.unmakeMove(move);
-                    continue;
-            }
-        }
+        // Futility pruning removed for quiet moves at low depth: it was cutting defensive moves
+        // (like retreating a hanging piece) and led to nonsensical choices such as castling while
+        // dropping material. Leaving the node unpruned keeps safety-first replies available.
         std::vector<Move> childPv;
         int eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
         history.pop_back();
@@ -249,39 +244,45 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 }
 
 int calculateTime(const Board& board, int wtime, int btime, int winc, int binc) {
+    // All times are milliseconds (lichess protocol). Be conservative near flag, allow more when safe.
     if (wtime < 0 || btime < 0) {
-        return 2000;
+        return 1500;
     }
-    
+
     int myTime = board.isWhiteTurn ? wtime : btime;
     int oppTime = board.isWhiteTurn ? btime : wtime;
     int increment = board.isWhiteTurn ? winc : binc;
 
-    int movesToGo = 30; 
-    double timeFactor = 1.0;
-    
-
-    if (myTime > oppTime * 2) {
-        timeFactor = 1.3;
-        movesToGo = 35;
-    } else if (myTime < oppTime / 2) {
-        timeFactor = 0.7;
-        movesToGo = 25;
+    // Emergency: low on time, think very fast.
+    if (myTime <= 2000) {
+        return std::max(80, myTime / 4);
     }
 
+    int movesToGo = 40; // default a bit larger so each move gets less time
+    double timeFactor = 1.0;
+
+    // If far ahead on clock, use a bit more; if behind, tighten.
+    if (myTime > oppTime * 2) {
+        timeFactor = 1.25;
+        movesToGo = 45;
+    } else if (myTime < oppTime / 2) {
+        timeFactor = 0.8;
+        movesToGo = 35;
+    }
+
+    // Game phase adjustment.
     int pieceCount = 0;
     for (int r = 0; r < 8; r++) {
         for (int c = 0; c < 8; c++) {
             if (board.squares[r][c] != 0) pieceCount++;
         }
     }
-    
     if (pieceCount <= 10) {
-        timeFactor *= 1.2;
-        movesToGo = 20;
+        timeFactor *= 1.15;
+        movesToGo = std::max(25, movesToGo - 10);
     } else if (pieceCount >= 28) {
-        timeFactor *= 0.8;
-        movesToGo = 40;
+        timeFactor *= 0.85;
+        movesToGo = std::min(50, movesToGo + 5);
     }
 
     bool inCheck = is_square_attacked(
@@ -291,29 +292,24 @@ int calculateTime(const Board& board, int wtime, int btime, int winc, int binc) 
         !board.isWhiteTurn
     );
     if (inCheck) {
-        timeFactor *= 1.15;
+        timeFactor *= 1.2;
+        movesToGo = std::max(25, movesToGo - 5);
     }
-    
-    
-    double baseTime = static_cast<double>(myTime) / movesToGo;
-    double incBonus = increment * 0.75; 
-    
-    int allocatedTime = static_cast<int>((baseTime + incBonus) * timeFactor);
-    
-    
-    int minTime = std::max(100, increment / 2); 
-    int maxTime = myTime / 5;
-    
 
-    if (myTime < 5000) {
+    double baseTime = static_cast<double>(myTime) / movesToGo;
+    double incBonus = increment * 0.6;
+
+    int allocatedTime = static_cast<int>((baseTime + incBonus) * timeFactor);
+
+    int minTime = std::max(80, increment / 2);
+    int maxTime = myTime / 8; // keep 12.5% max to avoid flagging
+
+    if (myTime < 15000) {
         maxTime = myTime / 10;
-        minTime = 50;
-    } else if (myTime < 15000) { 
-        maxTime = myTime / 8;
+        minTime = 70;
     }
-    
+
     allocatedTime = std::max(minTime, std::min(allocatedTime, maxTime));
-    
     return allocatedTime;
 }
 

@@ -585,7 +585,10 @@ std::vector<Move> get_capture_moves(const Board& board) {
 }
 
 bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttacker) {
-    int pawnDir = isWhiteAttacker ? 1 : -1; 
+    // White pawns attack one rank "up" the board (row - 1), black pawns one rank "down" (row + 1).
+    // The old code used the opposite sign, which let the engine think diagonals were safe when they
+    // were in fact covered by pawns. This broke check detection and castling legality.
+    int pawnDir = isWhiteAttacker ? 1 : -1;
     
     // Pawn attacks
     if (row + pawnDir >= 0 && row + pawnDir < 8) {
