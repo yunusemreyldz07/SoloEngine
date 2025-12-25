@@ -7,6 +7,8 @@
 #include <cstdlib>
 #include <iostream>
 
+static const char columns[] = "abcdefgh";
+
 Move killerMove[2][100];
 int historyTable[64][64];
 
@@ -50,6 +52,24 @@ int scoreMove(const Board& board, const Move& move, int ply) {
     }
 
     return 0;
+}
+
+static std::string move_to_uci(const Move& m) {
+    std::string s;
+    s += columns[m.fromCol];
+    s += static_cast<char>('0' + (8 - m.fromRow));
+    s += columns[m.toCol];
+    s += static_cast<char>('0' + (8 - m.toRow));
+    if (m.promotion != 0) {
+        switch (std::abs(m.promotion)) {
+            case queen: s += 'q'; break;
+            case rook: s += 'r'; break;
+            case bishop: s += 'b'; break;
+            case knight: s += 'n'; break;
+            default: break;
+        }
+    }
+    return s;
 }
 
 int quiescence(Board& board, int alpha, int beta, int ply, std::vector<uint64_t>& history) {
@@ -112,12 +132,13 @@ int quiescence(Board& board, int alpha, int beta, int ply, std::vector<uint64_t>
 }
 
 // Replacing minimax with negamax version for simplicity
-int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history) {
+int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine) {
     if (is_threefold_repetition(history)) {
         return repetition_draw_score(board);
     }
 
     if (depth == 0) {
+        pvLine.clear();
         return quiescence(board, alpha, beta, ply, history);
     }
     uint64_t currentHash = position_key(board);
@@ -125,6 +146,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     TTEntry* ttEntry = probeTranspositionTable(currentHash, transpositionTable);
     if (ttEntry != nullptr && ttEntry->depth >= depth) {
         if (ttEntry->flag == EXACT) {
+            pvLine.clear();
+            if (ttEntry->bestMove.fromRow != 0 || ttEntry->bestMove.toRow != 0 || ttEntry->bestMove.fromCol != 0 || ttEntry->bestMove.toCol != 0) {
+                pvLine.push_back(ttEntry->bestMove);
+            }
             return ttEntry->score;  // Exact score
         }
         if (ttEntry->flag == ALPHA && ttEntry->score <= alpha) {
@@ -147,6 +172,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     int legalMoveCount = 0;
     int maxEval = std::numeric_limits<int>::min() / 2;
     Move bestMove{};
+    pvLine.clear();
 
     for (Move& move : possibleMoves) { // Moves that leave king in check are skipped
         board.makeMove(move);
@@ -173,13 +199,17 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                     continue;
             }
         }
-        int eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history);
+        std::vector<Move> childPv;
+        int eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
         history.pop_back();
         board.unmakeMove(move);
 
         if (eval > maxEval) {
             maxEval = eval;
             bestMove = move;
+            pvLine.clear();
+            pvLine.push_back(move);
+            pvLine.insert(pvLine.end(), childPv.begin(), childPv.end());
         }
         alpha = std::max(alpha, eval);
         if (beta <= alpha){
@@ -302,6 +332,7 @@ Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHi
     if (history.empty()) history.push_back(position_key(board));
 
     Move overallBestMove;
+    std::vector<Move> bestPv;
     auto startTime = std::chrono::steady_clock::now();
     const bool timeLimited = (wtime >= 0 && btime >= 0);
     int allocatedTime = timeLimited ? calculateTime(board, wtime, btime, winc, binc)
@@ -339,17 +370,28 @@ Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHi
                 continue;
             }
 
-            int val = -negamax(board, depth - 1, -beta, -alpha, 1, history);
+            std::vector<Move> childPv;
+            int val = -negamax(board, depth - 1, -beta, -alpha, 1, history, childPv);
             history.pop_back();
             board.unmakeMove(move);
             
             if (val > bestValue) {
             bestValue = val;
             overallBestMove = move;
+            bestPv.clear();
+            bestPv.push_back(move);
+            bestPv.insert(bestPv.end(), childPv.begin(), childPv.end());
             if (bestValue > alpha) {
                 alpha = bestValue;
             }
-            std::cout << "info score cp " << bestValue << " depth " << depth << std::endl;
+            std::cout << "info score cp " << bestValue << " depth " << depth;
+            if (!bestPv.empty()) {
+                std::cout << " pv";
+                for (const auto& mv : bestPv) {
+                    std::cout << ' ' << move_to_uci(mv);
+                }
+            }
+            std::cout << std::endl;
             }
 
             // Zaman koruması: tahsis edilen sürenin %120'sini geçerse dur

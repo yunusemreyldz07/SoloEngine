@@ -267,6 +267,51 @@ int evaluate_board(const Board& board) {
                     } else if (semiOpenFile) {
                         score += (p > 0) ? 25 : -25; // Semi open file is also good
                     }
+                    // Connected rooks bonus
+                    for (int r = 0; r < 8; r++) {
+                        for (int c = 0; c < 8; c++) {
+                            int p = board.squares[r][c];
+                            if (abs_int(p) != rook) continue;
+                            
+                            // Any same file rook?
+                            for (int rr = r + 1; rr < 8; rr++) {
+                                int other = board.squares[rr][c];
+                                if (other == p) { // Same color rook
+                                    // Are there any pieces between them?
+                                    bool connected = true;
+                                    for (int between = r + 1; between < rr; between++) {
+                                        if (board.squares[between][c] != 0) {
+                                            connected = false;
+                                            break;
+                                        }
+                                    }
+                                    if (connected) {
+                                        score += (p > 0) ? 30 : -30;
+                                    }
+                                }
+                            }
+                            
+                            // Checking the same rank
+                            for (int cc = c + 1; cc < 8; cc++) {
+                                int other = board.squares[r][cc];
+                                if (other == p) { // Same color rook
+                                    // Are there any pieces between them?
+                                    bool connected = true;
+                                    for (int between = c + 1; between < cc; between++) {
+                                        if (board.squares[r][between] != 0) {
+                                            connected = false;
+                                            break;
+                                        }
+                                    }
+                                    if (connected) {
+                                        score += (p > 0) ? 30 : -30;
+                                    }
+                                }
+                            }
+
+                        }
+                    }
+
                     break;
                 }
                 case queen:
@@ -279,7 +324,36 @@ int evaluate_board(const Board& board) {
                             int centerDist = abs_int(r - 3.5) + abs_int(c - 3.5);
                             score += (p > 0) ? (7 - centerDist) * 5 : -(7 - centerDist) * 5;
                         } else {
-                            score += (p > 0) ? mg_king_pst[r][c] : -mg_king_pst[pr][c];
+                            score += (p > 0) ? mg_king_pst[r][c] : -mg_king_pst[pr][c]; // midgame PST
+
+                            // protect the pawns in front of the king
+
+                            int wKingFile = board.whiteKingCol;
+                            int pawnShield = 0;
+                            
+                            // Count pawns in front of the king
+                            for (int dc = -1; dc <= 1; dc++) {
+                                int c = wKingFile + dc;
+                                if (c < 0 || c >= 8) continue;
+                                
+                                // Are there pawns on the 2nd and 3rd ranks?
+                                if (board.squares[6][c] == pawn) pawnShield += 20; // Right in front
+                                else if (board.squares[5][c] == pawn) pawnShield += 10; // One square ahead
+                            }
+                            
+                            score += pawnShield;
+                            
+                            // Same for black king
+                            int bKingFile = board.blackKingCol;
+                            int blackPawnShield = 0;
+                            for (int dc = -1; dc <= 1; dc++) {
+                                int c = bKingFile + dc;
+                                if (c < 0 || c >= 8) continue;
+                                if (board.squares[1][c] == -pawn) blackPawnShield += 20;
+                                else if (board.squares[2][c] == -pawn) blackPawnShield += 10;
+                            }
+                            
+                            score -= blackPawnShield;
                         }
                         break;
                     }
