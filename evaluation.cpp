@@ -156,8 +156,62 @@ int evaulate_board(const Board& board) {
             int pr = (p > 0) ? r : 7 - r;
             switch (absPiece) {
                 case pawn:
+                {
                     score += (p > 0) ? pawn_pst[r][c] : -pawn_pst[pr][c];
+                    bool isolated = true;
+                    if (c > 0) {
+                        for (int rr = 0; rr < 8; rr++) {
+                            int leftPiece = board.squares[rr][c-1];
+                            if (abs_int(leftPiece) == pawn && (leftPiece > 0) == (p > 0)) {
+                                isolated = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (c < 7) {
+                        for (int rr = 0; rr < 8; rr++) {
+                            int rightPiece = board.squares[rr][c+1];
+                            if (abs_int(rightPiece) == pawn && (rightPiece > 0) == (p > 0)) {
+                                isolated = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (isolated) {
+                        score += (p > 0) ? -15 : 15; // isolated pawn is bad
+                    }
+
+                    // Doubled pawns penalty
+                    for (int rr = r+1; rr < 8; rr++) {
+                        if (board.squares[rr][c] == p) {
+                            score += (p > 0) ? -20 : 20; // Doubled pawns are bad
+                            break;
+                        }
+                    }
+                    bool passed = true;
+                    int direction = (p > 0) ? -1 : 1;
+                    int startRank = (p > 0) ? r : r;
+                    
+                    // Does it have opposing pawns ahead on adjacent files
+                    for (int checkCol = std::max(0, c-1); checkCol <= std::min(7, c+1); checkCol++) {
+                        for (int rr = startRank; rr >= 0 && rr < 8; rr += direction) {
+                            if (rr == r && checkCol == c) continue;
+                            int checkPiece = board.squares[rr][checkCol];
+                            if (checkPiece == -p) { // Opponent's pawn
+                                passed = false;
+                                break;
+                            }
+                        }
+                        if (!passed) break;
+                    }
+                    
+                    if (passed) {
+                        int rank = (p > 0) ? (7 - r) : r;
+                        int bonus = rank * rank * 10; // for example, rank 6 pawn gets 360
+                        score += (p > 0) ? bonus : -bonus;
+                    }
                     break;
+                }
                 case knight:
                     score += (p > 0) ? knight_pst[r][c] : -knight_pst[pr][c];
                     break;
@@ -177,17 +231,48 @@ int evaulate_board(const Board& board) {
                     break;
                 }
                 case rook:
+                {
                     score += (p > 0) ? rook_pst[r][c] : -rook_pst[pr][c];
+                    bool openFile = true;
+                    bool semiOpenFile = true;
+                    for (int rr = 0; rr < 8; rr++) {
+                        int pieceOnFile = board.squares[rr][c];
+                        if (pieceOnFile != 0) {
+                            int absPiece = abs_int(pieceOnFile);
+                            if (absPiece == pawn) {
+                                if ((pieceOnFile > 0) == (p > 0)) {
+                                    // you got your own pawn on the file
+                                    semiOpenFile = false;
+                                    openFile = false;
+                                } else {
+                                    // opponent's pawn on the file
+                                    openFile = false;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (openFile) {
+                        score += (p > 0) ? 50 : -50; // Open file is very valuable
+                    } else if (semiOpenFile) {
+                        score += (p > 0) ? 25 : -25; // Semi open file is also good
+                    }
                     break;
+                }
                 case queen:
                     score += (p > 0) ? queen_pst[r][c] : -queen_pst[pr][c];
                     break;
                 case king:
-                    if (endgame) score += (p > 0) ? eg_king_pst[r][c] : -eg_king_pst[pr][c];
-                    else score += (p > 0) ? mg_king_pst[r][c] : -mg_king_pst[pr][c];
-                    break;
-                default:
-                    break;
+                    {
+                        if (endgame) {
+                            score += (p > 0) ? eg_king_pst[r][c] : -eg_king_pst[pr][c];
+                            int centerDist = abs_int(r - 3.5) + abs_int(c - 3.5);
+                            score += (p > 0) ? (7 - centerDist) * 5 : -(7 - centerDist) * 5;
+                        } else {
+                            score += (p > 0) ? mg_king_pst[r][c] : -mg_king_pst[pr][c];
+                        }
+                        break;
+                    }
             }
         }
     }
@@ -203,8 +288,6 @@ int evaulate_board(const Board& board) {
 
 int repetition_draw_score(const Board& board) {
     int standPat = evaulate_board(board);
-    const int contempt = 100;
-    if (standPat > 200) return -contempt;
-    if (standPat < -200) return contempt;
+    if (standPat > 0) return standPat / 2;
     return 0;
 }
