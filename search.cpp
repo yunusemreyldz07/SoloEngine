@@ -7,6 +7,9 @@
 #include <cstdlib>
 #include <iostream>
 
+// Mate score used across search functions
+constexpr int MATE_SCORE = 100000;
+
 static std::chrono::steady_clock::time_point gSearchStart;
 static int gTimeLimitMs = std::numeric_limits<int>::max();
 static bool gTimeLimited = false;
@@ -192,7 +195,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         return scoreMove(board, a, ply) > scoreMove(board, b, ply);
     });
 
-    constexpr int MATE_SCORE = 100000;
     const int alphaOrig = alpha;
     int legalMoveCount = 0;
     int maxEval = std::numeric_limits<int>::min() / 2;
@@ -266,54 +268,72 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     return maxEval;
 }
 
-// Iterative deepening with optional movetime limit
 Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHistory, int movetimeMs) {
     bool isWhite = board.isWhiteTurn;
     std::vector<Move> possibleMoves = get_all_moves(board, isWhite);
     std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
-        return scoreMove(board, a, /*ply*/ 0) > scoreMove(board, b, /*ply*/ 0);
+        return scoreMove(board, a, 0) > scoreMove(board, b, 0);
     });
-    
-    Move bestMove;
-    if(!possibleMoves.empty()) bestMove = possibleMoves[0]; 
+
+    if (possibleMoves.empty()) return {};
+    if (possibleMoves.size() == 1) return possibleMoves[0];
+
+    Move bestMoveSoFar = possibleMoves[0]; 
 
     std::vector<uint64_t> history = baseHistory;
     if (history.empty()) history.push_back(position_key(board));
 
-    Move overallBestMove;
-    std::vector<Move> bestPv;
     gSearchStart = std::chrono::steady_clock::now();
     gTimeLimited = (movetimeMs > 0);
     gTimeLimitMs = gTimeLimited ? movetimeMs : std::numeric_limits<int>::max();
+    const int effectiveMaxDepth = gTimeLimited ? 128 : maxDepth;
 
-    const bool timeLimited = gTimeLimited;
-    const int effectiveMaxDepth = timeLimited ? 128 : maxDepth; // large depth cap when time-limited
-    const int allocatedTime = gTimeLimitMs;
+    bool timeExpired = false;
+
     for (int depth = 1; depth <= effectiveMaxDepth; depth++) {
-        if (timeLimited) {
+        
+        if (gTimeLimited) {
             auto now = std::chrono::steady_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - gSearchStart).count();
-            if (elapsed >= allocatedTime) break;
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - gSearchStart).count() >= gTimeLimitMs) {
+                break;
+            }
         }
-        int bestValue = std::numeric_limits<int>::min() / 2; 
+
+        int bestValue = std::numeric_limits<int>::min() / 2;
         int alpha = -2000000000;
         int beta = 2000000000;
-        // (PV move ordering)
-        if (depth > 1 && (overallBestMove.fromRow != 0 || overallBestMove.fromCol != 0 || 
-                          overallBestMove.toRow != 0 || overallBestMove.toCol != 0)) {
-            std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
-                bool aIsPV = (a.fromRow == overallBestMove.fromRow && a.fromCol == overallBestMove.fromCol && a.toRow == overallBestMove.toRow && a.toCol == overallBestMove.toCol);
-                bool bIsPV = (b.fromRow == overallBestMove.fromRow && b.fromCol == overallBestMove.fromCol && b.toRow == overallBestMove.toRow && b.toCol == overallBestMove.toCol);
+        
+        Move currentDepthBestMove; // Only the best move found at this depth
+        bool thisDepthCompleted = true; // Is this depth completed?
+
+        // PV Move Ordering (Put the best move from the previous depth first)
+        if (depth > 1) {
+             // Here we use bestMoveSoFar because it was the winner of the previous depth.
+             Move pvMove = bestMoveSoFar; 
+             std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
+                bool aIsPV = (a.fromRow == pvMove.fromRow && a.fromCol == pvMove.fromCol && a.toRow == pvMove.toRow && a.toCol == pvMove.toCol);
+                bool bIsPV = (b.fromRow == pvMove.fromRow && b.fromCol == pvMove.fromCol && b.toRow == pvMove.toRow && b.toCol == pvMove.toCol);
                 if (aIsPV) return true;
                 if (bIsPV) return false;
-                return scoreMove(board, a, /*ply*/ 0) > scoreMove(board, b, /*ply*/ 0);
+                return scoreMove(board, a, 0) > scoreMove(board, b, 0);
             });
         }
+
         for (Move move : possibleMoves) {
-            
+            // In-loop time check
+            if (gTimeLimited) {
+                auto nowInner = std::chrono::steady_clock::now();
+                if (std::chrono::duration_cast<std::chrono::milliseconds>(nowInner - gSearchStart).count() >= gTimeLimitMs) {
+                    timeExpired = true;
+                    thisDepthCompleted = false; // Depth incomplete
+                    break; 
+                }
+            }
+
             board.makeMove(move);
             history.push_back(position_key(board));
 
+            // Check if the king is in check, etc
             int newKingRow = isWhite ? board.whiteKingRow : board.blackKingRow;
             int newKingCol = isWhite ? board.whiteKingCol : board.blackKingCol;
             if (is_square_attacked(board, newKingRow, newKingCol, !isWhite)) {
@@ -324,45 +344,41 @@ Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHi
 
             std::vector<Move> childPv;
             int val = -negamax(board, depth - 1, -beta, -alpha, 1, history, childPv);
+            
             history.pop_back();
             board.unmakeMove(move);
-            
-            if (val > bestValue) {
-            bestValue = val;
-            overallBestMove = move;
-            bestPv.clear();
-            bestPv.push_back(move);
-            bestPv.insert(bestPv.end(), childPv.begin(), childPv.end());
-            if (bestValue > alpha) {
-                alpha = bestValue;
-            }
-            std::cout << "info score cp " << bestValue << " depth " << depth;
-            if (!bestPv.empty()) {
-                std::cout << " pv";
-                for (const auto& mv : bestPv) {
-                    std::cout << ' ' << move_to_uci(mv);
-                }
-            }
-            std::cout << std::endl;
-            }
 
-            if (timeLimited) {
-                auto nowInner = std::chrono::steady_clock::now();
-                auto elapsedInner = std::chrono::duration_cast<std::chrono::milliseconds>(nowInner - gSearchStart).count();
-                if (elapsedInner >= allocatedTime) {
-                    break;
+            if (val > bestValue) {
+                bestValue = val;
+                currentDepthBestMove = move;
+                
+                if (bestValue > alpha) {
+                    alpha = bestValue;
+                }
+                
+                if (thisDepthCompleted) { 
+                    std::cout << "info depth " << depth << " score cp " << bestValue << " pv ";
+                    std::cout << move_to_uci(move) << " ";
+                    for (const Move& pvMove : childPv) {
+                        std::cout << move_to_uci(pvMove) << " ";
+                    }
+                    std::cout << std::endl;
                 }
             }
         }
-        bestMove = overallBestMove;
 
-        if (timeLimited) {
-            auto nowAfterDepth = std::chrono::steady_clock::now();
-            auto elapsedAfterDepth = std::chrono::duration_cast<std::chrono::milliseconds>(nowAfterDepth - gSearchStart).count();
-            if (elapsedAfterDepth >= allocatedTime) {
-                break;
-            }
+        if (timeExpired) {
+            break; 
+        }
+
+        if (thisDepthCompleted && (bestValue > std::numeric_limits<int>::min() / 2)) {
+            bestMoveSoFar = currentDepthBestMove;
+        }
+
+        if (bestValue >= MATE_SCORE - 50) {
+            break;
         }
     }
-    return bestMove;
+
+    return bestMoveSoFar; // Return the best move found within time/depth limits 
 }
