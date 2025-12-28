@@ -214,13 +214,36 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
 
         legalMoveCount++;
-        bool inCheck = is_square_attacked(board, board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow, board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol, !board.isWhiteTurn);
-
         // Futility pruning removed for quiet moves at low depth: it was cutting defensive moves
         // (like retreating a hanging piece) and led to nonsensical choices such as castling while
         // dropping material. Leaving the node unpruned keeps safety-first replies available.
         std::vector<Move> childPv;
-        int eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
+        int eval;
+        bool inCheck = is_square_attacked(board, kingRow, kingCol, !whiteToMove);
+        bool fullDepthSearch = true;
+
+        // depth > 2, no check, many legal moves, non-capture, non-promotion. (conditions for Late Move Reduction)
+        if (depth >= 3 && inCheck == false && legalMoveCount > 4 && move.capturedPiece == 0 && move.promotion == 0) {
+            
+            int reduction = 1;
+            if (legalMoveCount > 10) reduction = 2; // if move is late enough, reduce more 
+            if (depth > 8 && legalMoveCount > 20) reduction = 3; 
+
+            // Perform reduced-depth search 
+            eval = -negamax(board, depth - 1 - reduction, -beta, -alpha, ply + 1, history, childPv);
+
+            // if eval is higher than alpha, then the result is interesting enough to research at full depth
+            if (eval > alpha) {
+                fullDepthSearch = true; 
+            } else {
+                fullDepthSearch = false; // LMR result is sufficient, no need to re-search
+            }
+        }
+
+        if (fullDepthSearch) {
+             eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
+        }
+
         history.pop_back();
         board.unmakeMove(move);
 
@@ -379,6 +402,10 @@ Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHi
             break;
         }
     }
+    auto searchEnd = std::chrono::steady_clock::now();
+    long long duration = std::chrono::duration_cast<std::chrono::milliseconds>(searchEnd - gSearchStart).count();
+    
+    std::cout << "info time spent searching: " << duration << " ms" << std::endl;
 
     return bestMoveSoFar; // Return the best move found within time/depth limits 
 }

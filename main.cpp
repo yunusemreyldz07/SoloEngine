@@ -81,8 +81,9 @@ int main() {
                 depth = 128;
             }
             // Before every move
-            if (transpositionTable.size() > 10000000) {  // 10 million entries
+            if (transpositionTable.size() > 20000000) {  // 20 million entries
                 transpositionTable.clear();  // Clear
+                std::cout << "info string TT full, clearing memory..." << std::endl;
             }
             Move best = getBestMove(board, depth, gameHistory, movetime);
             

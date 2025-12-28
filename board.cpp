@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <sstream>
-
 // Piece encoding (constants declared in board.h)
 
 int chess_board[8][8] = {
@@ -17,7 +16,6 @@ int chess_board[8][8] = {
     {rook, knight, bishop, queen, king, bishop, knight, rook}
 };
 
-// columns defined in main.cpp
 int knight_moves[8][2] = {
     {-2, -1}, {-2, 1}, {-1, -2}, {-1, 2},
     {1, -2}, {1, 2}, {2, -1}, {2, 1}
@@ -285,6 +283,7 @@ void Board::loadFromFEN(const std::string& fen) {
 
 std::vector<Move> generate_pawn_moves(const Board& board, int row, int col) {
     std::vector<Move> moves;
+    moves.reserve(16);
     int piece = board.squares[row][col];
     int color = (piece > 0) ? 1 : -1; // 1 for white, -1 for black
     int direction = (color == 1) ? -1 : 1; // White moves up (-1), Black moves down (+1)
@@ -367,6 +366,7 @@ std::vector<Move> generate_pawn_moves(const Board& board, int row, int col) {
 
 std::vector<Move> generate_knight_moves(const Board& board, int row, int col) {
     std::vector<Move> moves;
+    moves.reserve(8);
     int piece = board.squares[row][col];
     int color = (piece > 0) ? 1 : -1; // 1 for white, -1 for black
 
@@ -390,6 +390,7 @@ std::vector<Move> generate_queen_moves(const Board& board, int row, int col) {
     std::vector<Move> diagonalmoves = generate_bishop_moves(board, row, col);
     std::vector<Move> straightmoves = generate_rook_moves(board, row, col);
     std::vector<Move> allmoves;
+    allmoves.reserve(28);
     allmoves.insert(allmoves.end(), diagonalmoves.begin(), diagonalmoves.end());
     allmoves.insert(allmoves.end(), straightmoves.begin(), straightmoves.end());
     return allmoves;
@@ -397,6 +398,7 @@ std::vector<Move> generate_queen_moves(const Board& board, int row, int col) {
 
 std::vector<Move> generate_king_moves(const Board& board, int row, int col) {
     std::vector<Move> moves;
+    moves.reserve(8);
     int piece = board.squares[row][col];
     int color = (piece > 0) ? 1 : -1;
 
@@ -454,12 +456,11 @@ std::vector<Move> generate_king_moves(const Board& board, int row, int col) {
     return moves;
 }
 
-// ... diğer generate fonksiyonları
-
 std::vector<Move> generate_bishop_moves(const Board& board, int row, int col) {
     int piece = board.squares[row][col];
     int color = (piece > 0) ? 1 : -1; // 1 for white, -1 for black
     std::vector<Move> moves;
+    moves.reserve(14);
     for (int d = 0; d < 4; ++d) {
         int r = row + bishop_directions[d][0];
         int c = col + bishop_directions[d][1];
@@ -484,7 +485,7 @@ std::vector<Move> generate_rook_moves(const Board& board, int row, int col) {
     int piece = board.squares[row][col];
     int color = (piece > 0) ? 1 : -1; // 1 for white, -1 for black
     std::vector<Move> moves;
-
+    moves.reserve(14);
     for (int d = 0; d < 4; ++d) {
         int r = row + rook_directions[d][0];
         int c = col + rook_directions[d][1];
@@ -507,6 +508,7 @@ std::vector<Move> generate_rook_moves(const Board& board, int row, int col) {
 
 std::vector<Move> get_all_moves(const Board& board, bool isWhiteTurn) {
     std::vector<Move> allMoves;
+    allMoves.reserve(256);
     for (int r = 0; r < 8; ++r) {
         for (int c = 0; c < 8; ++c) {
             int piece = board.squares[r][c];
