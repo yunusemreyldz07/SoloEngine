@@ -171,8 +171,17 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     }
     uint64_t currentHash = position_key(board);
 
+    bool isRepeated = false;
+    int historyStart = std::max(0, (int)history.size() - 100);
+    for (int i = historyStart; i < history.size(); ++i) {
+        if (history[i] == currentHash) {
+            isRepeated = true;
+            break;
+        }
+    }
+
     TTEntry* ttEntry = probeTranspositionTable(currentHash, transpositionTable);
-    if (ttEntry != nullptr && ttEntry->depth >= depth) {
+    if (!isRepeated && ttEntry != nullptr && ttEntry->depth >= depth) {
         if (ttEntry->flag == EXACT) {
             pvLine.clear();
             if (ttEntry->bestMove.fromRow != 0 || ttEntry->bestMove.toRow != 0 || ttEntry->bestMove.fromCol != 0 || ttEntry->bestMove.toCol != 0) {
@@ -380,6 +389,9 @@ Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHi
                 }
                 
                 if (thisDepthCompleted) { 
+                    auto searchEnd = std::chrono::steady_clock::now();
+                    long long duration = std::chrono::duration_cast<std::chrono::milliseconds>(searchEnd - gSearchStart).count();
+                    std::cout << "info time spent searching this depth: " << duration << " ms" << std::endl;
                     std::cout << "info depth " << depth << " score cp " << bestValue << " pv ";
                     std::cout << move_to_uci(move) << " ";
                     for (const Move& pvMove : childPv) {
@@ -402,10 +414,6 @@ Move getBestMove(Board& board, int maxDepth, const std::vector<uint64_t>& baseHi
             break;
         }
     }
-    auto searchEnd = std::chrono::steady_clock::now();
-    long long duration = std::chrono::duration_cast<std::chrono::milliseconds>(searchEnd - gSearchStart).count();
-    
-    std::cout << "info time spent searching: " << duration << " ms" << std::endl;
 
     return bestMoveSoFar; // Return the best move found within time/depth limits 
 }

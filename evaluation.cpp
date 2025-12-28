@@ -469,6 +469,7 @@ int evaluate_board(const Board& board) {
     // protect the pawns in front of the king
     if (isMidgame || isOpening) {
         int wKingFile = board.whiteKingCol;
+        int wKingRank = board.whiteKingRow;
         int pawnShield = 0;
         
         // count pawns in front of the white king
@@ -494,6 +495,110 @@ int evaluate_board(const Board& board) {
         }
         
         score -= blackPawnShield;
+
+        // Penalty for open files next to king
+        int openFilePenalty = 0;
+        for (int dc = -1; dc <= 1; dc++) {
+            int column = wKingFile + dc;
+            if (column < 0 || column >= 8) continue;
+            
+            bool hasOwnPawn = false;
+            for (int r = 0; r < 8; r++) {
+                if (board.squares[r][column] == pawn) {
+                    hasOwnPawn = true;
+                    break;
+                }
+            }
+            
+            if (!hasOwnPawn) {
+                // Open file next to king is dangerous
+                openFilePenalty += 50;
+            }
+        }
+        int queenThreat = 0;
+        // Find enemy queen
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                if (board.squares[r][c] == -queen) {
+                    // Calculate distance to white king
+                    int distance = std::abs(r - wKingRank) + std::abs(c - wKingFile);
+                    if (distance <= 3) {
+                        // Enemy queen is VERY close to king
+                        queenThreat += (4 - distance) * 40; // Closer = worse
+                    }
+                }
+            }
+        }
+        
+        int backRankPenalty = 0;
+        if (wKingRank == 7) { // White king on back rank
+            bool trapped = true;
+            // Check if king can move forward
+            if (board.squares[6][wKingFile] == 0) {
+                trapped = false;
+            }
+            if (trapped) {
+                backRankPenalty = 60; // Trapped on back rank
+            }
+        }
+        
+        score += pawnShield;
+        score -= openFilePenalty;
+        score -= queenThreat;
+        score -= backRankPenalty;
+        
+        // Same for black king (mirror)
+        int bKingRank = board.blackKingRow;
+        for (int dc = -1; dc <= 1; dc++) {
+            int column = bKingFile + dc;
+            if (column < 0 || column >= 8) continue;
+            if (board.squares[1][column] == -pawn) blackPawnShield += 20;
+            else if (board.squares[2][column] == -pawn) blackPawnShield += 10;
+        }
+        
+        int blackOpenFilePenalty = 0;
+        for (int dc = -1; dc <= 1; dc++) {
+            int column = bKingFile + dc;
+            if (column < 0 || column >= 8) continue;
+            bool hasOwnPawn = false;
+            for (int r = 0; r < 8; r++) {
+                if (board.squares[r][column] == -pawn) {
+                    hasOwnPawn = true;
+                    break;
+                }
+            }
+            if (!hasOwnPawn) {
+                blackOpenFilePenalty += 50;
+            }
+        }
+        
+        int blackQueenThreat = 0;
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                if (board.squares[r][c] == queen) {
+                    int distance = std::abs(r - bKingRank) + std::abs(c - bKingFile);
+                    if (distance <= 3) {
+                        blackQueenThreat += (4 - distance) * 40;
+                    }
+                }
+            }
+        }
+        
+        int blackBackRankPenalty = 0;
+        if (bKingRank == 0) {
+            bool trapped = true;
+            if (board.squares[1][bKingFile] == 0) {
+                trapped = false;
+            }
+            if (trapped) {
+                blackBackRankPenalty = 60;
+            }
+        }
+        
+        score -= blackPawnShield;
+        score += blackOpenFilePenalty;
+        score += blackQueenThreat;
+        score += blackBackRankPenalty;
     }
 
     if (whitesWhiteBishop >= 1 && whitesBlackBishop >= 1) {
@@ -538,10 +643,10 @@ int evaluate_board(const Board& board) {
         int blackCenterPawns = 0;
         
         // Direct center pawn occupation
-        if (board.squares[4][4] == pawn) whiteCenterPawns += 80; // e4
-        if (board.squares[4][3] == pawn) whiteCenterPawns += 80; // d4
-        if (board.squares[3][4] == -pawn) blackCenterPawns += 80; // e5
-        if (board.squares[3][3] == -pawn) blackCenterPawns += 80; // d5
+        if (board.squares[4][4] == pawn) whiteCenterPawns += 40; // e4
+        if (board.squares[4][3] == pawn) whiteCenterPawns += 40; // d4
+        if (board.squares[3][4] == -pawn) blackCenterPawns += 40; // e5
+        if (board.squares[3][3] == -pawn) blackCenterPawns += 40; // d5
         
         // Extended center (c4, c5, f4, f5)
         if (board.squares[4][2] == pawn) whiteCenterPawns += 25; // c4
@@ -580,7 +685,12 @@ int evaluate_board(const Board& board) {
 }
 
 int repetition_draw_score(const Board& board) {
-    int standPat = evaluate_board(board);
-    if (standPat > 0) return standPat / 2;
+    int currentScore = evaluate_board(board);
+    if (!board.isWhiteTurn) currentScore = -currentScore;
+    
+    // if my position is clearly better, then a draw is bad
+    if (currentScore > 100) return -50; 
+    
+    // if my position is clearly worse, then a draw is good
     return 0;
 }
