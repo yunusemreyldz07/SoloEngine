@@ -4,9 +4,14 @@
 #include "board.h"
 #include <vector>
 #include <cstdint>
+#include <atomic>
 
 extern Move killerMove[2][100]; // 2 slots, max 100 ply
 extern int historyTable[64][64]; // fromSquare x toSquare
+extern std::atomic<long long> nodeCount; // visited node counter
+
+void resetNodeCounter();
+long long getNodeCounter();
 
 // Move ordering
 int scoreMove(const Board& board, const Move& move, int ply);
