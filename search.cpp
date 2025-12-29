@@ -6,6 +6,7 @@
 #include <limits>
 #include <cstdlib>
 #include <iostream>
+#include <atomic>
 
 // Mate score used across search functions
 constexpr int MATE_SCORE = 100000;
@@ -18,6 +19,15 @@ static const char columns[] = "abcdefgh";
 
 Move killerMove[2][100];
 int historyTable[64][64];
+std::atomic<long long> nodeCount{0};
+
+void resetNodeCounter() {
+    nodeCount.store(0, std::memory_order_relaxed);
+}
+
+long long getNodeCounter() {
+    return nodeCount.load(std::memory_order_relaxed);
+}
 
 int scoreMove(const Board& board, const Move& move, int ply) {
     int moveScore = 0;
@@ -82,6 +92,7 @@ static std::string move_to_uci(const Move& m) {
 }
 
 int quiescence(Board& board, int alpha, int beta, int ply, std::vector<uint64_t>& history) {
+    nodeCount.fetch_add(1, std::memory_order_relaxed);
     if (gTimeLimited) {
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - gSearchStart).count();
         if (elapsed >= gTimeLimitMs) {
@@ -151,6 +162,7 @@ int quiescence(Board& board, int alpha, int beta, int ply, std::vector<uint64_t>
 
 // Replacing minimax with negamax version for simplicity
 int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine) {
+    nodeCount.fetch_add(1, std::memory_order_relaxed);
     if (gTimeLimited) {
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - gSearchStart).count();
         if (elapsed >= gTimeLimitMs) {

@@ -3,8 +3,55 @@
 #include <iostream>
 #include <string>
 #include <sstream>
-
+#include <chrono>
+#include <vector>
+#include <algorithm>
 char columns[] = "abcdefgh";
+
+void bench() {
+    // 1. Standart Test Pozisyonları (Stockfish'in kullandıkları)
+    std::vector<std::string> fens = {
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",  // Başlangıç
+        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", // Karmaşık (KiwiPete)
+        "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1", // Oyun sonu
+        "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1" // Taktik
+    };
+
+    long long totalNodes = 0;
+    long long totalTimeMs = 0;
+    Board board;
+    transpositionTable.clear();
+
+    for (const auto& fen : fens) {
+        board.loadFromFEN(fen);
+        std::vector<uint64_t> history;
+        history.reserve(256);
+        history.push_back(position_key(board));
+
+        resetNodeCounter();
+
+        auto startTime = std::chrono::steady_clock::now();
+        Move best = getBestMove(board, 8, history);
+        auto endTime = std::chrono::steady_clock::now();
+
+        long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+        long long nodes = getNodeCounter();
+
+        totalNodes += nodes;
+        totalTimeMs += elapsed;
+
+        std::cout << "info string bench fen nodes " << nodes
+                  << " time " << elapsed << "ms nps "
+                  << (nodes * 1000 / (elapsed + 1))
+                  << " best " << columns[best.fromCol] << (8 - best.fromRow)
+                  << columns[best.toCol] << (8 - best.toRow) << std::endl;
+    }
+
+    long long benchDuration = std::max<long long>(1, totalTimeMs);
+    std::cout << "Bench: " << totalNodes << " nodes "
+              << (totalNodes * 1000 / benchDuration) << " nps" << std::endl;
+    std::cout << "Nodes: " << totalNodes << std::endl;
+}
 
 int main() {
     Board board;
@@ -23,6 +70,10 @@ int main() {
 
         else if (line == "isready") {
             std::cout << "readyok" << std::endl;
+        }
+
+        else if (line == "bench") {
+            bench();
         }
         
         else if (line.substr(0, 8) == "position") {
