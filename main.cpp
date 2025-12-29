@@ -31,7 +31,7 @@ void bench() {
         resetNodeCounter();
 
         auto startTime = std::chrono::steady_clock::now();
-        Move best = getBestMove(board, 8, history);
+        Move best = getBestMove(board, 5, history);
         auto endTime = std::chrono::steady_clock::now();
 
         long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
