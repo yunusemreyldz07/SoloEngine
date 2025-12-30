@@ -53,12 +53,19 @@ void bench() {
     std::cout << "Nodes: " << totalNodes << std::endl;
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    
+    if (argc > 1 && std::string(argv[1]) == "bench") {
+        bench();
+        return 0;
+    }
+
     Board board;
     std::vector<uint64_t> gameHistory;
     gameHistory.reserve(512);
     std::string line;
 
+    // Normal UCI döngüsü buradan devam eder...
     while (std::getline(std::cin, line)) {
         
         if (line == "uci") {
@@ -67,7 +74,6 @@ int main() {
             std::cout << "uciok" << std::endl;
         }
         
-
         else if (line == "isready") {
             std::cout << "readyok" << std::endl;
         }
@@ -81,7 +87,6 @@ int main() {
                 board.resetBoard();
             }
             else if (line.find("fen") != std::string::npos) {
-                // "position fen rnbqkbnr/... w KQkq - 0 1 moves e2e4"
                 size_t fenStart = line.find("fen") + 4;
                 size_t movesPos = line.find("moves");
                 std::string fenStr;
@@ -116,7 +121,7 @@ int main() {
             {
                 std::stringstream ss(line);
                 std::string token;
-                ss >> token; // "go"
+                ss >> token; 
                 while (ss >> token) {
                     if (token == "depth") {
                         int parsed = 0;
@@ -127,13 +132,13 @@ int main() {
                     }
                 }
             }
-            // If movetime is provided, allow effectively unlimited depth; time will stop the search.
+            
             if (movetime > 0) {
                 depth = 128;
             }
-            // Before every move
-            if (transpositionTable.size() > 20000000) {  // 20 million entries
-                transpositionTable.clear();  // Clear
+            
+            if (transpositionTable.size() > 20000000) { 
+                transpositionTable.clear(); 
                 std::cout << "info string TT full, clearing memory..." << std::endl;
             }
             Move best = getBestMove(board, depth, gameHistory, movetime);
@@ -143,18 +148,10 @@ int main() {
             
             if (best.promotion != 0) {
                 switch (abs(best.promotion)) {
-                    case queen:
-                        std::cout << 'q';
-                        break;
-                    case rook:
-                        std::cout << 'r';
-                        break;
-                    case bishop:
-                        std::cout << 'b';
-                        break;
-                    case knight:
-                        std::cout << 'n';
-                        break;
+                    case queen: std::cout << 'q'; break;
+                    case rook: std::cout << 'r'; break;
+                    case bishop: std::cout << 'b'; break;
+                    case knight: std::cout << 'n'; break;
                 }
             }
             std::cout << std::endl;
