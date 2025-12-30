@@ -138,7 +138,7 @@ int quiescence(Board& board, int alpha, int beta, int ply){
     return alpha;
 }
 
-// Negamax for move searching 
+// Negamax
 int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine) {
     nodeCount.fetch_add(1, std::memory_order_relaxed);
     
