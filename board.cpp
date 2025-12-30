@@ -134,6 +134,12 @@ void Board::makeMove(Move& move) {
     else if (piece == 4 && move.fromRow == 7 && move.fromCol == 0){
         whiteCanCastleQueenSide = false;
     }
+    else if (piece == -4 && move.fromRow == 0 && move.fromCol == 7){
+        blackCanCastleKingSide = false;
+    }
+    else if (piece == -4 && move.fromRow == 0 && move.fromCol == 0){
+        blackCanCastleQueenSide = false;
+    }
 
     if (piece == 6) {
         whiteCanCastleKingSide = false;
@@ -403,14 +409,14 @@ void generate_king_moves(const Board& board, int row, int col, std::vector<Move>
         // Black castles
         if (color == -1 && row == 0 && col == 4) {
             if (board.blackCanCastleKingSide) {
-                if (board.squares[0][5] == 0 && board.squares[0][6] == 0) {
+                if (board.squares[0][5] == 0 && board.squares[0][6] == 0 && board.squares[0][7] == -rook) {
                     if (!is_square_attacked(board, 0, 5, true) && !is_square_attacked(board, 0, 6, true)) {
                         Move m; m.fromRow = row; m.fromCol = col; m.toRow = 0; m.toCol = 6; m.isCastling = true; moveList.push_back(m);
                     }
                 }
             }
             if (board.blackCanCastleQueenSide) {
-                if (board.squares[0][1] == 0 && board.squares[0][2] == 0 && board.squares[0][3] == 0) {
+                if (board.squares[0][1] == 0 && board.squares[0][2] == 0 && board.squares[0][3] == 0 && board.squares[0][0] == -rook) {
                     if (!is_square_attacked(board, 0, 3, true) && !is_square_attacked(board, 0, 2, true)) {
                         Move m; m.fromRow = row; m.fromCol = col; m.toRow = 0; m.toCol = 2; m.isCastling = true; moveList.push_back(m);
                     }
@@ -421,14 +427,14 @@ void generate_king_moves(const Board& board, int row, int col, std::vector<Move>
         // White castles
         if (color == 1 && row == 7 && col == 4) {
             if (board.whiteCanCastleKingSide) {
-                if (board.squares[7][5] == 0 && board.squares[7][6] == 0) {
+                if (board.squares[7][5] == 0 && board.squares[7][6] == 0 && board.squares[7][7] == rook) {
                     if (!is_square_attacked(board, 7, 5, false) && !is_square_attacked(board, 7, 6, false)) {
                         Move m; m.fromRow = row; m.fromCol = col; m.toRow = 7; m.toCol = 6; m.isCastling = true; moveList.push_back(m);
                     }
                 }
             }
             if (board.whiteCanCastleQueenSide) {
-                if (board.squares[7][1] == 0 && board.squares[7][2] == 0 && board.squares[7][3] == 0) {
+                if (board.squares[7][1] == 0 && board.squares[7][2] == 0 && board.squares[7][3] == 0 && board.squares[7][0] == rook) {
                     if (!is_square_attacked(board, 7, 3, false) && !is_square_attacked(board, 7, 2, false)) {
                         Move m; m.fromRow = row; m.fromCol = col; m.toRow = 7; m.toCol = 2; m.isCastling = true; moveList.push_back(m);
                     }
