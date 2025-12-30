@@ -47,10 +47,7 @@ void bench() {
                   << columns[best.toCol] << (8 - best.toRow) << std::endl;
     }
 
-    long long benchDuration = std::max<long long>(1, totalTimeMs);
-    std::cout << "Bench: " << totalNodes << " nodes "
-              << (totalNodes * 1000 / benchDuration) << " nps" << std::endl;
-    std::cout << "Nodes: " << totalNodes << std::endl;
+    std::cout << "Bench: " << totalNodes << std::endl;
 }
 
 int main(int argc, char* argv[]) {
