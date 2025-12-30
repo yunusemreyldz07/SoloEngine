@@ -144,6 +144,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     
     pvLine.clear();
 
+    bool firstMove = true;
+
     const int alphaOrig = alpha;
     int maxEval = -200000;
     int MATE_VALUE = 100000;
@@ -195,11 +197,19 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     for (Move& move : possibleMoves) {
         board.makeMove(move);
-
+        int eval;
         std::vector<Move> childPv;
-        
-        int eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
-        
+        if (firstMove){
+            eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
+            firstMove = false;
+        }
+        else {
+            eval = -negamax(board, depth - 1, -alpha -1, -alpha, ply + 1, history, childPv);
+            if (eval > alpha && eval < beta) {
+                eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
+            }
+        }
+
         board.unmakeMove(move);
 
         if (eval > maxEval) {
