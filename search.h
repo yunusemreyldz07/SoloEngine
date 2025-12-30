@@ -5,7 +5,7 @@
 #include <vector>
 #include <cstdint>
 #include <atomic>
-
+extern char columns[];
 extern Move killerMove[2][100]; // 2 slots, max 100 ply
 extern int historyTable[64][64]; // fromSquare x toSquare
 extern std::atomic<long long> nodeCount; // visited node counter
@@ -22,6 +22,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
 // movetimeMs > 0: time-limited, effectively unlimited depth (search until time runs out).
 // movetimeMs <= 0: depth-limited, no time limit.
-Move getBestMove(Board& board, int depth, const std::vector<uint64_t>& baseHistory, int movetimeMs = -1);
+Move getBestMove(Board& board, int maxDepth, int movetimeMs = -1, const std::vector<uint64_t>& history = {}, int ply = 0);
 
 #endif

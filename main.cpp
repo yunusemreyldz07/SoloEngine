@@ -6,7 +6,6 @@
 #include <chrono>
 #include <vector>
 #include <algorithm>
-char columns[] = "abcdefgh";
 
 void bench() {
     // 1. Standart Test Pozisyonları (Stockfish'in kullandıkları)
@@ -31,7 +30,7 @@ void bench() {
         resetNodeCounter();
 
         auto startTime = std::chrono::steady_clock::now();
-        Move best = getBestMove(board, 5, history);
+        Move best = getBestMove(board, 5, -1, history);
         auto endTime = std::chrono::steady_clock::now();
 
         long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
@@ -143,7 +142,7 @@ int main(int argc, char* argv[]) {
                 transpositionTable.clear(); 
                 std::cout << "info string TT full, clearing memory..." << std::endl;
             }
-            Move best = getBestMove(board, depth, gameHistory, movetime);
+            Move best = getBestMove(board, depth, movetime, gameHistory);
             
             std::cout << "bestmove " << columns[best.fromCol] << (8 - best.fromRow) 
                  << columns[best.toCol] << (8 - best.toRow);

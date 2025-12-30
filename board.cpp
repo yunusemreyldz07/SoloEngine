@@ -4,6 +4,7 @@
 #include <cmath>
 #include <sstream>
 // Piece encoding (constants declared in board.h)
+char columns[] = "abcdefgh";
 
 int chess_board[8][8] = {
     {-rook, -knight, -bishop, -queen, -king, -bishop, -knight, -rook},
@@ -42,10 +43,6 @@ int queen_directions[8][2] = {
     {0, -1},          {0, 1},
     {1, -1},  {1, 0}, {1, 1}
 };
-
-inline int abs_int(int x) {
-    return x < 0 ? -x : x;
-}
 
 inline char to_upper_ascii(char c) {
     return (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
@@ -95,13 +92,13 @@ void Board::makeMove(Move& move) {
     squares[move.fromRow][move.fromCol] = 0;
     squares[move.toRow][move.toCol] = piece;
 
-    if (abs_int(piece) == 1 && move.fromCol != move.toCol && move.capturedPiece == 0) {
+    if (abs(piece) == 1 && move.fromCol != move.toCol && move.capturedPiece == 0) {
         move.isEnPassant = true;
         int captureRow = move.fromRow;
         squares[captureRow][move.toCol] = 0;
     }
     
-    if (abs_int(piece) == 6 && abs_int(move.fromCol - move.toCol) == 2) {
+    if (abs(piece) == 6 && abs(move.fromCol - move.toCol) == 2) {
         if (move.toCol > move.fromCol) {
             // king-side
             squares[move.toRow][move.toCol - 1] = squares[move.toRow][move.toCol + 1];
@@ -115,14 +112,14 @@ void Board::makeMove(Move& move) {
     }
 
     // Promotion
-    if (abs_int(piece) == 1) {
+    if (abs(piece) == 1) {
         int promotionRank = piece > 0 ? 0 : 7;
         if (move.toRow == promotionRank && move.promotion != 0) {
             squares[move.toRow][move.toCol] = (piece > 0) ? move.promotion : -move.promotion;
         }
     }
 
-    if (abs_int(piece) == 1 && abs_int(move.fromRow - move.toRow) == 2) {
+    if (abs(piece) == 1 && abs(move.fromRow - move.toRow) == 2) {
         enPassantCol = move.fromCol;
     } else {
         enPassantCol = -1;
@@ -281,9 +278,7 @@ void Board::loadFromFEN(const std::string& fen) {
     }
 }
 
-std::vector<Move> generate_pawn_moves(const Board& board, int row, int col) {
-    std::vector<Move> moves;
-    moves.reserve(16);
+void generate_pawn_moves(const Board& board, int row, int col, std::vector<Move>& moveList) {
     int piece = board.squares[row][col];
     int color = (piece > 0) ? 1 : -1; // 1 for white, -1 for black
     int direction = (color == 1) ? -1 : 1; // White moves up (-1), Black moves down (+1)
@@ -302,10 +297,10 @@ std::vector<Move> generate_pawn_moves(const Board& board, int row, int col) {
             for (int promoType : {queen, rook, bishop, knight}) {
                 Move pm = move;
                 pm.promotion = promoType;
-                moves.push_back(pm);
+                moveList.push_back(pm);
             }
         } else {
-            moves.push_back(move);
+            moveList.push_back(move);
 
             // Double move forward from starting position
             if ((color == 1 && row == 6) || (color == -1 && row == 1)) {
@@ -313,7 +308,7 @@ std::vector<Move> generate_pawn_moves(const Board& board, int row, int col) {
                 if (board.squares[r2][col] == 0) {
                     Move dm = move;
                     dm.toRow = r2;
-                    moves.push_back(dm);
+                    moveList.push_back(dm);
                 }
             }
         }
@@ -334,10 +329,10 @@ std::vector<Move> generate_pawn_moves(const Board& board, int row, int col) {
                         for (int promoType : {queen, rook, bishop, knight}) {
                             Move pm = m;
                             pm.promotion = promoType;
-                            moves.push_back(pm);
+                            moveList.push_back(pm);
                         }
                     } else {
-                        moves.push_back(m);
+                        moveList.push_back(m);
                     }
                 }
             }
@@ -345,7 +340,7 @@ std::vector<Move> generate_pawn_moves(const Board& board, int row, int col) {
     }
 
     // En passant (independent of forward square being empty)
-    if (board.enPassantCol != -1 && abs_int(col - board.enPassantCol) == 1) {
+    if (board.enPassantCol != -1 && abs(col - board.enPassantCol) == 1) {
         int epTargetRow = row + direction;
         if (epTargetRow >= 0 && epTargetRow < 8) {
             int epPawnRow = row; // captured pawn sits next to us on current row
@@ -356,17 +351,13 @@ std::vector<Move> generate_pawn_moves(const Board& board, int row, int col) {
                 m.fromRow = row; m.fromCol = col; m.toRow = epTargetRow; m.toCol = epPawnCol;
                 m.isEnPassant = true;
                 m.capturedPiece = expectedEnemyPawn;
-                moves.push_back(m);
+                moveList.push_back(m);
             }
         }
     }
-
-    return moves;
 }
 
-std::vector<Move> generate_knight_moves(const Board& board, int row, int col) {
-    std::vector<Move> moves;
-    moves.reserve(8);
+void generate_knight_moves(const Board& board, int row, int col, std::vector<Move>& moveList) {
     int piece = board.squares[row][col];
     int color = (piece > 0) ? 1 : -1; // 1 for white, -1 for black
 
@@ -379,26 +370,18 @@ std::vector<Move> generate_knight_moves(const Board& board, int row, int col) {
                 Move m;
                 m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c;
                 m.capturedPiece = target;
-                moves.push_back(m);
+                moveList.push_back(m);
             }
         }
     }
-    return moves;
 }
 
-std::vector<Move> generate_queen_moves(const Board& board, int row, int col) {
-    std::vector<Move> diagonalmoves = generate_bishop_moves(board, row, col);
-    std::vector<Move> straightmoves = generate_rook_moves(board, row, col);
-    std::vector<Move> allmoves;
-    allmoves.reserve(28);
-    allmoves.insert(allmoves.end(), diagonalmoves.begin(), diagonalmoves.end());
-    allmoves.insert(allmoves.end(), straightmoves.begin(), straightmoves.end());
-    return allmoves;
+void generate_queen_moves(const Board& board, int row, int col, std::vector<Move>& moveList) {
+    generate_bishop_moves(board, row, col, moveList);
+    generate_rook_moves(board, row, col, moveList);
 }
 
-std::vector<Move> generate_king_moves(const Board& board, int row, int col) {
-    std::vector<Move> moves;
-    moves.reserve(8);
+void generate_king_moves(const Board& board, int row, int col, std::vector<Move>& moveList) {
     int piece = board.squares[row][col];
     int color = (piece > 0) ? 1 : -1;
 
@@ -408,7 +391,7 @@ std::vector<Move> generate_king_moves(const Board& board, int row, int col) {
         if (r >= 0 && r < 8 && c >= 0 && c < 8) {
             int target = board.squares[r][c];
             if (target == 0 || (target > 0 && color == -1) || (target < 0 && color == 1)) {
-                Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = target; moves.push_back(m);
+                Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = target; moveList.push_back(m);
             }
         }
     }
@@ -422,14 +405,14 @@ std::vector<Move> generate_king_moves(const Board& board, int row, int col) {
             if (board.blackCanCastleKingSide) {
                 if (board.squares[0][5] == 0 && board.squares[0][6] == 0) {
                     if (!is_square_attacked(board, 0, 5, true) && !is_square_attacked(board, 0, 6, true)) {
-                        Move m; m.fromRow = row; m.fromCol = col; m.toRow = 0; m.toCol = 6; m.isCastling = true; moves.push_back(m);
+                        Move m; m.fromRow = row; m.fromCol = col; m.toRow = 0; m.toCol = 6; m.isCastling = true; moveList.push_back(m);
                     }
                 }
             }
             if (board.blackCanCastleQueenSide) {
                 if (board.squares[0][1] == 0 && board.squares[0][2] == 0 && board.squares[0][3] == 0) {
                     if (!is_square_attacked(board, 0, 3, true) && !is_square_attacked(board, 0, 2, true)) {
-                        Move m; m.fromRow = row; m.fromCol = col; m.toRow = 0; m.toCol = 2; m.isCastling = true; moves.push_back(m);
+                        Move m; m.fromRow = row; m.fromCol = col; m.toRow = 0; m.toCol = 2; m.isCastling = true; moveList.push_back(m);
                     }
                 }
             }
@@ -440,37 +423,34 @@ std::vector<Move> generate_king_moves(const Board& board, int row, int col) {
             if (board.whiteCanCastleKingSide) {
                 if (board.squares[7][5] == 0 && board.squares[7][6] == 0) {
                     if (!is_square_attacked(board, 7, 5, false) && !is_square_attacked(board, 7, 6, false)) {
-                        Move m; m.fromRow = row; m.fromCol = col; m.toRow = 7; m.toCol = 6; m.isCastling = true; moves.push_back(m);
+                        Move m; m.fromRow = row; m.fromCol = col; m.toRow = 7; m.toCol = 6; m.isCastling = true; moveList.push_back(m);
                     }
                 }
             }
             if (board.whiteCanCastleQueenSide) {
                 if (board.squares[7][1] == 0 && board.squares[7][2] == 0 && board.squares[7][3] == 0) {
                     if (!is_square_attacked(board, 7, 3, false) && !is_square_attacked(board, 7, 2, false)) {
-                        Move m; m.fromRow = row; m.fromCol = col; m.toRow = 7; m.toCol = 2; m.isCastling = true; moves.push_back(m);
+                        Move m; m.fromRow = row; m.fromCol = col; m.toRow = 7; m.toCol = 2; m.isCastling = true; moveList.push_back(m);
                     }
                 }
             }
         }
     }
-    return moves;
 }
 
-std::vector<Move> generate_bishop_moves(const Board& board, int row, int col) {
+void generate_bishop_moves(const Board& board, int row, int col, std::vector<Move>& moveList) {
     int piece = board.squares[row][col];
     int color = (piece > 0) ? 1 : -1; // 1 for white, -1 for black
-    std::vector<Move> moves;
-    moves.reserve(14);
     for (int d = 0; d < 4; ++d) {
         int r = row + bishop_directions[d][0];
         int c = col + bishop_directions[d][1];
         while (r >= 0 && r < 8 && c >= 0 && c < 8) {
             int target = board.squares[r][c];
             if (target == 0) {
-                Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = 0; moves.push_back(m);
+                Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = 0; moveList.push_back(m);
             } else {
                 if ((target > 0 && color == -1) || (target < 0 && color == 1)) {
-                    Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = target; moves.push_back(m);
+                    Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = target; moveList.push_back(m);
                 }
                 break;
             }
@@ -478,24 +458,21 @@ std::vector<Move> generate_bishop_moves(const Board& board, int row, int col) {
             c += bishop_directions[d][1];
         }
     }
-    return moves;
 }
 
-std::vector<Move> generate_rook_moves(const Board& board, int row, int col) {
+void generate_rook_moves(const Board& board, int row, int col, std::vector<Move>& moveList) {
     int piece = board.squares[row][col];
     int color = (piece > 0) ? 1 : -1; // 1 for white, -1 for black
-    std::vector<Move> moves;
-    moves.reserve(14);
     for (int d = 0; d < 4; ++d) {
         int r = row + rook_directions[d][0];
         int c = col + rook_directions[d][1];
         while (r >= 0 && r < 8 && c >= 0 && c < 8) {
             int target = board.squares[r][c];
             if (target == 0) {
-                Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = 0; moves.push_back(m);
+                Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = 0; moveList.push_back(m);
             } else {
                 if ((target > 0 && color == -1) || (target < 0 && color == 1)) {
-                    Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = target; moves.push_back(m);
+                    Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = target; moveList.push_back(m);
                 }
                 break;
             }
@@ -503,59 +480,43 @@ std::vector<Move> generate_rook_moves(const Board& board, int row, int col) {
             c += rook_directions[d][1];
         }
     }
-    return moves;
 }
 
-std::vector<Move> get_all_moves(const Board& board, bool isWhiteTurn) {
-    std::vector<Move> allMoves;
-    allMoves.reserve(256);
+std::vector<Move> get_all_moves(Board& board, bool isWhiteTurn) {
+    std::vector<Move> pseudoMoves;
+    std::vector<Move> legalMoves;
+    pseudoMoves.reserve(256);
     for (int r = 0; r < 8; ++r) {
         for (int c = 0; c < 8; ++c) {
             int piece = board.squares[r][c];
             if (piece == 0) continue;
             if (isWhiteTurn && piece < 0) continue;
             if (!isWhiteTurn && piece > 0) continue;
-            switch (abs_int(piece)) {
-                case pawn:
-                    {
-                        auto v = generate_pawn_moves(board, r, c);
-                        allMoves.insert(allMoves.end(), v.begin(), v.end());
-                    }
-                    break;
-                case knight:
-                    {
-                        auto v = generate_knight_moves(board, r, c);
-                        allMoves.insert(allMoves.end(), v.begin(), v.end());
-                    }
-                    break;
-                case bishop:
-                    {
-                        auto v = generate_bishop_moves(board, r, c);
-                        allMoves.insert(allMoves.end(), v.begin(), v.end());
-                    }
-                    break;
-                case rook:
-                    {
-                        auto v = generate_rook_moves(board, r, c);
-                        allMoves.insert(allMoves.end(), v.begin(), v.end());
-                    }
-                    break;
-                case queen:
-                    {
-                        auto v = generate_queen_moves(board, r, c);
-                        allMoves.insert(allMoves.end(), v.begin(), v.end());
-                    }
-                    break;
-                case king:
-                    {
-                        auto v = generate_king_moves(board, r, c);
-                        allMoves.insert(allMoves.end(), v.begin(), v.end());
-                    }
-                    break;
+            switch (abs(piece)) {
+                case pawn:   generate_pawn_moves(board, r, c, pseudoMoves); break;
+                case knight: generate_knight_moves(board, r, c, pseudoMoves); break;
+                case bishop: generate_bishop_moves(board, r, c, pseudoMoves); break;
+                case rook:   generate_rook_moves(board, r, c, pseudoMoves); break;
+                case queen:  generate_queen_moves(board, r, c, pseudoMoves); break;
+                case king:   generate_king_moves(board, r, c, pseudoMoves); break;
             }
         }
     }
-    return allMoves;
+
+    for (auto &m : pseudoMoves) {
+    
+        board.makeMove(m);
+        int kingRow = isWhiteTurn ? board.whiteKingRow : board.blackKingRow;
+        int kingCol = isWhiteTurn ? board.whiteKingCol : board.blackKingCol;
+        if (is_square_attacked(board, kingRow, kingCol, !isWhiteTurn)) {
+            board.unmakeMove(m);
+            continue;
+        }
+        legalMoves.push_back(m);
+        board.unmakeMove(m);
+    }
+
+    return legalMoves;
 }
 
 std::vector<Move> get_capture_moves(const Board& board) {
@@ -568,15 +529,15 @@ std::vector<Move> get_capture_moves(const Board& board) {
             if (piece == 0) continue;
             if (whiteToMove && piece < 0) continue;
             if (!whiteToMove && piece > 0) continue;
-            int absP = abs_int(piece);
+            int absP = abs(piece);
             std::vector<Move> gen;
             switch (absP) {
-                case pawn: gen = generate_pawn_moves(board, row, col); break;
-                case knight: gen = generate_knight_moves(board, row, col); break;
-                case bishop: gen = generate_bishop_moves(board, row, col); break;
-                case rook: gen = generate_rook_moves(board, row, col); break;
-                case queen: gen = generate_queen_moves(board, row, col); break;
-                case king: gen = generate_king_moves(board, row, col); break;
+                case pawn: generate_pawn_moves(board, row, col, gen); break;
+                case knight: generate_knight_moves(board, row, col, gen); break;
+                case bishop: generate_bishop_moves(board, row, col, gen); break;
+                case rook: generate_rook_moves(board, row, col, gen); break;
+                case queen: generate_queen_moves(board, row, col, gen); break;
+                case king: generate_king_moves(board, row, col, gen); break;
             }
             for (auto &m : gen) {
                 if (m.capturedPiece != 0 || m.isEnPassant) moves.push_back(m);
@@ -622,7 +583,7 @@ bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttack
             if (r < 0 || r >= 8 || c < 0 || c >= 8) break;
             int p = board.squares[r][c];
             if (p != 0) {
-                if ((p > 0) == isWhiteAttacker && (abs_int(p) == queen || abs_int(p) == rook)) return true;
+                if ((p > 0) == isWhiteAttacker && (abs(p) == queen || abs(p) == rook)) return true;
                 break;
             }
         }
@@ -636,7 +597,7 @@ bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttack
             if (r < 0 || r >= 8 || c < 0 || c >= 8) break;
             int p = board.squares[r][c];
             if (p != 0) {
-                if ((p > 0) == isWhiteAttacker && (abs_int(p) == queen || abs_int(p) == bishop)) return true;
+                if ((p > 0) == isWhiteAttacker && (abs(p) == queen || abs(p) == bishop)) return true;
                 break;
             }
         }
@@ -664,7 +625,7 @@ void printBoard(const Board& board) {
             char cStr = '.';
             if (p != 0) {
                 char ch = ' ';
-                int ap = abs_int(p);
+                int ap = abs(p);
                 switch (ap) {
                     case pawn: ch = 'p'; break;
                     case knight: ch = 'n'; break;
@@ -728,7 +689,7 @@ const Zobrist& zobrist() {
 }
 
 int piece_to_zobrist_index(int piece) {
-    int absP = abs_int(piece);
+    int absP = abs(piece);
     if (absP < 1 || absP > 6) return -1;
     int base = (piece > 0) ? 0 : 6;
     return base + (absP - 1);
