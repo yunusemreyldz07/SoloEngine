@@ -91,7 +91,7 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
 
 int quiescence(Board& board, int alpha, int beta, int ply){
     // Do not stop until you reach a quiet position
-    int stand_pat = !board.isWhiteTurn ? evaluate_board(board) : -evaluate_board(board);
+    int stand_pat = board.isWhiteTurn ? evaluate_board(board) : -evaluate_board(board);
 
     // Alpha-Beta pruning
     if (stand_pat >= beta) {
