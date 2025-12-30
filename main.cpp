@@ -6,7 +6,6 @@
 #include <chrono>
 #include <vector>
 #include <algorithm>
-char columns[] = "abcdefgh";
 
 void bench() {
     // 1. Standart Test Pozisyonları (Stockfish'in kullandıkları)
@@ -31,7 +30,7 @@ void bench() {
         resetNodeCounter();
 
         auto startTime = std::chrono::steady_clock::now();
-        Move best = getBestMove(board, 5, history);
+        Move best = getBestMove(board, 5, -1, history);
         auto endTime = std::chrono::steady_clock::now();
 
         long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
@@ -48,9 +47,9 @@ void bench() {
     }
 
     long long benchDuration = std::max<long long>(1, totalTimeMs);
-    std::cout << "Bench: " << totalNodes << " nodes "
+    std::cout << totalNodes << " nodes " 
               << (totalNodes * 1000 / benchDuration) << " nps" << std::endl;
-    std::cout << "Nodes: " << totalNodes << std::endl;
+    std::cout << "Bench: " << totalNodes << std::endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -71,6 +70,8 @@ int main(int argc, char* argv[]) {
         if (line == "uci") {
             std::cout << "id name SoloBot" << std::endl;
             std::cout << "id author xsolod3v" << std::endl;
+            std::cout << "option name Hash type spin default 16 min 1 max 2048" << std::endl;
+            std::cout << "option name Threads type spin default 1 min 1 max 1" << std::endl;
             std::cout << "uciok" << std::endl;
         }
         
@@ -141,7 +142,7 @@ int main(int argc, char* argv[]) {
                 transpositionTable.clear(); 
                 std::cout << "info string TT full, clearing memory..." << std::endl;
             }
-            Move best = getBestMove(board, depth, gameHistory, movetime);
+            Move best = getBestMove(board, depth, movetime, gameHistory);
             
             std::cout << "bestmove " << columns[best.fromCol] << (8 - best.fromRow) 
                  << columns[best.toCol] << (8 - best.toRow);

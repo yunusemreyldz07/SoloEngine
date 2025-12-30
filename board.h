@@ -6,6 +6,8 @@
 #include <string>
 #include <unordered_map>
 
+extern char columns[];
+
 // Piece constants
 // Convention: empty = 0, white pieces are positive, black pieces are negative.
 inline constexpr int empty_sqr = 0;
@@ -67,14 +69,13 @@ public:
 };
 
 // Move generation functions
-std::vector<Move> generate_pawn_moves(const Board& board, int row, int col);
-std::vector<Move> generate_knight_moves(const Board& board, int row, int col);
-std::vector<Move> generate_bishop_moves(const Board& board, int row, int col);
-std::vector<Move> generate_rook_moves(const Board& board, int row, int col);
-std::vector<Move> generate_queen_moves(const Board& board, int row, int col);
-std::vector<Move> generate_king_moves(const Board& board, int row, int col);
-
-std::vector<Move> get_all_moves(const Board& board, bool isWhiteTurn = true);
+void generate_pawn_moves(const Board& board, int row, int col, std::vector<Move>& moveList);
+void generate_knight_moves(const Board& board, int row, int col, std::vector<Move>& moveList);
+void generate_bishop_moves(const Board& board, int row, int col, std::vector<Move>& moveList);
+void generate_rook_moves(const Board& board, int row, int col, std::vector<Move>& moveList);
+void generate_queen_moves(const Board& board, int row, int col, std::vector<Move>& moveList);
+void generate_king_moves(const Board& board, int row, int col, std::vector<Move>& moveList);
+std::vector<Move> get_all_moves(Board& board, bool isWhiteTurn = true);
 std::vector<Move> get_capture_moves(const Board& board);
 
 // Attack detection
