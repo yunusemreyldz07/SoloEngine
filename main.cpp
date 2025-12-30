@@ -117,32 +117,62 @@ int main(int argc, char* argv[]) {
         }
         
         if (line.substr(0, 2) == "go") {
-            int depth = 6;
+            int depth = -1;
             int movetime = -1;
+            int wtime = -1, btime = -1;
+            int winc = 0, binc = 0;
             {
                 std::stringstream ss(line);
                 std::string token;
                 ss >> token; 
                 while (ss >> token) {
-                    if (token == "depth") {
-                        int parsed = 0;
-                        if (ss >> parsed) depth = parsed;
-                    }
-                    else if (token == "movetime") {
-                        ss >> movetime;
-                    }
+                if (token == "depth") {
+                    ss >> depth;
+                }
+                else if (token == "movetime") {
+                    ss >> movetime;
+                }
+                else if (token == "wtime") {
+                    ss >> wtime;
+                }
+                else if (token == "btime") {
+                    ss >> btime;
+                }
+                else if (token == "winc") {
+                    ss >> winc;
+                }
+                else if (token == "binc") {
+                    ss >> binc;
                 }
             }
-            
-            if (movetime > 0) {
+            int timeToThink = 0;
+
+            if (movetime != -1) {
+                timeToThink = movetime;
                 depth = 128;
+            }
+            else if (wtime != -1 || btime != -1) {
+                int myTime = board.isWhiteTurn ? wtime : btime;
+                int myInc = board.isWhiteTurn ? winc : binc;
+
+                if (myTime > 0) {
+                    timeToThink = (myTime / 20) + (myInc / 2);
+                    if (timeToThink >= myTime) {
+                        timeToThink = myTime - 50;
+                    }
+                    if (timeToThink < 0) timeToThink = 10;
+                }
+                depth = 128;
+            }
+            else if (depth == -1) {
+                depth = 6;
             }
             
             if (transpositionTable.size() > 20000000) { 
                 transpositionTable.clear(); 
                 std::cout << "info string TT full, clearing memory..." << std::endl;
             }
-            Move best = getBestMove(board, depth, movetime, gameHistory);
+            Move best = getBestMove(board, depth, timeToThink, gameHistory);
             
             std::cout << "bestmove " << columns[best.fromCol] << (8 - best.fromRow) 
                  << columns[best.toCol] << (8 - best.toRow);
