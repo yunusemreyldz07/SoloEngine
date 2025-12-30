@@ -71,6 +71,8 @@ int main(int argc, char* argv[]) {
         if (line == "uci") {
             std::cout << "id name SoloBot" << std::endl;
             std::cout << "id author xsolod3v" << std::endl;
+            std::cout << "option name Hash type spin default 16 min 1 max 2048" << std::endl;
+            std::cout << "option name Threads type spin default 1 min 1 max 1" << std::endl;
             std::cout << "uciok" << std::endl;
         }
         
