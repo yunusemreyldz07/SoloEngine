@@ -183,11 +183,11 @@ int main(int argc, char* argv[]) {
                     case rook: std::cout << 'r'; break;
                     case bishop: std::cout << 'b'; break;
                     case knight: std::cout << 'n'; break;
+                    }
                 }
-            }
             std::cout << std::endl;
+            }
         }
-        
         else if (line == "quit") {
             break;
         }
