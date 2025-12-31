@@ -84,6 +84,7 @@ int main(int argc, char* argv[]) {
         }
         
         else if (line.substr(0, 8) == "position") {
+            transpositionTable.clear();
             if (line.find("startpos") != std::string::npos) {
                 board.resetBoard();
             }
@@ -115,7 +116,7 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
-        
+
         if (line.substr(0, 2) == "go") {
             int depth = -1;
             int movetime = -1;
@@ -153,16 +154,18 @@ int main(int argc, char* argv[]) {
                 timeToThink = movetime;
                 depth = 128;
             }
+
             else if (wtime != -1 || btime != -1) {
                 int myTime = board.isWhiteTurn ? wtime : btime;
                 int myInc = board.isWhiteTurn ? winc : binc;
 
                 if (myTime > 0) {
+
                     timeToThink = (myTime / 20) + (myInc / 2);
-                    if (timeToThink >= myTime) {
-                        timeToThink = myTime - 50;
-                    }
-                    if (timeToThink < 0) timeToThink = 10;
+
+                    if (timeToThink >= myTime) timeToThink = myTime - 50;
+                    
+                    if (timeToThink < 10) timeToThink = 10; 
                 }
                 depth = 128;
             }
@@ -170,16 +173,15 @@ int main(int argc, char* argv[]) {
                 depth = 6;
             }
 
-            if (transpositionTable.size() > 20000000) {
-                transpositionTable.clear();
-                std::cout << "info string TT full, clearing memory..." << std::endl;
+            if (transpositionTable.size() > 20000000) { 
+                transpositionTable.clear(); 
             }
 
             Move best = getBestMove(board, depth, timeToThink, gameHistory);
-
-            std::cout << "bestmove " << columns[best.fromCol] << (8 - best.fromRow)
-                      << columns[best.toCol] << (8 - best.toRow);
-
+            
+            std::cout << "bestmove " << columns[best.fromCol] << (8 - best.fromRow) 
+                 << columns[best.toCol] << (8 - best.toRow);
+            
             if (best.promotion != 0) {
                 switch (abs(best.promotion)) {
                     case queen: std::cout << 'q'; break;

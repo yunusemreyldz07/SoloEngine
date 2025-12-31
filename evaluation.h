@@ -15,6 +15,9 @@ extern const int queen_pst[8][8];
 extern const int mg_king_pst[8][8];
 extern const int eg_king_pst[8][8];
 
+extern int center_distance(int row, int col);
+extern int manhattan_distance(int r1, int c1, int r2, int c2);
+
 // Evaluation functions
 bool is_endgame(const Board& board);
 int evaluate_board(const Board& board);

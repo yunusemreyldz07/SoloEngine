@@ -141,8 +141,6 @@ int quiescence(Board& board, int alpha, int beta, int ply){
 // Negamax for move searching 
 int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine) {
     nodeCount.fetch_add(1, std::memory_order_relaxed);
-    
-    pvLine.clear();
 
     bool firstMove = true;
 
@@ -151,30 +149,31 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     int MATE_VALUE = 100000;
 
     if (depth == 0) {
+        pvLine.clear();
         return quiescence(board, alpha, beta, ply);
     }
 
     if (is_threefold_repetition(history)) {
+        pvLine.clear();
         return 0; // Draw
     }
 
-    history.push_back(position_key(board));
     uint64_t currentHash = position_key(board);
     TTEntry* ttEntry = probeTranspositionTable(currentHash, transpositionTable);
 
-    auto history_pop = [&history]() { history.pop_back(); };
+    auto history_pop = [&history]() { if (!history.empty()) history.pop_back(); };
 
     if (ttEntry != nullptr && ttEntry->depth >= depth) {
         if (ttEntry->flag == EXACT) {
-            history_pop();
+            pvLine.clear();
             return ttEntry->score;
         }
         if (ttEntry->flag == ALPHA && ttEntry->score <= alpha) {
-            history_pop();
+            pvLine.clear();
             return alpha;
         }
         if (ttEntry->flag == BETA && ttEntry->score >= beta) {
-            history_pop();
+            pvLine.clear();
             return beta;
         }
     }
@@ -199,6 +198,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         board.makeMove(move);
         int eval;
         std::vector<Move> childPv;
+        uint64_t newHash = position_key(board);
+        history.push_back(newHash);
         if (firstMove){
             eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
             firstMove = false;
@@ -209,24 +210,24 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
             }
         }
-
+        if (!history.empty()) history.pop_back();
         board.unmakeMove(move);
 
         if (eval > maxEval) {
             maxEval = eval;
-        }
-
-        if (eval > alpha) {
-            alpha = eval;
             bestMove = move;
             pvLine.clear();
             pvLine.push_back(move);
             pvLine.insert(pvLine.end(), childPv.begin(), childPv.end());
         }
 
+        if (eval > alpha) {
+            alpha = eval;
+        }
+
         if (beta <= alpha) {
             if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
-                 if (!(move.fromCol == killerMove[0][ply].fromCol && move.fromRow == killerMove[0][ply].fromRow &&
+                 if (ply < 100 && !(move.fromCol == killerMove[0][ply].fromCol && move.fromRow == killerMove[0][ply].fromRow &&
                       move.toCol == killerMove[0][ply].toCol && move.toRow == killerMove[0][ply].toRow)){
                     killerMove[1][ply] = killerMove[0][ply];
                     killerMove[0][ply] = move;
@@ -234,7 +235,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             }
             int from = move.fromRow * 8 + move.fromCol;
             int to = move.toRow * 8 + move.toCol;
-            historyTable[from][to] += depth * depth;
+            
+            if (from >= 0 && from < 64 && to >= 0 && to < 64) {
+                 historyTable[from][to] += depth * depth;
+            }
+            
             break; // beta cutoff
         }
     }
@@ -312,6 +317,8 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
             std::vector<Move> childPv;
             std::vector<uint64_t> localHistory = history; // make a mutable copy for search
+            uint64_t newHash = position_key(board);
+            localHistory.push_back(newHash);
             int val = -negamax(board, depth - 1, -beta, -alpha, ply + 1, localHistory, childPv);
             
             board.unmakeMove(move);
