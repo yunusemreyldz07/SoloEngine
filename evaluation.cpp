@@ -85,6 +85,16 @@ inline int abs_int(int x) {
     return x < 0 ? -x : x;
 }
 
+// Distance from center squares (3,3), (3,4), (4,3), (4,4)
+int center_distance(int row, int col) {
+    return std::abs(2 * row - 7) + std::abs(2 * col - 7);
+}
+
+// Distance between two squares
+int manhattan_distance(int r1, int c1, int r2, int c2) {
+    return std::abs(r1 - r2) + std::abs(c1 - c2);
+}
+
 bool is_endgame(const Board& board) {
     int whiteQueens = 0;
     int blackQueens = 0;
@@ -387,84 +397,27 @@ int evaluate_board(const Board& board) {
 
     // Apply king scores now that phase is known
     score += endgame ? (whiteKingEgScore + blackKingEgScore) : (whiteKingMgScore + blackKingMgScore);
-    /*
-    if (isOpening) {
-        int whiteDevelopment = 0;
-        int blackDevelopment = 0;
-        
-        // Knights should move from starting squares
-        if (board.squares[7][1] == knight) whiteDevelopment -= 30; // still at b1
-        if (board.squares[7][6] == knight) whiteDevelopment -= 30; // still at g1
-        
-        // Reward developed knights
-        if (board.squares[5][2] == knight) whiteDevelopment += 25; // c3
-        if (board.squares[5][5] == knight) whiteDevelopment += 25; // f3
-        if (board.squares[6][2] == knight) whiteDevelopment += 15; // c2 (acceptable)
-        if (board.squares[6][5] == knight) whiteDevelopment += 15; // f2 (acceptable)
-        
-        // Bishops should move from starting squares
-        if (board.squares[7][2] == bishop) whiteDevelopment -= 25; // still at c1
-        if (board.squares[7][5] == bishop) whiteDevelopment -= 25; // still at f1
-        
-        // Castling is great in opening
-        if (!board.whiteCanCastleKingSide && !board.whiteCanCastleQueenSide) {
-            // Already castled (king moved)
-            if (board.whiteKingCol != 4) {
-                whiteDevelopment += 50; // Castled
-            }
-        }
-        
-        // Queen shouldn't move early
-        if (board.squares[7][3] != queen) { // Queen not on starting square
-            bool queenMoved = false;
-            for (int row = 0; row < 8; row++) {
-                for (int column = 0; column < 8; column++) {
-                    if (board.squares[row][column] == queen) {
-                        queenMoved = true;
-                        // Penalty for early queen moves
-                        if (row != 7) whiteDevelopment -= 40;
-                        break;
-                    }
-                }
-                if (queenMoved) break;
-            }
-        }
-        
-        // BLACK DEVELOPMENT (mirror logic)
-        if (board.squares[0][1] == -knight) blackDevelopment -= 30;
-        if (board.squares[0][6] == -knight) blackDevelopment -= 30;
-        
-        if (board.squares[2][2] == -knight) blackDevelopment += 25; // c6
-        if (board.squares[2][5] == -knight) blackDevelopment += 25; // f6
-        if (board.squares[1][2] == -knight) blackDevelopment += 15;
-        if (board.squares[1][5] == -knight) blackDevelopment += 15;
-        
-        if (board.squares[0][2] == -bishop) blackDevelopment -= 25;
-        if (board.squares[0][5] == -bishop) blackDevelopment -= 25;
-        
-        if (!board.blackCanCastleKingSide && !board.blackCanCastleQueenSide) {
-            if (board.blackKingCol != 4) {
-                blackDevelopment += 50;
-            }
-        }
-        
-        if (board.squares[0][3] != -queen) {
-            bool queenMoved = false;
-            for (int row = 0; row < 8; row++) {
-                for (int column = 0; column < 8; column++) {
-                    if (board.squares[row][column] == -queen) {
-                        queenMoved = true;
-                        if (row != 0) blackDevelopment -= 40;
-                        break;
-                    }
-                }
-                if (queenMoved) break;
-            }
-        }
-        
-        score += whiteDevelopment - blackDevelopment;
-    } */
 
+    if (endgame && (score > 200 || score < -200)) {  
+        bool whiteWinning = (score > 0);
+        int winningKingRow = whiteWinning ? board.whiteKingRow : board.blackKingRow;
+        int winningKingCol = whiteWinning ? board.whiteKingCol : board.blackKingCol;
+        int losingKingRow  = whiteWinning ? board.blackKingRow : board.whiteKingRow;
+        int losingKingCol  = whiteWinning ? board.blackKingCol : board.whiteKingCol;
+        
+        int enemyDistFromCenter = center_distance(losingKingRow, losingKingCol);
+        
+        int distanceBetweenKings = manhattan_distance(
+            winningKingRow, winningKingCol, 
+            losingKingRow, losingKingCol
+        );
+        
+        int mopUpScore = 0;
+        mopUpScore += enemyDistFromCenter * 10;
+        mopUpScore += (14 - distanceBetweenKings) * 5;
+        
+        score += whiteWinning ? mopUpScore : -mopUpScore;
+    }
 
     // protect the pawns in front of the king
     if (isMidgame || isOpening) {
@@ -607,37 +560,7 @@ int evaluate_board(const Board& board) {
     if (blacksWhiteBishop >= 1 && blacksBlackBishop >= 1) {
         score -= endgame ? 60 : 30;
     }
-    /*
-    // Mobility bonus
-    int whiteMobility = 0;
-    int blackMobility = 0;
 
-    for (int row = 0; row < 8; row++) {
-        for (int column = 0; column < 8; column++) {
-            int p = board.squares[row][column];
-            if (p == 0) continue;
-            
-            int absPiece = abs_int(p);
-            if (absPiece == pawn || absPiece == king) continue; // Skip pawns/king
-            
-            std::vector<Move> moves;
-            switch (absPiece) {
-                case knight: moves = generate_knight_moves(board, row, column); break;
-                case bishop: moves = generate_bishop_moves(board, row, column); break;
-                case rook: moves = generate_rook_moves(board, row, column); break;
-                case queen: moves = generate_queen_moves(board, row, column); break;
-            }
-            
-            if (p > 0) {
-                whiteMobility += moves.size();
-            } else {
-                blackMobility += moves.size();
-            }
-        }
-    }
-
-    score += isOpening ? (whiteMobility - blackMobility) * 7 : (whiteMobility - blackMobility) * 3; // every extra move is worth 7 centipawns in opening, 3 in other phases (activity bonus)
-    */
     if (!endgame) { // center control in opening/midgame
         int whiteCenterPawns = 0;
         int blackCenterPawns = 0;
@@ -655,30 +578,6 @@ int evaluate_board(const Board& board) {
         if (board.squares[3][5] == -pawn) blackCenterPawns += 25; // f5
         
         score += whiteCenterPawns - blackCenterPawns;
-        /*
-        // Attacks on the center
-        int whiteActivity = 0;
-        int blackActivity = 0;
-        
-        // Bonus for pieces attacking center squares
-        int centerSquares[4][2] = {{4,4}, {4,3}, {3,4}, {3,3}}; // e4, d4, e5, d5
-        
-        for (auto& square : centerSquares) {
-            int row = square[0];
-            int column = square[1];
-            
-            // Check if white attacks this square
-            if (is_square_attacked(board, row, column, true)) {
-                whiteActivity += 15;
-            }
-            // Check if black attacks this square
-            if (is_square_attacked(board, row, column, false)) {
-                blackActivity += 15;
-            }
-        }
-        
-        score += whiteActivity - blackActivity;
-        */
     }
     score += board.isWhiteTurn ? TEMPO_BONUS : -TEMPO_BONUS; // static tempo bonus
     return score;
