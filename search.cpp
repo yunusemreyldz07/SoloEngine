@@ -178,6 +178,36 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
     }
 
+    // Null move pruning
+    {
+        int kingRow = board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow;
+        int kingCol = board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol;
+        // Check if side to move is currently in check
+        bool inCheck = is_square_attacked(board, kingRow, kingCol, !board.isWhiteTurn);
+
+        if (!inCheck && depth >= 3 && (beta - alpha == 1) && !is_endgame(board)) {
+            // Make a "null move" by flipping side to move
+            board.isWhiteTurn = !board.isWhiteTurn;
+
+            // Push new position key to history so threefold repetition checks remain correct
+            uint64_t nullHash = position_key(board);
+            history.push_back(nullHash);
+
+            // Reduction factor R (typical values 2..3). Ensure we don't search negative depth
+            int R = std::min(3, std::max(1, depth - 2));
+            std::vector<Move> nullPv;
+            int nullScore = -negamax(board, depth - 1 - R, -beta, -beta + 1, ply + 1, history, nullPv);
+
+            // Undo history change and null move
+            if (!history.empty()) history.pop_back();
+            board.isWhiteTurn = !board.isWhiteTurn;
+
+            if (nullScore >= beta) {
+                return beta; // Null-move cutoff
+            }
+        }
+    }
+
     std::vector<Move> possibleMoves = get_all_moves(board, board.isWhiteTurn);
     Move bestMove = possibleMoves.empty() ? Move() : possibleMoves[0];
 
