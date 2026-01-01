@@ -170,9 +170,10 @@ int main(int argc, char* argv[]) {
                     if (timeToThink < 0) timeToThink = 10;
                     depth = 128;
                 }
-                else if (depth == -1) {
-                    depth = 6;
-                }
+            }
+            
+            if (depth == -1) {
+                depth = 6;
             }
             
             if (transpositionTable.size() > 20000000) { 
