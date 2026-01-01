@@ -79,12 +79,18 @@ int main(int argc, char* argv[]) {
             std::cout << "readyok" << std::endl;
         }
 
+        else if (line == "ucinewgame") {
+            transpositionTable.clear();
+            board.resetBoard();
+            gameHistory.clear();
+            gameHistory.push_back(position_key(board));
+        }
+
         else if (line == "bench") {
             bench();
         }
         
         else if (line.substr(0, 8) == "position") {
-            transpositionTable.clear();
             if (line.find("startpos") != std::string::npos) {
                 board.resetBoard();
             }
@@ -155,17 +161,14 @@ int main(int argc, char* argv[]) {
                 depth = 128;
             }
 
-            else if (wtime != -1 || btime != -1) {
+            else if ((wtime != -1 && board.isWhiteTurn) || (btime != -1 && !board.isWhiteTurn)) {
                 int myTime = board.isWhiteTurn ? wtime : btime;
                 int myInc = board.isWhiteTurn ? winc : binc;
 
                 if (myTime > 0) {
 
                     timeToThink = (myTime / 20) + (myInc / 2);
-
-                    if (timeToThink >= myTime) timeToThink = myTime - 50;
-                    
-                    if (timeToThink < 10) timeToThink = 10; 
+                    timeToThink = std::min(timeToThink, std::max(10, myTime - 50));
                 }
                 depth = 128;
             }
