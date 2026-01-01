@@ -158,21 +158,21 @@ int main(int argc, char* argv[]) {
                 timeToThink = movetime;
                 depth = 128;
             }
-            else if (wtime != -1 || btime != -1) {
+            else {
                 int myTime = board.isWhiteTurn ? wtime : btime;
                 int myInc = board.isWhiteTurn ? winc : binc;
 
-                if (myTime > 0) {
+                if (myTime != -1 && myTime > 0) {
                     timeToThink = (myTime / 20) + (myInc / 2);
                     if (timeToThink >= myTime) {
                         timeToThink = myTime - 50;
                     }
                     if (timeToThink < 0) timeToThink = 10;
+                    depth = 128;
                 }
-                depth = 128;
-            }
-            else if (depth == -1) {
-                depth = 6;
+                else if (depth == -1) {
+                    depth = 6;
+                }
             }
             
             if (transpositionTable.size() > 20000000) { 
