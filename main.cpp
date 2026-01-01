@@ -82,6 +82,13 @@ int main(int argc, char* argv[]) {
         else if (line == "bench") {
             bench();
         }
+
+        else if (line == "ucinewgame") {
+            transpositionTable.clear();
+            board.resetBoard();
+            gameHistory.clear();
+            gameHistory.push_back(position_key(board));
+        }
         
         else if (line.substr(0, 8) == "position") {
             if (line.find("startpos") != std::string::npos) {
@@ -115,7 +122,7 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
-        
+
         if (line.substr(0, 2) == "go") {
             int depth = -1;
             int movetime = -1;
@@ -170,7 +177,6 @@ int main(int argc, char* argv[]) {
             
             if (transpositionTable.size() > 20000000) { 
                 transpositionTable.clear(); 
-                std::cout << "info string TT full, clearing memory..." << std::endl;
             }
             Move best = getBestMove(board, depth, timeToThink, gameHistory);
             

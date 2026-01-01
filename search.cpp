@@ -141,39 +141,71 @@ int quiescence(Board& board, int alpha, int beta, int ply){
 // Negamax
 int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine) {
     nodeCount.fetch_add(1, std::memory_order_relaxed);
-    
-    pvLine.clear();
+
+    bool firstMove = true;
 
     const int alphaOrig = alpha;
     int maxEval = -200000;
     int MATE_VALUE = 100000;
 
     if (depth == 0) {
+        pvLine.clear();
         return quiescence(board, alpha, beta, ply);
     }
 
     if (is_threefold_repetition(history)) {
+        pvLine.clear();
         return 0; // Draw
     }
 
-    history.push_back(position_key(board));
     uint64_t currentHash = position_key(board);
     TTEntry* ttEntry = probeTranspositionTable(currentHash, transpositionTable);
 
-    auto history_pop = [&history]() { history.pop_back(); };
+    auto history_pop = [&history]() { if (!history.empty()) history.pop_back(); };
 
     if (ttEntry != nullptr && ttEntry->depth >= depth) {
         if (ttEntry->flag == EXACT) {
-            history_pop();
+            pvLine.clear();
             return ttEntry->score;
         }
         if (ttEntry->flag == ALPHA && ttEntry->score <= alpha) {
-            history_pop();
+            pvLine.clear();
             return alpha;
         }
         if (ttEntry->flag == BETA && ttEntry->score >= beta) {
-            history_pop();
+            pvLine.clear();
             return beta;
+        }
+    }
+
+    // Null move pruning
+    {
+        int kingRow = board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow;
+        int kingCol = board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol;
+        // Check if side to move is currently in check
+        bool inCheck = is_square_attacked(board, kingRow, kingCol, !board.isWhiteTurn);
+
+        if (!inCheck && depth >= 3 && (beta - alpha == 1) && !is_endgame(board)) {
+            // Make a "null move" by flipping side to move
+            board.isWhiteTurn = !board.isWhiteTurn;
+
+            // Push new position key to history so threefold repetition checks remain correct
+            uint64_t nullHash = position_key(board);
+            history.push_back(nullHash);
+
+            // Reduction factor R (typical values 2..3). Ensure we don't search negative depth
+            int R = std::min(3, std::max(1, depth - 2));
+            std::vector<Move> nullPv;
+            int nullScore = -negamax(board, depth - 1 - R, -beta, -beta + 1, ply + 1, history, nullPv);
+
+            // Undo history change and null move
+            if (!history.empty()) history.pop_back();
+            board.isWhiteTurn = !board.isWhiteTurn;
+
+            if (nullScore >= beta) {
+                pvLine.clear();
+                return beta; // Null-move cutoff
+            }
         }
     }
 
@@ -195,28 +227,46 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     for (Move& move : possibleMoves) {
         board.makeMove(move);
-
+        int eval;
         std::vector<Move> childPv;
-        
-        int eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
-        
+        uint64_t newHash = position_key(board);
+        history.push_back(newHash);
+        if (firstMove){
+            eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
+            firstMove = false;
+        }
+        else {
+            // Perform the null-window search with a separate PV container to avoid
+            // propagating an incorrect PV if no re-search is performed.
+            std::vector<Move> nullWindowPv;
+            eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);
+            if (eval > alpha && eval < beta) {
+                // Re-search with full window; only this search should populate childPv.
+                childPv.clear();
+                eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
+            } else {
+                // No full-window re-search; do not use a PV from the null-window search.
+                childPv.clear();
+            }
+        }
+        if (!history.empty()) history.pop_back();
         board.unmakeMove(move);
 
         if (eval > maxEval) {
             maxEval = eval;
-        }
-
-        if (eval > alpha) {
-            alpha = eval;
             bestMove = move;
             pvLine.clear();
             pvLine.push_back(move);
             pvLine.insert(pvLine.end(), childPv.begin(), childPv.end());
         }
 
+        if (eval > alpha) {
+            alpha = eval;
+        }
+
         if (beta <= alpha) {
             if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
-                 if (!(move.fromCol == killerMove[0][ply].fromCol && move.fromRow == killerMove[0][ply].fromRow &&
+                 if (ply < 100 && !(move.fromCol == killerMove[0][ply].fromCol && move.fromRow == killerMove[0][ply].fromRow &&
                       move.toCol == killerMove[0][ply].toCol && move.toRow == killerMove[0][ply].toRow)){
                     killerMove[1][ply] = killerMove[0][ply];
                     killerMove[0][ply] = move;
@@ -224,7 +274,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             }
             int from = move.fromRow * 8 + move.fromCol;
             int to = move.toRow * 8 + move.toCol;
-            historyTable[from][to] += depth * depth;
+            
+            if (from >= 0 && from < 64 && to >= 0 && to < 64) {
+                 historyTable[from][to] += depth * depth;
+            }
+            
             break; // beta cutoff
         }
     }
@@ -302,6 +356,8 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
             std::vector<Move> childPv;
             std::vector<uint64_t> localHistory = history; // make a mutable copy for search
+            uint64_t newHash = position_key(board);
+            localHistory.push_back(newHash);
             int val = -negamax(board, depth - 1, -beta, -alpha, ply + 1, localHistory, childPv);
             
             board.unmakeMove(move);
