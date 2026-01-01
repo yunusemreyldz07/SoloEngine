@@ -203,6 +203,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             board.isWhiteTurn = !board.isWhiteTurn;
 
             if (nullScore >= beta) {
+                pvLine.clear();
                 return beta; // Null-move cutoff
             }
         }
