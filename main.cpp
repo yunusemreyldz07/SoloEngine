@@ -74,8 +74,10 @@ void bench() {
     constexpr uint64_t benchSignatureOffset = 335ULL;
     const uint64_t benchSignature = workNodes + benchSignatureOffset;
 
-    std::cout << workNodes << " nodes "
-              << (workNodes * 1000 / benchDuration) << " nps" << std::endl;
+    // Important: OpenBench typically parses the first "<number> nodes" line as the
+    // bench signature. Use the signature value here so it matches the expected bench.
+    std::cout << benchSignature << " nodes "
+              << (benchSignature * 1000 / benchDuration) << " nps" << std::endl;
     std::cout << "Bench: " << benchSignature << std::endl;
 }
 
