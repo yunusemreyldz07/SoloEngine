@@ -122,12 +122,11 @@ int main(int argc, char* argv[]) {
             int movetime = -1;
             int wtime = -1, btime = -1;
             int winc = 0, binc = 0;
-
-            std::stringstream ss(line);
-            std::string token;
-            ss >> token;
-
-            while (ss >> token) {
+            {
+                std::stringstream ss(line);
+                std::string token;
+                ss >> token; 
+                while (ss >> token) {
                 if (token == "depth") {
                     ss >> depth;
                 }
@@ -147,36 +146,32 @@ int main(int argc, char* argv[]) {
                     ss >> binc;
                 }
             }
-
             int timeToThink = 0;
 
             if (movetime != -1) {
                 timeToThink = movetime;
                 depth = 128;
             }
-
             else if (wtime != -1 || btime != -1) {
                 int myTime = board.isWhiteTurn ? wtime : btime;
                 int myInc = board.isWhiteTurn ? winc : binc;
 
                 if (myTime > 0) {
-
                     timeToThink = (myTime / 20) + (myInc / 2);
-
-                    if (timeToThink >= myTime) timeToThink = myTime - 50;
-                    
-                    if (timeToThink < 10) timeToThink = 10; 
+                    if (timeToThink >= myTime) {
+                        timeToThink = myTime - 50;
+                    }
+                    if (timeToThink < 0) timeToThink = 10;
                 }
                 depth = 128;
             }
             else if (depth == -1) {
                 depth = 6;
             }
-
+            
             if (transpositionTable.size() > 20000000) { 
                 transpositionTable.clear(); 
             }
-
             Move best = getBestMove(board, depth, timeToThink, gameHistory);
             
             std::cout << "bestmove " << columns[best.fromCol] << (8 - best.fromRow) 
@@ -188,11 +183,11 @@ int main(int argc, char* argv[]) {
                     case rook: std::cout << 'r'; break;
                     case bishop: std::cout << 'b'; break;
                     case knight: std::cout << 'n'; break;
+                    }
                 }
-            }
             std::cout << std::endl;
+            }
         }
-        
         else if (line == "quit") {
             break;
         }
