@@ -235,9 +235,17 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             firstMove = false;
         }
         else {
-            eval = -negamax(board, depth - 1, -alpha -1, -alpha, ply + 1, history, childPv);
+            // Perform the null-window search with a separate PV container to avoid
+            // propagating an incorrect PV if no re-search is performed.
+            std::vector<Move> nullWindowPv;
+            eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);
             if (eval > alpha && eval < beta) {
+                // Re-search with full window; only this search should populate childPv.
+                childPv.clear();
                 eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
+            } else {
+                // No full-window re-search; do not use a PV from the null-window search.
+                childPv.clear();
             }
         }
         if (!history.empty()) history.pop_back();
