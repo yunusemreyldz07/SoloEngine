@@ -82,9 +82,15 @@ int main(int argc, char* argv[]) {
         else if (line == "bench") {
             bench();
         }
+
+        else if (line == "ucinewgame") {
+            transpositionTable.clear();
+            board.resetBoard();
+            gameHistory.clear();
+            gameHistory.push_back(position_key(board));
+        }
         
         else if (line.substr(0, 8) == "position") {
-            transpositionTable.clear();
             if (line.find("startpos") != std::string::npos) {
                 board.resetBoard();
             }
