@@ -730,34 +730,113 @@ uint64_t position_key(const Board& board) {
     return h;
 }
 
-// Transposition Table Definition
-std::unordered_map<uint64_t, TTEntry> transpositionTable;
+// Transposition Table (lockless, thread-safe)
+TranspositionTable globalTT;
 
-void storeInTT(uint64_t key, int score, int depth, TTFlag flag, Move bestMove, 
-               std::unordered_map<uint64_t, TTEntry>& table) {
-    TTEntry entry;
-    entry.hash = key;
-    entry.score = score;
-    entry.depth = depth;
-    entry.flag = flag;
-    entry.bestMove = bestMove;
-    table[key] = entry;  // Insert or update the entry
+uint16_t TranspositionTable::packMove(const Move& m) {
+    int from = m.fromRow * 8 + m.fromCol;
+    int to = m.toRow * 8 + m.toCol;
+
+    if (from < 0 || from >= 64) from = 0;
+    if (to < 0 || to >= 64) to = 0;
+
+    int promo = std::abs(m.promotion);
+    if (promo < 0) promo = 0;
+    if (promo > 7) promo = 7;
+
+    return static_cast<uint16_t>((from & 63) | ((to & 63) << 6) | ((promo & 7) << 12));
 }
 
-TTEntry* probeTranspositionTable(uint64_t key, std::unordered_map<uint64_t, TTEntry>& table) {
-    auto it = table.find(key);
-    if (it != table.end() && it->second.hash == key) {
-        return &it->second;  // Found, return pointer
-    }
-    return nullptr;  // Not found
+Move TranspositionTable::unpackMove(uint16_t packed) {
+    Move m;
+    const int from = packed & 63;
+    const int to = (packed >> 6) & 63;
+    const int promo = (packed >> 12) & 7;
+
+    m.fromRow = from / 8;
+    m.fromCol = from % 8;
+    m.toRow = to / 8;
+    m.toCol = to % 8;
+    m.promotion = promo;
+    return m;
 }
 
-Move isInTranspositionTable(uint64_t key, const std::unordered_map<uint64_t, TTEntry>& table) {
-    auto it = table.find(key);
-    if (it != table.end()) {
-        return it->second.bestMove;
+uint64_t TranspositionTable::packData(int score, int depth, TTFlag flag, uint16_t packedMove) {
+    uint64_t data = static_cast<uint32_t>(score);
+    data |= (static_cast<uint64_t>(depth) & 0xFFULL) << 32;
+    data |= (static_cast<uint64_t>(static_cast<int>(flag)) & 0x3ULL) << 40;
+    data |= (static_cast<uint64_t>(packedMove) & 0xFFFFULL) << 42;
+    return data;
+}
+
+void TranspositionTable::unpackData(uint64_t data, int& score, int& depth, TTFlag& flag, uint16_t& packedMove) {
+    score = static_cast<int32_t>(static_cast<uint32_t>(data & 0xFFFFFFFFULL));
+    depth = static_cast<int>((data >> 32) & 0xFFULL);
+    flag = static_cast<TTFlag>((data >> 40) & 0x3ULL);
+    packedMove = static_cast<uint16_t>((data >> 42) & 0xFFFFULL);
+}
+
+void TranspositionTable::resize(int mbSize) {
+    delete[] table;
+    table = nullptr;
+    size = 0;
+
+    if (mbSize <= 0) return;
+    const size_t bytes = static_cast<size_t>(mbSize) * 1024ULL * 1024ULL;
+    size_t count = bytes / sizeof(TTAtomicEntry);
+    if (count == 0) count = 1;
+
+    table = new TTAtomicEntry[count];
+    size = count;
+    clear();
+}
+
+void TranspositionTable::clear() {
+    if (!table || size == 0) return;
+    for (size_t i = 0; i < size; i++) {
+        table[i].data.store(0, std::memory_order_relaxed);
+        table[i].key.store(0, std::memory_order_relaxed);
     }
-    return Move();
+}
+
+void TranspositionTable::store(uint64_t hash, int score, int depth, TTFlag flag, const Move& bestMove) {
+    if (!table || size == 0) return;
+
+    const size_t index = static_cast<size_t>(hash % size);
+    TTAtomicEntry& e = table[index];
+
+    const uint64_t existingKey = e.key.load(std::memory_order_relaxed);
+    const uint64_t existingData = e.data.load(std::memory_order_relaxed);
+    int existingScore = 0;
+    int existingDepth = 0;
+    TTFlag existingFlag = TTFlag::EXACT;
+    uint16_t existingMove = 0;
+    unpackData(existingData, existingScore, existingDepth, existingFlag, existingMove);
+
+    // Depth-preferred replacement. If keys differ, we can overwrite.
+    if (existingKey == 0 || existingKey != hash || depth >= existingDepth) {
+        const uint16_t pm = packMove(bestMove);
+        const uint64_t newData = packData(score, depth, flag, pm);
+        e.data.store(newData, std::memory_order_relaxed);
+        // Publish after data is written.
+        e.key.store(hash, std::memory_order_release);
+    }
+}
+
+bool TranspositionTable::probe(uint64_t key, int& outScore, int& outDepth, TTFlag& outFlag, Move& outMove) const {
+    if (!table || size == 0) return false;
+
+    const size_t index = static_cast<size_t>(key % size);
+    const TTAtomicEntry& e = table[index];
+
+    const uint64_t foundKey = e.key.load(std::memory_order_acquire);
+    if (foundKey != key) return false;
+
+    const uint64_t data = e.data.load(std::memory_order_relaxed);
+    uint16_t packedMove = 0;
+    unpackData(data, outScore, outDepth, outFlag, packedMove);
+    outMove = unpackMove(packedMove);
+    return true;
 }
 
 bool is_threefold_repetition(const std::vector<uint64_t>& history) {

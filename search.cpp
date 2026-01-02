@@ -159,20 +159,24 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     }
 
     uint64_t currentHash = position_key(board);
-    TTEntry* ttEntry = probeTranspositionTable(currentHash, transpositionTable);
+    int ttScore = 0;
+    int ttDepth = 0;
+    TTFlag ttFlag = TTFlag::EXACT;
+    Move ttMove;
+    const bool ttHit = globalTT.probe(currentHash, ttScore, ttDepth, ttFlag, ttMove);
 
     auto history_pop = [&history]() { if (!history.empty()) history.pop_back(); };
 
-    if (ttEntry != nullptr && ttEntry->depth >= depth) {
-        if (ttEntry->flag == EXACT) {
+    if (ttHit && ttDepth >= depth) {
+        if (ttFlag == EXACT) {
             pvLine.clear();
-            return ttEntry->score;
+            return ttScore;
         }
-        if (ttEntry->flag == ALPHA && ttEntry->score <= alpha) {
+        if (ttFlag == ALPHA && ttScore <= alpha) {
             pvLine.clear();
             return alpha;
         }
-        if (ttEntry->flag == BETA && ttEntry->score >= beta) {
+        if (ttFlag == BETA && ttScore >= beta) {
             pvLine.clear();
             return beta;
         }
@@ -222,7 +226,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     // Move Ordering
     std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
-        return scoreMove(board, a, ply, ttEntry ? &ttEntry->bestMove : nullptr) > scoreMove(board, b, ply, ttEntry ? &ttEntry->bestMove : nullptr);
+        const Move* ttMovePtr = ttHit ? &ttMove : nullptr;
+        return scoreMove(board, a, ply, ttMovePtr) > scoreMove(board, b, ply, ttMovePtr);
     });
 
     for (Move& move : possibleMoves) {
@@ -290,7 +295,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     else if (maxEval >= beta) flag = BETA;
     else flag = EXACT;
     
-    storeInTT(currentHash, maxEval, depth, flag, bestMove, transpositionTable);
+    globalTT.store(currentHash, maxEval, depth, flag, bestMove);
     return maxEval;
 }
 

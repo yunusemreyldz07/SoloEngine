@@ -1,10 +1,10 @@
 #ifndef BOARD_H
 #define BOARD_H
 
-#include <vector>
+#include <atomic>
 #include <cstdint>
 #include <string>
-#include <unordered_map>
+#include <vector>
 
 extern char columns[];
 
@@ -30,7 +30,7 @@ extern int queen_directions[8][2];
 struct Move {
     int fromRow, fromCol;
     int toRow, toCol;
-    int capturedPiece; 
+    int capturedPiece;
     int promotion;
 
     bool prevW_KingSide;
@@ -51,12 +51,12 @@ public:
     int pieces_otb[14];
     int squares[8][8];
     bool isWhiteTurn;
-    
+
     bool whiteCanCastleKingSide;
     bool whiteCanCastleQueenSide;
     bool blackCanCastleKingSide;
     bool blackCanCastleQueenSide;
-    
+
     int whiteKingRow, whiteKingCol;
     int blackKingRow, blackKingCol;
     int enPassantCol;
@@ -106,23 +106,42 @@ enum TTFlag {
     ALPHA,      // Upper bound (fail-low)
     BETA        // Lower bound (fail-high)
 };
-/*
-By the way, the concept of these flags is to indicate the type of score stored in the transposition table entry.
-EXACT means the score is precise, ALPHA indicates the score is an upper bound (the true score is less than or equal to this), and BETA indicates the score is a lower bound (the true score is greater than or equal to this).
-It is like an exam. Alpha is when you know you did at most 70 points (you could have done less), Beta is when you know you did at least 70 points (you could have done more), and Exact is when you know you did exactly 70 points.
-*/
 
-struct TTEntry {
-    uint64_t hash; // Position hash key
-    int depth; // Search depth at which this entry was stored
-    int score; // Evaluation score
-    TTFlag flag; // Type of score
-    Move bestMove; // Best move found
+class TranspositionTable {
+public:
+    TranspositionTable() : table(nullptr), size(0) {}
+    ~TranspositionTable() { delete[] table; }
+
+    // Resize the table to given size in MB (count = bytes / sizeof(entry)).
+    void resize(int mbSize);
+    void clear();
+
+    // Lockless + thread-safe: write data first, then publish key with release semantics.
+    void store(uint64_t hash, int score, int depth, TTFlag flag, const Move& bestMove);
+
+    // Backward-compatible overload (older call sites passing an int)
+    void store(uint64_t hash, int score, int depth, int flag, const Move& bestMove) {
+        store(hash, score, depth, static_cast<TTFlag>(flag), bestMove);
+    }
+
+    bool probe(uint64_t key, int& outScore, int& outDepth, TTFlag& outFlag, Move& outMove) const;
+    size_t entryCount() const { return size; }
+
+private:
+    struct TTAtomicEntry {
+        std::atomic<uint64_t> key{0};
+        std::atomic<uint64_t> data{0};
+    };
+
+    TTAtomicEntry* table;
+    size_t size;
+
+    static uint16_t packMove(const Move& m);
+    static Move unpackMove(uint16_t packed);
+    static uint64_t packData(int score, int depth, TTFlag flag, uint16_t packedMove);
+    static void unpackData(uint64_t data, int& score, int& depth, TTFlag& flag, uint16_t& packedMove);
 };
-TTEntry* probeTranspositionTable(uint64_t key, std::unordered_map<uint64_t, TTEntry>& table);
-void storeInTT(uint64_t key, int score, int depth, TTFlag flag, Move bestMove, std::unordered_map<uint64_t, TTEntry>& table);
-extern std::unordered_map<uint64_t, TTEntry> transpositionTable;
-Move isInTranspositionTable(uint64_t key, const std::unordered_map<uint64_t, Move>& table);
 
+extern TranspositionTable globalTT;
 
 #endif

@@ -43,7 +43,8 @@ void bench() {
     uint64_t workNodes = 0;
     long long totalTimeMs = 0;
     Board board;
-    transpositionTable.clear();
+    if (globalTT.entryCount() == 0) globalTT.resize(16);
+    globalTT.clear();
 
     for (size_t i = 0; i < fens.size(); ++i) {
         const auto& fen = fens[i];
@@ -87,6 +88,8 @@ int main(int argc, char* argv[]) {
     }
 
     Board board;
+    // Default TT size matches the UCI 'Hash' option default.
+    if (globalTT.entryCount() == 0) globalTT.resize(16);
     std::vector<uint64_t> gameHistory;
     gameHistory.reserve(512);
     std::string line;
@@ -98,7 +101,7 @@ int main(int argc, char* argv[]) {
             std::cout << "id name SoloBot" << std::endl;
             std::cout << "id author xsolod3v" << std::endl;
             std::cout << "option name Hash type spin default 16 min 1 max 2048" << std::endl;
-            std::cout << "option name Threads type spin default 1 min 1 max 1" << std::endl;
+            std::cout << "option name Threads type spin default 1 min 1 max 8" << std::endl;
             std::cout << "uciok" << std::endl;
         }
         
@@ -111,12 +114,12 @@ int main(int argc, char* argv[]) {
         }
 
         else if (line == "ucinewgame") {
-            transpositionTable.clear();
+            globalTT.clear();
             board.resetBoard();
             gameHistory.clear();
             gameHistory.push_back(position_key(board));
         }
-        
+
         else if (line.substr(0, 8) == "position") {
             if (line.find("startpos") != std::string::npos) {
                 board.resetBoard();
@@ -202,9 +205,6 @@ int main(int argc, char* argv[]) {
                 depth = 6;
             }
             
-            if (transpositionTable.size() > 20000000) { 
-                transpositionTable.clear(); 
-            }
             Move best = getBestMove(board, depth, timeToThink, gameHistory);
             
             std::cout << "bestmove " << columns[best.fromCol] << (8 - best.fromRow) 
