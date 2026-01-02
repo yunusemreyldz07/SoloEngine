@@ -167,6 +167,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     auto history_pop = [&history]() { if (!history.empty()) history.pop_back(); };
 
+    int movesSearched = 0;
+
     if (ttHit && ttDepth >= depth) {
         if (ttFlag == EXACT) {
             pvLine.clear();
@@ -232,6 +234,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     for (Move& move : possibleMoves) {
         board.makeMove(move);
+        movesSearched++;
         int eval;
         std::vector<Move> childPv;
         uint64_t newHash = position_key(board);
@@ -241,16 +244,26 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             firstMove = false;
         }
         else {
-            // Perform the null-window search with a separate PV container to avoid
-            // propagating an incorrect PV if no re-search is performed.
+            // Late Move Reduction (LMR)
+            int reduction = 0;
             std::vector<Move> nullWindowPv;
-            eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);
+            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && depth >= 3 && movesSearched > 4) {
+                reduction = 1 + (depth / 6); // Increase reduction with depth
+
+                if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we don't search negative depth
+            }
+            
+            eval = -negamax(board, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);
+
+            if (reduction > 0 && eval > alpha) {
+                // Re-search at full depth if reduced search suggests a better move
+                eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, history, childPv);
+            }
+
             if (eval > alpha && eval < beta) {
-                // Re-search with full window; only this search should populate childPv.
                 childPv.clear();
                 eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
             } else {
-                // No full-window re-search; do not use a PV from the null-window search.
                 childPv.clear();
             }
         }
