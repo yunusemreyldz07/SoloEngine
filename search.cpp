@@ -108,6 +108,12 @@ int quiescence(Board& board, int alpha, int beta, int ply){
     });
 
     for (Move& move : captureMoves) {
+
+        int seeValue = see_exchange(board, move);
+        if (seeValue < 0) {
+            continue; // Bad capture, skip it
+        }
+
         // Delta Pruning
         // If even the most optimistic evaluation (stand_pat + value of captured piece + margin) is worse than alpha, skip 
         int capturedValue = PIECE_VALUES[std::abs(move.capturedPiece)];
