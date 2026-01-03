@@ -361,11 +361,22 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                 // Here we use bestMoveSoFar because it was the winner of the previous depth
                 Move pvMove = bestMoveSoFar; 
                 std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
-                    bool aIsPV = (a.fromRow == pvMove.fromRow && a.fromCol == pvMove.fromCol && a.toRow == pvMove.toRow && a.toCol == pvMove.toCol);
-                    bool bIsPV = (b.fromRow == pvMove.fromRow && b.fromCol == pvMove.fromCol && b.toRow == pvMove.toRow && b.toCol == pvMove.toCol);
-                    if (aIsPV) return true;
-                    if (bIsPV) return false;
-                    return scoreMove(board, a, 0, nullptr) > scoreMove(board, b, 0, nullptr);
+                    const bool aIsPV = (a.fromRow == pvMove.fromRow && a.fromCol == pvMove.fromCol && a.toRow == pvMove.toRow && a.toCol == pvMove.toCol && a.promotion == pvMove.promotion);
+                    const bool bIsPV = (b.fromRow == pvMove.fromRow && b.fromCol == pvMove.fromCol && b.toRow == pvMove.toRow && b.toCol == pvMove.toCol && b.promotion == pvMove.promotion);
+
+                    // Strict-weak-ordering: comparator must be irreflexive (never a < a).
+                    if (aIsPV != bIsPV) return aIsPV;
+
+                    const int sa = scoreMove(board, a, 0, nullptr);
+                    const int sb = scoreMove(board, b, 0, nullptr);
+                    if (sa != sb) return sa > sb;
+
+                    // Deterministic tie-breaker.
+                    if (a.fromRow != b.fromRow) return a.fromRow < b.fromRow;
+                    if (a.fromCol != b.fromCol) return a.fromCol < b.fromCol;
+                    if (a.toRow != b.toRow) return a.toRow < b.toRow;
+                    if (a.toCol != b.toCol) return a.toCol < b.toCol;
+                    return a.promotion < b.promotion;
                 });
             }
 

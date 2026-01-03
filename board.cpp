@@ -119,8 +119,21 @@ void Board::makeMove(Move& move) {
         }
     }
 
-    if (abs(piece) == 1 && abs(move.fromRow - move.toRow) == 2) {
-        enPassantCol = move.fromCol;
+    if (abs(piece) == pawn && abs(move.fromRow - move.toRow) == 2) {
+        // En-passant is only relevant if the opponent can actually capture.
+        // This affects repetition detection and hashing.
+        const int enemyPawn = (piece > 0) ? -pawn : pawn;
+        bool canCapture = false;
+        for (int dc : {-1, 1}) {
+            const int c = move.toCol + dc;
+            if (c >= 0 && c < 8) {
+                if (squares[move.toRow][c] == enemyPawn) {
+                    canCapture = true;
+                    break;
+                }
+            }
+        }
+        enPassantCol = canCapture ? move.toCol : -1;
     } else {
         enPassantCol = -1;
     }
@@ -279,6 +292,14 @@ void Board::loadFromFEN(const std::string& fen) {
     // En passant
     if (enPassant != "-") {
         enPassantCol = enPassant[0] - 'a';
+
+        // Normalize: only keep EP if side-to-move can capture it.
+        const int pawnRow = isWhiteTurn ? 3 : 4; // rank 5 for white, rank 4 for black
+        const int myPawn = isWhiteTurn ? pawn : -pawn;
+        bool canCapture = false;
+        if (enPassantCol - 1 >= 0 && squares[pawnRow][enPassantCol - 1] == myPawn) canCapture = true;
+        if (enPassantCol + 1 < 8 && squares[pawnRow][enPassantCol + 1] == myPawn) canCapture = true;
+        if (!canCapture) enPassantCol = -1;
     } else {
         enPassantCol = -1;
     }
