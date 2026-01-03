@@ -253,7 +253,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     for (Move& move : possibleMoves) {
         int lmpCount = (depth * depth) + 10;
         // Late Move Pruning (LMP) logic
-        if (!pvNode && depth < 16 && movesSearched >= lmpCount && !inCheck) { // if the move is late enough in the move list (this is kinda like gambling, but we trust our move ordering) and the move is not a check
+        if (!pvNode && depth > 3 && depth < 8 && movesSearched >= lmpCount && !inCheck) { // if the move is late enough in the move list (this is kinda like gambling, but we trust our move ordering) and the move is not a check
             if (move.capturedPiece == 0 && move.promotion == 0 && !move.isEnPassant) {
                 bool isKiller = false;
                 // Checking if the move is a killer move, they are important so we should not prune them
