@@ -143,7 +143,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     nodeCount.fetch_add(1, std::memory_order_relaxed);
 
     bool firstMove = true;
-
+    const int lmpTable[16] = {0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136}; // for Late Move Pruning
     const int alphaOrig = alpha;
     int maxEval = -200000;
     int MATE_VALUE = 100000;
@@ -252,6 +252,24 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     });
 
     for (Move& move : possibleMoves) {
+        // Late Move Pruning (LMP) logic
+        if (depth < 16 && movesSearched >= lmpTable[depth] && !inCheck) { // if the move is late enough in the move list (this is kinda like gambling, but we trust our move ordering) and the move is not a check
+            if (move.capturedPiece == 0 && move.promotion == 0 && !move.isEnPassant) {
+                bool isKiller = false;
+                // Checking if the move is a killer move, they are important so we should not prune them
+                if (ply < 100) {
+                    if (move.fromCol == killerMove[0][ply].fromCol && move.fromRow == killerMove[0][ply].fromRow &&
+                        move.toCol == killerMove[0][ply].toCol && move.toRow == killerMove[0][ply].toRow) isKiller = true;
+                    else if (move.fromCol == killerMove[1][ply].fromCol && move.fromRow == killerMove[1][ply].fromRow &&
+                        move.toCol == killerMove[1][ply].toCol && move.toRow == killerMove[1][ply].toRow) isKiller = true;
+                }
+                
+                if (!isKiller) {
+                    continue; // skip this move (late move pruning)
+                }
+            }
+        }
+
         board.makeMove(move);
         movesSearched++;
         std::vector<Move> childPv;
