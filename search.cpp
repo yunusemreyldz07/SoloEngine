@@ -157,7 +157,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         pvLine.clear();
         return 0; // Draw
     }
-
+    bool inCheck = is_square_attacked(board, board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow, board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol, !board.isWhiteTurn);
     uint64_t currentHash = position_key(board);
     int ttScore = 0;
     int ttDepth = 0;
@@ -168,7 +168,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     auto history_pop = [&history]() { if (!history.empty()) history.pop_back(); };
 
     int movesSearched = 0;
+    int eval = -MATE_VALUE;
 
+    // Static evaluation (from side-to-move perspective). Used by forward/reverse pruning.
+    const int staticEval = board.isWhiteTurn ? evaluate_board(board) : -evaluate_board(board);
     if (ttHit && ttDepth >= depth) {
         if (ttFlag == EXACT) {
             pvLine.clear();
@@ -181,6 +184,22 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         if (ttFlag == BETA && ttScore >= beta) {
             pvLine.clear();
             return beta;
+        }
+    }
+
+
+    // Reverse Futility Pruning 
+    // Only makes sense in non-PV nodes (null-window), otherwise it can prune good PV continuations.
+    if ((beta - alpha) == 1 && depth < 9 && !inCheck && !is_endgame(board) && beta < MATE_SCORE - 100) {
+        
+        // margin: for every depth, we allow a margin of 100 centipawns
+        // The deeper we go, the larger the margin should be
+        int margin = 80 * depth; 
+
+        if (staticEval - margin >= beta) {
+            // "I'm so far ahead that even if I reduce the margin, I still surpass the opponent's threshold, so I don't need to search further and lose time"
+            pvLine.clear();
+            return beta; // Cutoff
         }
     }
 
@@ -235,7 +254,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     for (Move& move : possibleMoves) {
         board.makeMove(move);
         movesSearched++;
-        int eval;
         std::vector<Move> childPv;
         uint64_t newHash = position_key(board);
         history.push_back(newHash);
