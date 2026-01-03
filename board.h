@@ -80,6 +80,7 @@ std::vector<Move> get_capture_moves(const Board& board);
 
 // Attack detection
 bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttacker);
+int see_exchange(Board& board, Move& move);
 
 // Utility functions
 void printBoard(const Board& board);
