@@ -245,6 +245,17 @@ int evaluate_board_pesto(const Board& board) {
     int whiteBishops = 0;
     int blackBishops = 0;
 
+    // File bookkeeping for pawn structure and king safety/open files
+    bool hasWhitePawnFile[8] = {false};
+    bool hasBlackPawnFile[8] = {false};
+    bool fileHasWhiteRQ[8] = {false};
+    bool fileHasBlackRQ[8] = {false};
+
+    // Pawn lists for structure penalties
+    struct PawnPos { int row; int col; bool white; };
+    PawnPos pawns[16]; // at most 16 pawns total
+    int pawnCount = 0;
+
     // PESTO evaluation + simple material counting
     for (int row = 0; row < 8; row++) {
         for (int col = 0; col < 8; col++) {
@@ -263,6 +274,19 @@ int evaluate_board_pesto(const Board& board) {
 
             if (absPiece == bishop) {
                 if (p > 0) whiteBishops++; else blackBishops++;
+            }
+
+            // Track pawns for structure/open-file info
+            if (absPiece == pawn) {
+                if (p > 0) hasWhitePawnFile[col] = true; else hasBlackPawnFile[col] = true;
+                if (pawnCount < 16) {
+                    pawns[pawnCount++] = {row, col, p > 0};
+                }
+            }
+
+            // Track rook/queen presence by file for king safety
+            if (absPiece == rook || absPiece == queen) {
+                if (p > 0) fileHasWhiteRQ[col] = true; else fileHasBlackRQ[col] = true;
             }
         }
     }
@@ -293,11 +317,205 @@ int evaluate_board_pesto(const Board& board) {
         }
     }
 
-    // 3) Tapered eval
+    // 3) Pawn structure: isolated / doubled / backward (lightweight)
+    for (int i = 0; i < pawnCount; i++) {
+        const int row = pawns[i].row;
+        const int col = pawns[i].col;
+        const bool white = pawns[i].white;
+        const int sign = white ? 1 : -1;
+
+        // Isolated: no same-color pawn on adjacent files
+        bool isolated = true;
+        if (col > 0) {
+            isolated &= !(white ? hasWhitePawnFile[col - 1] : hasBlackPawnFile[col - 1]);
+        }
+        if (col < 7) {
+            isolated &= !(white ? hasWhitePawnFile[col + 1] : hasBlackPawnFile[col + 1]);
+        }
+        if (isolated) {
+            mgScore += sign * -8;
+            egScore += sign * -8;
+        }
+
+        // Doubled: more than one pawn same color on this file
+        const int fileCount = white ? hasWhitePawnFile[col] : hasBlackPawnFile[col];
+        // has* arrays are bool, so we need an actual count; recompute cheaply
+        int sameFilePawns = 0;
+        for (int j = 0; j < pawnCount; j++) {
+            if (pawns[j].white == white && pawns[j].col == col) sameFilePawns++;
+        }
+        if (sameFilePawns > 1) {
+            const int extra = sameFilePawns - 1;
+            mgScore += sign * (-6 * extra);
+            egScore += sign * (-6 * extra);
+        }
+
+        // Backward (simple): not passed, not isolated, and no friendly pawn behind on adjacent files
+        if (!isolated && !is_passed_pawn(board, row, col, white)) {
+            bool supportedBehind = false;
+            const int dir = white ? -1 : 1;
+            for (int dc = -1; dc <= 1; dc += 2) {
+                const int f = col + dc;
+                if (f < 0 || f > 7) continue;
+                for (int r = row + dir; r >= 0 && r < 8; r += dir) {
+                    int piece = board.squares[r][f];
+                    if (piece == 0) continue;
+                    if (white ? (piece == pawn) : (piece == -pawn)) {
+                        supportedBehind = true;
+                    }
+                    break; // stop at first piece on that ray
+                }
+            }
+            if (!supportedBehind) {
+                mgScore += sign * -6;
+                egScore += sign * -6;
+            }
+        }
+    }
+
+    // 4) Rook on open/semi-open files (modest)
+    for (int row = 0; row < 8; row++) {
+        for (int col = 0; col < 8; col++) {
+            const int p = board.squares[row][col];
+            if (p == 0 || abs_int(p) != rook) continue;
+            const bool white = (p > 0);
+            const bool ownPawn = white ? hasWhitePawnFile[col] : hasBlackPawnFile[col];
+            const bool oppPawn = white ? hasBlackPawnFile[col] : hasWhitePawnFile[col];
+            const int bonus = (!ownPawn && !oppPawn) ? 15 : (!ownPawn ? 10 : 0);
+            mgScore += (white ? bonus : -bonus);
+            egScore += (white ? bonus : -bonus);
+        }
+    }
+
+    // 5) Mobility: simple reachable-square count with small weight
+    auto add_ray_mobility = [&](int r, int c, int dr, int dc, int maxSteps) {
+        int count = 0;
+        for (int step = 1; step <= maxSteps; step++) {
+            int nr = r + dr * step;
+            int nc = c + dc * step;
+            if (nr < 0 || nr >= 8 || nc < 0 || nc >= 8) break;
+            int piece = board.squares[nr][nc];
+            if (piece == 0) {
+                count++;
+                continue;
+            }
+            // Can capture enemy, but stop afterwards
+            int cur = board.squares[r][c];
+            if ((cur > 0 && piece < 0) || (cur < 0 && piece > 0)) count++;
+            break;
+        }
+        return count;
+    };
+
+    for (int row = 0; row < 8; row++) {
+        for (int col = 0; col < 8; col++) {
+            const int p = board.squares[row][col];
+            if (p == 0) continue;
+            const int sign = (p > 0) ? 1 : -1;
+            int mob = 0;
+            switch (abs_int(p)) {
+                case knight: {
+                    static const int kMoves[8][2] = {{-2,-1},{-2,1},{-1,-2},{-1,2},{1,-2},{1,2},{2,-1},{2,1}};
+                    for (auto& m : kMoves) {
+                        int nr = row + m[0];
+                        int nc = col + m[1];
+                        if (nr < 0 || nr >= 8 || nc < 0 || nc >= 8) continue;
+                        int dst = board.squares[nr][nc];
+                        if (dst == 0 || (dst > 0) != (p > 0)) mob++;
+                    }
+                    break;
+                }
+                case bishop: {
+                    mob += add_ray_mobility(row, col, 1, 1, 7);
+                    mob += add_ray_mobility(row, col, 1, -1, 7);
+                    mob += add_ray_mobility(row, col, -1, 1, 7);
+                    mob += add_ray_mobility(row, col, -1, -1, 7);
+                    break;
+                }
+                case rook: {
+                    mob += add_ray_mobility(row, col, 1, 0, 7);
+                    mob += add_ray_mobility(row, col, -1, 0, 7);
+                    mob += add_ray_mobility(row, col, 0, 1, 7);
+                    mob += add_ray_mobility(row, col, 0, -1, 7);
+                    break;
+                }
+                case queen: {
+                    mob += add_ray_mobility(row, col, 1, 0, 7);
+                    mob += add_ray_mobility(row, col, -1, 0, 7);
+                    mob += add_ray_mobility(row, col, 0, 1, 7);
+                    mob += add_ray_mobility(row, col, 0, -1, 7);
+                    mob += add_ray_mobility(row, col, 1, 1, 7);
+                    mob += add_ray_mobility(row, col, 1, -1, 7);
+                    mob += add_ray_mobility(row, col, -1, 1, 7);
+                    mob += add_ray_mobility(row, col, -1, -1, 7);
+                    break;
+                }
+                default:
+                    break;
+            }
+            if (mob > 0) {
+                int mgMob = 0;
+                int egMob = 0;
+                switch (abs_int(p)) {
+                    case knight: mgMob = mob * 2; egMob = mob * 2; break;
+                    case bishop: mgMob = mob * 2; egMob = mob * 2; break;
+                    case rook:   mgMob = mob * 1; egMob = mob * 2; break;
+                    case queen:  mgMob = mob * 1; egMob = mob * 1; break;
+                    default: break;
+                }
+                mgScore += sign * mgMob;
+                egScore += sign * egMob;
+            }
+        }
+    }
+
+    // 6) King safety: pawn shield + open/semi-open file pressure near king
+    auto king_safety = [&](bool whiteKing) {
+        const int kRow = whiteKing ? board.whiteKingRow : board.blackKingRow;
+        const int kCol = whiteKing ? board.whiteKingCol : board.blackKingCol;
+        int penalty = 0;
+
+        // Pawn shield: check the three files around the king on the two ranks in front
+        for (int dc = -1; dc <= 1; dc++) {
+            int file = kCol + dc;
+            if (file < 0 || file > 7) continue;
+            // Front ranks relative to side
+            int r1 = kRow + (whiteKing ? -1 : 1);
+            int r2 = kRow + (whiteKing ? -2 : 2);
+            if (r1 >= 0 && r1 < 8) {
+                int piece = board.squares[r1][file];
+                if (piece != (whiteKing ? pawn : -pawn)) penalty += 6;
+            } else {
+                penalty += 6;
+            }
+            if (r2 >= 0 && r2 < 8) {
+                int piece = board.squares[r2][file];
+                if (piece != (whiteKing ? pawn : -pawn)) penalty += 4;
+            } else {
+                penalty += 4;
+            }
+        }
+
+        // Open/semi-open file towards the king
+        const bool ownPawn = whiteKing ? hasWhitePawnFile[kCol] : hasBlackPawnFile[kCol];
+        const bool oppPawn = whiteKing ? hasBlackPawnFile[kCol] : hasWhitePawnFile[kCol];
+        const bool oppRQ = whiteKing ? fileHasBlackRQ[kCol] : fileHasWhiteRQ[kCol];
+        if (!ownPawn && oppRQ) {
+            penalty += oppPawn ? 10 : 14;
+        }
+        return penalty;
+    };
+
+    mgScore -= king_safety(true);
+    egScore -= king_safety(true);
+    mgScore += king_safety(false);
+    egScore += king_safety(false);
+
+    // 7) Tapered eval
     phase = clamp_int(phase, 0, PESTO_MAX_PHASE);
     int score = (mgScore * phase + egScore * (PESTO_MAX_PHASE - phase)) / PESTO_MAX_PHASE;
 
-    // 4) Mop-up
+    // 8) Mop-up
     if (is_endgame(board) && std::abs(score) > 200) {
         const bool whiteWinning = (score > 0);
         const int winningKingRow = whiteWinning ? board.whiteKingRow : board.blackKingRow;
