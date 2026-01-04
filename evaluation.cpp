@@ -169,11 +169,8 @@ int eg_king_table[64] = {
 };
 
 inline int to_sq_a1(int row, int col) {
-    // Convert (row,col) from board.squares[8][8] to a 0..63 square index where:
-    // 0 = a1, 7 = h1, 56 = a8, 63 = h8
-    return (7 - row) * 8 + col;
+    return row * 8 + col;
 }
-
 inline int flip_sq(int sq) {
     // Vertical flip (A1<->A8 etc). Matches the classic FLIP(sq) = sq ^ 56.
     return sq ^ 56;
@@ -199,7 +196,7 @@ int* eg_pesto_table[6] =
     eg_king_table
 };
 
-int gamephaseInc[12] = {0,0,1,1,1,1,2,2,4,4,0,0};
+int gamephaseInc[12] = {0, 1, 1, 2, 4, 0, 0, 1, 1, 2, 4, 0};
 int mg_table[12][64]; // first six: white pieces, next six: black pieces
 int eg_table[12][64];
 
