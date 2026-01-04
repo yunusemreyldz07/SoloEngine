@@ -2,84 +2,7 @@
 #include <cmath>
 #include "board.h"
 
-constexpr int PIECE_VALUES[] = {0, 100, 350, 350, 500, 1000, 20000};
-
-constexpr int pawn_pst[8][8] = {
-    {0,  0,  0,  0,  0,  0,  0,  0},
-    {50, 50, 50, 50, 50, 50, 50, 50},
-    {10, 10, 20, 30, 30, 20, 10, 10},
-    {5,  5, 10, 25, 25, 10,  5,  5},
-    {0,  0,  0, 20, 20,  0,  0,  0},
-    {5, -5,-10,  0,  0,-10, -5,  5},
-    {5, 10, 10,-20,-20, 10, 10,  5},
-    {0,  0,  0,  0,  0,  0,  0,  0}
-};
-
-constexpr int knight_pst[8][8] = {
-    {-50,-40,-30,-30,-30,-30,-40,-50},
-    {-40,-20,  0,  0,  0,  0,-20,-40},
-    {-30,  0, 10, 15, 15, 10,  0,-30},
-    {-30,  5, 15, 20, 20, 15,  5,-30},
-    {-30,  0, 15, 20, 20, 15,  0,-30},
-    {-30,  5, 10, 15, 15, 10,  5,-30},
-    {-40,-20,  0,  5,  5,  0,-20,-40},
-    {-50,-40,-30,-30,-30,-30,-40,-50}
-};
-
-constexpr int bishop_pst[8][8] = {
-    {-20,-10,-10,-10,-10,-10,-10,-20},
-    {-10,  0,  0,  0,  0,  0,  0,-10},
-    {-10,  0,  5, 10, 10,  5,  0,-10},
-    {-10,  5,  5, 10, 10,  5,  5,-10},
-    {-10,  0, 10, 10, 10, 10,  0,-10},
-    {-10, 10, 10, 10, 10, 10, 10,-10},
-    {-10,  5,  0,  0,  0,  0,  5,-10},
-    {-20,-10,-10,-10,-10,-10,-10,-20}
-};
-
-constexpr int rook_pst[8][8] = {
-    {0,  0,  0,  0,  0,  0,  0,  0},
-    {5, 10, 10, 10, 10, 10, 10,  5},
-    {-5, 0, 0, 0, 0, 0, 0, -5},
-    {-5, 0, 0, 0, 0, 0, 0, -5},
-    {-5, 0, 0, 0, 0, 0, 0, -5},
-    {-5, 0, 0, 0, 0, 0, 0, -5},
-    {-5, 0, 0, 0, 0, 0, 0, -5},
-    {0,  0,  0,  5,  5,  0,  0,  0}
-};
-
-constexpr int queen_pst[8][8] = {
-    {-20,-10,-10, -5, -5,-10,-10,-20},
-    {-10,  0,  0,  0,  0,  0,  0,-10},
-    {-10,  0,  5,  5,  5,  5,  0,-10},
-    { -5,  0,  5,  5,  5,  5,  0, -5},
-    {  0,  0,  5,  5,  5,  5,  0, -5},
-    {-10,  5,  5,  5,  5,  5,  0,-10},
-    {-10,  0,  5,  0,  0,  0,  0,-10},
-    {-20,-10,-10, -5, -5,-10,-10,-20}
-};
-
-constexpr int mg_king_pst[8][8] = {
-    {-30,-40,-40,-50,-50,-40,-40,-30},
-    {-30,-40,-40,-50,-50,-40,-40,-30},
-    {-30,-40,-40,-50,-50,-40,-40,-30},
-    {-30,-40,-40,-50,-50,-40,-40,-30},
-    {-20,-30,-30,-40,-40,-30,-30,-20},
-    {-10,-20,-20,-20,-20,-20,-20,-10},
-    {20, 20,  0,  0,  0,  0, 20, 20},
-    {20, 30, 10,  0,  0, 10, 30, 20}
-};
-
-constexpr int eg_king_pst[8][8] = {
-    {-50,-40,-30,-20,-20,-30,-40,-50},
-    {-30,-20,-10,  0,  0,-10,-20,-30},
-    {-30,-10, 20, 30, 30, 20,-10,-30},
-    {-30,-10, 30, 40, 40, 30,-10,-30},
-    {-30,-10, 30, 40, 40, 30,-10,-30},
-    {-30,-10, 20, 30, 30, 20,-10,-30},
-    {-30,-30,  0,  0,  0,  0,-30,-30},
-    {-50,-30,-30,-30,-30,-30,-30,-50}
-};
+const int PIECE_VALUES[7] = {0, 100, 300, 300, 500, 900, 20000};
 
 inline int abs_int(int x) {
     return x < 0 ? -x : x;
@@ -93,6 +16,504 @@ int center_distance(int row, int col) {
 // Distance between two squares
 int manhattan_distance(int r1, int c1, int r2, int c2) {
     return std::abs(r1 - r2) + std::abs(c1 - c2);
+}
+
+namespace {
+constexpr int PESTO_TEMPO_BONUS = 10;
+constexpr int PESTO_MAX_PHASE = 24;
+
+// Classic PESTO (Rofchade) piece values (centipawns): pawn..king.
+constexpr int PESTO_MG_VALUE[6] = {82, 337, 365, 477, 1025, 0};
+constexpr int PESTO_EG_VALUE[6] = {94, 281, 297, 512, 936, 0};
+
+// Game phase increments per piece type (pawn..king).
+constexpr int PESTO_PHASE_INC[6] = {0, 1, 1, 2, 4, 0};
+
+inline int clamp_int(int x, int lo, int hi) {
+    return (x < lo) ? lo : (x > hi) ? hi : x;
+}
+
+inline int to_sq_a1(int row, int col) {
+    // Convert (row,col) from board.squares[8][8] to a 0..63 square index where:
+    // 0 = a1, 7 = h1, 56 = a8, 63 = h8
+    return (7 - row) * 8 + col;
+}
+
+inline int flip_sq(int sq) {
+    // Vertical flip (A1<->A8 etc). Matches the classic FLIP(sq) = sq ^ 56.
+    return sq ^ 56;
+}
+
+inline bool has_pawn_on_file(const Board& board, int file, bool whitePawn) {
+    const int pawnPiece = whitePawn ? pawn : -pawn;
+    for (int r = 0; r < 8; r++) {
+        if (board.squares[r][file] == pawnPiece) return true;
+    }
+    return false;
+}
+
+inline bool is_passed_pawn(const Board& board, int row, int col, bool isWhitePawn) {
+    const int enemyPawn = isWhitePawn ? -pawn : pawn;
+    const int dir = isWhitePawn ? -1 : 1;
+    for (int dc = -1; dc <= 1; dc++) {
+        const int file = col + dc;
+        if (file < 0 || file > 7) continue;
+        for (int r = row + dir; r >= 0 && r < 8; r += dir) {
+            if (board.squares[r][file] == enemyPawn) return false;
+        }
+    }
+    return true;
+}
+
+inline bool pawn_path_blocked(const Board& board, int row, int col, bool isWhitePawn) {
+    const int dir = isWhitePawn ? -1 : 1;
+    for (int r = row + dir; r >= 0 && r < 8; r += dir) {
+        if (board.squares[r][col] != 0) return true;
+    }
+    return false;
+}
+
+// Values from Rofchade. Oriented for white, using a1-indexing.
+constexpr int pesto_mg_pawn_table[64] = {
+      0,   0,   0,   0,   0,   0,   0,   0,
+     98, 134,  61,  95,  68, 126,  34, -11,
+     -6,   7,  26,  31,  65,  56,  25, -20,
+    -14,  13,   6,  21,  23,  12,  17, -23,
+    -27,  -2,  -5,  12,  17,   6,  10, -25,
+    -26,  -4,  -4, -10,   3,   3,  33, -12,
+    -35,  -1, -20, -23, -15,  24,  38, -22,
+      0,   0,   0,   0,   0,   0,   0,   0,
+};
+
+constexpr int pesto_eg_pawn_table[64] = {
+      0,   0,   0,   0,   0,   0,   0,   0,
+    178, 173, 158, 134, 147, 132, 165, 187,
+     94, 100,  85,  67,  56,  53,  82,  84,
+     32,  24,  13,   5,  -2,   4,  17,  17,
+     13,   9,  -3,  -7,  -7,  -8,   3,  -1,
+      4,   7,  -6,   1,   0,  -5,  -1,  -8,
+     13,   8,   8,  10,  13,   0,   2,  -7,
+      0,   0,   0,   0,   0,   0,   0,   0,
+};
+
+constexpr int pesto_mg_knight_table[64] = {
+    -167, -89, -34, -49,  61, -97, -15, -107,
+     -73, -41,  72,  36,  23,  62,   7,  -17,
+     -47,  60,  37,  65,  84, 129,  73,   44,
+      -9,  17,  19,  53,  37,  69,  18,   22,
+     -13,   4,  16,  13,  28,  19,  21,   -8,
+     -23,  -9,  12,  10,  19,  17,  25,  -16,
+     -29, -53, -12,  -3,  -1,  18, -14,  -19,
+    -105, -21, -58, -33, -17, -28, -19,  -23,
+};
+
+constexpr int pesto_eg_knight_table[64] = {
+    -58, -38, -13, -28, -31, -27, -63, -99,
+    -25,  -8, -25,  -2,  -9, -25, -24, -52,
+    -24, -20,  10,   9,  -1,  -9, -19, -41,
+    -17,   3,  22,  22,  22,  11,   8, -18,
+    -18,  -6,  16,  25,  16,  17,   4, -18,
+    -23,  -3,  -1,  15,  10,  -3, -20, -22,
+    -42, -20, -10,  -5,  -2, -20, -23, -44,
+    -29, -51, -23, -15, -22, -18, -50, -64,
+};
+
+constexpr int pesto_mg_bishop_table[64] = {
+    -29,   4, -82, -37, -25, -42,   7,  -8,
+    -26,  16, -18, -13,  30,  59,  18, -47,
+    -16,  37,  43,  40,  35,  50,  37,  -2,
+     -4,   5,  19,  50,  37,  37,   7,  -2,
+     -6,  13,  13,  26,  34,  12,  10,   4,
+      0,  15,  15,  15,  14,  27,  18,  10,
+      4,  15,  16,   0,   7,  21,  33,   1,
+    -33,  -3, -14, -21, -13, -12, -39, -21,
+};
+
+constexpr int pesto_eg_bishop_table[64] = {
+    -14, -21, -11,  -8,  -7,  -9, -17, -24,
+     -8,  -4,   7, -12,  -3, -13,  -4, -14,
+      2,  -8,   0,  -1,  -2,   6,   0,   4,
+     -3,   9,  12,   9,  14,  10,   3,   2,
+     -6,   3,  13,  19,   7,  10,  -3,  -9,
+    -12,  -3,   8,  10,  13,   3,  -7, -15,
+    -14, -18,  -7,  -1,   4,  -9, -15, -27,
+    -23,  -9, -23,  -5,  -9, -16,  -5, -17,
+};
+
+constexpr int pesto_mg_rook_table[64] = {
+     32,  42,  32,  51,  63,   9,  31,  43,
+     27,  32,  58,  62,  80,  67,  26,  44,
+     -5,  19,  26,  36,  17,  45,  61,  16,
+    -24, -11,   7,  26,  24,  35,  -8, -20,
+    -36, -26, -12,  -1,   9,  -7,   6, -23,
+    -45, -25, -16, -17,   3,   0,  -5, -33,
+    -44, -16, -20,  -9,  -1,  11,  -6, -71,
+    -19, -13,   1,  17,  16,   7, -37, -26,
+};
+
+constexpr int pesto_eg_rook_table[64] = {
+    13, 10, 18, 15, 12, 12,  8,  5,
+    11, 13, 13, 11, -3,  3,  8,  3,
+     7,  7,  7,  5,  4, -3, -5, -3,
+     4,  3, 13,  1,  2,  1, -1,  2,
+     3,  5,  8,  4, -5, -6, -8, -11,
+    -4,  0, -5, -1, -7, -12, -8, -16,
+    -6, -6,  0,  2, -9,  -9, -11, -3,
+    -9,  2,  3, -1, -5, -13,  4, -20,
+};
+
+constexpr int pesto_mg_queen_table[64] = {
+    -28,   0,  29,  12,  59,  44,  43,  45,
+    -24, -39,  -5,   1, -16,  57,  28,  54,
+    -13, -17,   7,   8,  29,  56,  47,  57,
+    -27, -27, -16, -16,  -1,  17,  -2,   1,
+     -9, -26,  -9, -10,  -2,  -4,   3,  -3,
+    -14,   2, -11,  -2,  -5,   2,  14,   5,
+    -35,  -8,  11,   2,   8,  15,  -3,   1,
+     -1, -18,  -9,  10, -15, -25, -31, -50,
+};
+
+constexpr int pesto_eg_queen_table[64] = {
+     -9,  22,  22,  27,  27,  19,  10,  20,
+    -17,  20,  32,  41,  58,  25,  30,   0,
+    -20,   6,   9,  49,  47,  35,  19,   9,
+      3,  22,  24,  45,  57,  40,  57,  36,
+    -18,  28,  19,  47,  31,  34,  39,  23,
+    -16, -27,  15,   6,   9,  17,  10,   5,
+    -22, -23, -30, -16, -16, -23, -36, -32,
+    -33, -28, -22, -43,  -5, -32, -20, -41,
+};
+
+constexpr int pesto_mg_king_table[64] = {
+    -65,  23,  16, -15, -56, -34,   2,  13,
+     29,  -1, -20,  -7,  -8,  -4, -38, -29,
+     -9,  24,   2, -16, -20,   6,  22, -22,
+    -17, -20, -12, -27, -30, -25, -14, -36,
+    -49,  -1, -27, -39, -46, -44, -33, -51,
+    -14, -14, -22, -46, -44, -30, -15, -27,
+      1,   7,  -8, -64, -43, -16,   9,   8,
+    -15,  36,  12, -54,   8, -28,  24,  14,
+};
+
+constexpr int pesto_eg_king_table[64] = {
+    -74, -35, -18, -18, -11,  15,   4, -17,
+    -12,  17,  14,  17,  17,  38,  23,  11,
+     10,  17,  23,  15,  20,  45,  44,  13,
+     -8,  22,  24,  27,  26,  33,  26,   3,
+    -18,  -4,  21,  24,  27,  23,   9, -11,
+    -19,  -3,  11,  21,  23,  16,   7,  -9,
+    -27, -11,   4,  13,  14,   4,  -5, -17,
+    -53, -34, -21, -11, -28, -14, -24, -43,
+};
+
+inline int pesto_mg_pst(int pieceIndex, int sq) {
+    switch (pieceIndex) {
+        case 0: return pesto_mg_pawn_table[sq];
+        case 1: return pesto_mg_knight_table[sq];
+        case 2: return pesto_mg_bishop_table[sq];
+        case 3: return pesto_mg_rook_table[sq];
+        case 4: return pesto_mg_queen_table[sq];
+        case 5: return pesto_mg_king_table[sq];
+        default: return 0;
+    }
+}
+
+inline int pesto_eg_pst(int pieceIndex, int sq) {
+    switch (pieceIndex) {
+        case 0: return pesto_eg_pawn_table[sq];
+        case 1: return pesto_eg_knight_table[sq];
+        case 2: return pesto_eg_bishop_table[sq];
+        case 3: return pesto_eg_rook_table[sq];
+        case 4: return pesto_eg_queen_table[sq];
+        case 5: return pesto_eg_king_table[sq];
+        default: return 0;
+    }
+}
+} // namespace
+
+int evaluate_board_pesto(const Board& board) {
+    int mgScore = 0;
+    int egScore = 0;
+    int phase = 0;
+
+    int whiteBishops = 0;
+    int blackBishops = 0;
+    int whiteQueens = 0;
+    int blackQueens = 0;
+
+    int whitePawnsPerFile[8] = {0};
+    int blackPawnsPerFile[8] = {0};
+
+    int whiteRookCount = 0;
+    int blackRookCount = 0;
+    int whiteRooksRow[2] = {0, 0};
+    int whiteRooksCol[2] = {0, 0};
+    int blackRooksRow[2] = {0, 0};
+    int blackRooksCol[2] = {0, 0};
+
+    for (int row = 0; row < 8; row++) {
+        for (int col = 0; col < 8; col++) {
+            const int p = board.squares[row][col];
+            if (p == 0) continue;
+            const int absPiece = abs_int(p);
+            const int sign = (p > 0) ? 1 : -1;
+
+            // Our piece constants are pawn..king = 1..6; PESTO arrays are 0..5.
+            const int pieceIndex = absPiece - 1;
+
+            // Convert to a1-indexed square and flip for black pieces.
+            const int sq = to_sq_a1(row, col);
+            const int pstSq = (p > 0) ? sq : flip_sq(sq);
+
+            mgScore += sign * (PESTO_MG_VALUE[pieceIndex] + pesto_mg_pst(pieceIndex, pstSq));
+            egScore += sign * (PESTO_EG_VALUE[pieceIndex] + pesto_eg_pst(pieceIndex, pstSq));
+            phase += PESTO_PHASE_INC[pieceIndex];
+
+            if (absPiece == bishop) {
+                if (p > 0) whiteBishops++; else blackBishops++;
+            } else if (absPiece == queen) {
+                if (p > 0) whiteQueens++; else blackQueens++;
+            } else if (absPiece == pawn) {
+                if (p > 0) whitePawnsPerFile[col]++; else blackPawnsPerFile[col]++;
+            } else if (absPiece == rook) {
+                if (p > 0) {
+                    if (whiteRookCount < 2) { whiteRooksRow[whiteRookCount] = row; whiteRooksCol[whiteRookCount] = col; }
+                    whiteRookCount++;
+                } else {
+                    if (blackRookCount < 2) { blackRooksRow[blackRookCount] = row; blackRooksCol[blackRookCount] = col; }
+                    blackRookCount++;
+                }
+            }
+        }
+    }
+
+    // Pawn structure: isolated, doubled and passed
+    for (int row = 0; row < 8; row++) {
+        for (int col = 0; col < 8; col++) {
+            const int p = board.squares[row][col];
+            if (abs_int(p) != pawn) continue;
+            const bool isWhitePawn = (p > 0);
+            const int sign = isWhitePawn ? 1 : -1;
+
+            const int* myFiles = isWhitePawn ? whitePawnsPerFile : blackPawnsPerFile;
+
+            bool isolated = true;
+            if (col > 0 && myFiles[col - 1] > 0) isolated = false;
+            if (col < 7 && myFiles[col + 1] > 0) isolated = false;
+            if (isolated) {
+                mgScore += sign * -15;
+                egScore += sign * -10;
+            }
+
+            if (myFiles[col] > 1) {
+                // Apply a modest penalty per pawn on a doubled file.
+                mgScore += sign * -12;
+                egScore += sign * -6;
+            }
+
+            if (is_passed_pawn(board, row, col, isWhitePawn)) {
+                int rank = isWhitePawn ? (7 - row) : row;
+                int bonus = rank * rank * 8;
+                if (pawn_path_blocked(board, row, col, isWhitePawn)) bonus /= 4;
+                mgScore += sign * (bonus / 4);
+                egScore += sign * bonus;
+            }
+        }
+    }
+
+    // Rooks: open/semi-open file bonuses
+    for (int row = 0; row < 8; row++) {
+        for (int col = 0; col < 8; col++) {
+            const int p = board.squares[row][col];
+            if (abs_int(p) != rook) continue;
+            const bool isWhiteRook = (p > 0);
+            const int sign = isWhiteRook ? 1 : -1;
+
+            const bool hasWhitePawn = has_pawn_on_file(board, col, true);
+            const bool hasBlackPawn = has_pawn_on_file(board, col, false);
+
+            const bool openFile = !hasWhitePawn && !hasBlackPawn;
+            const bool semiOpenFile = openFile ? false : (isWhiteRook ? !hasWhitePawn : !hasBlackPawn);
+
+            if (openFile) {
+                mgScore += sign * 50;
+                egScore += sign * 25;
+            } else if (semiOpenFile) {
+                mgScore += sign * 25;
+                egScore += sign * 10;
+            }
+        }
+    }
+
+    // Connected rooks: one bonus per connected pair
+    auto connected_rooks_bonus = [&](bool white) {
+        const int cnt = white ? whiteRookCount : blackRookCount;
+        if (cnt < 2) return 0;
+
+        const int r1 = white ? whiteRooksRow[0] : blackRooksRow[0];
+        const int c1 = white ? whiteRooksCol[0] : blackRooksCol[0];
+        const int r2 = white ? whiteRooksRow[1] : blackRooksRow[1];
+        const int c2 = white ? whiteRooksCol[1] : blackRooksCol[1];
+
+        // Same file
+        if (c1 == c2) {
+            const int lo = (r1 < r2) ? r1 : r2;
+            const int hi = (r1 < r2) ? r2 : r1;
+            bool clear = true;
+            for (int r = lo + 1; r < hi; r++) {
+                if (board.squares[r][c1] != 0) { clear = false; break; }
+            }
+            if (clear) return 30;
+        }
+
+        // Same rank
+        if (r1 == r2) {
+            const int lo = (c1 < c2) ? c1 : c2;
+            const int hi = (c1 < c2) ? c2 : c1;
+            bool clear = true;
+            for (int c = lo + 1; c < hi; c++) {
+                if (board.squares[r1][c] != 0) { clear = false; break; }
+            }
+            if (clear) return 30;
+        }
+        return 0;
+    };
+
+    mgScore += connected_rooks_bonus(true);
+    mgScore -= connected_rooks_bonus(false);
+
+    // Bishop pair
+    if (whiteBishops >= 2) { mgScore += 30; egScore += 60; }
+    if (blackBishops >= 2) { mgScore -= 30; egScore -= 60; }
+
+    // King safety + center control are mainly midgame terms
+    const bool endgame = is_endgame(board);
+    if (!endgame) {
+        // Pawn shield
+        {
+            const int wKingFile = board.whiteKingCol;
+            int pawnShield = 0;
+            for (int dc = -1; dc <= 1; dc++) {
+                const int file = wKingFile + dc;
+                if (file < 0 || file > 7) continue;
+                if (board.squares[6][file] == pawn) pawnShield += 20;
+                else if (board.squares[5][file] == pawn) pawnShield += 10;
+            }
+            mgScore += pawnShield;
+
+            const int bKingFile = board.blackKingCol;
+            int blackPawnShield = 0;
+            for (int dc = -1; dc <= 1; dc++) {
+                const int file = bKingFile + dc;
+                if (file < 0 || file > 7) continue;
+                if (board.squares[1][file] == -pawn) blackPawnShield += 20;
+                else if (board.squares[2][file] == -pawn) blackPawnShield += 10;
+            }
+            mgScore -= blackPawnShield;
+
+            // Open file is a danger next to king (no own pawn on that file)
+            int openFilePenalty = 0;
+            for (int dc = -1; dc <= 1; dc++) {
+                const int file = wKingFile + dc;
+                if (file < 0 || file > 7) continue;
+                if (!has_pawn_on_file(board, file, true)) openFilePenalty += 50;
+            }
+            mgScore -= openFilePenalty;
+
+            int blackOpenFilePenalty = 0;
+            for (int dc = -1; dc <= 1; dc++) {
+                const int file = bKingFile + dc;
+                if (file < 0 || file > 7) continue;
+                if (!has_pawn_on_file(board, file, false)) blackOpenFilePenalty += 50;
+            }
+            mgScore += blackOpenFilePenalty;
+        }
+
+        // Queen proximity to king
+        {
+            int queenThreat = 0;
+            for (int r = 0; r < 8; r++) {
+                for (int c = 0; c < 8; c++) {
+                    if (board.squares[r][c] == -queen) {
+                        const int d = std::abs(r - board.whiteKingRow) + std::abs(c - board.whiteKingCol);
+                        if (d <= 3) queenThreat += (4 - d) * 40;
+                    }
+                }
+            }
+            mgScore -= queenThreat;
+
+            int blackQueenThreat = 0;
+            for (int r = 0; r < 8; r++) {
+                for (int c = 0; c < 8; c++) {
+                    if (board.squares[r][c] == queen) {
+                        const int d = std::abs(r - board.blackKingRow) + std::abs(c - board.blackKingCol);
+                        if (d <= 3) blackQueenThreat += (4 - d) * 40;
+                    }
+                }
+            }
+            mgScore += blackQueenThreat;
+        }
+
+        // Backrankish safety (very simple)
+        {
+            if (board.whiteKingRow == 7) {
+                const int f = board.whiteKingCol;
+                if (f >= 0 && f < 8 && board.squares[6][f] != 0) mgScore -= 60;
+            }
+            if (board.blackKingRow == 0) {
+                const int f = board.blackKingCol;
+                if (f >= 0 && f < 8 && board.squares[1][f] != 0) mgScore += 60;
+            }
+        }
+
+        // Center control (pawns)
+        {
+            int whiteCenterPawns = 0;
+            int blackCenterPawns = 0;
+
+            if (board.squares[4][4] == pawn) whiteCenterPawns += 40; // e4
+            if (board.squares[4][3] == pawn) whiteCenterPawns += 40; // d4
+            if (board.squares[3][4] == -pawn) blackCenterPawns += 40; // e5
+            if (board.squares[3][3] == -pawn) blackCenterPawns += 40; // d5
+
+            if (board.squares[4][2] == pawn) whiteCenterPawns += 25; // c4
+            if (board.squares[4][5] == pawn) whiteCenterPawns += 25; // f4
+            if (board.squares[3][2] == -pawn) blackCenterPawns += 25; // c5
+            if (board.squares[3][5] == -pawn) blackCenterPawns += 25; // f5
+
+            mgScore += (whiteCenterPawns - blackCenterPawns);
+        }
+    }
+
+    // Mop-up (endgame conversion assistance)
+    // Applies in endgames where one side is clearly ahead.
+    // We add this to EG score so it fades out automatically as MG dominates.
+    {
+        const int tmpPhase = clamp_int(phase, 0, PESTO_MAX_PHASE);
+        const int blendedNoTempo = (mgScore * tmpPhase + egScore * (PESTO_MAX_PHASE - tmpPhase)) / PESTO_MAX_PHASE;
+        if (endgame && (blendedNoTempo > 200 || blendedNoTempo < -200)) {
+            const bool whiteWinning = (blendedNoTempo > 0);
+            const int winningKingRow = whiteWinning ? board.whiteKingRow : board.blackKingRow;
+            const int winningKingCol = whiteWinning ? board.whiteKingCol : board.blackKingCol;
+            const int losingKingRow  = whiteWinning ? board.blackKingRow : board.whiteKingRow;
+            const int losingKingCol  = whiteWinning ? board.blackKingCol : board.whiteKingCol;
+
+            const int enemyDistFromCenter = center_distance(losingKingRow, losingKingCol);
+            const int distanceBetweenKings = manhattan_distance(
+                winningKingRow, winningKingCol,
+                losingKingRow, losingKingCol
+            );
+
+            int mopUpScore = 0;
+            mopUpScore += enemyDistFromCenter * 10;
+            mopUpScore += (14 - distanceBetweenKings) * 5;
+            egScore += whiteWinning ? mopUpScore : -mopUpScore;
+        }
+    }
+
+    phase = clamp_int(phase, 0, PESTO_MAX_PHASE);
+    const int score = (mgScore * phase + egScore * (PESTO_MAX_PHASE - phase)) / PESTO_MAX_PHASE;
+    return score + (board.isWhiteTurn ? PESTO_TEMPO_BONUS : -PESTO_TEMPO_BONUS);
 }
 
 bool is_endgame(const Board& board) {
@@ -145,442 +566,7 @@ bool is_endgame(const Board& board) {
 }
 
 int evaluate_board(const Board& board) {
-    int score = 0;
-    constexpr int TEMPO_BONUS = 15; // centipawns awarded to side to move
-    // Material tallies for endgame detection (merged into main scan)
-    int whiteQueens = 0, blackQueens = 0;
-    int whiteRooks = 0, blackRooks = 0;
-    int whiteOther = 0, blackOther = 0; // non-pawn, non-king, non-queen pieces
-    int whiteMinors = 0, blackMinors = 0;
-
-    // Phase-dependent king scores (computed once, applied after endgame decision)
-    int whiteKingMgScore = 0, whiteKingEgScore = 0;
-    int blackKingMgScore = 0, blackKingEgScore = 0;
-
-    int whitesBlackBishop = 0;
-    int whitesWhiteBishop = 0;
-    int blacksBlackBishop = 0;
-    int blacksWhiteBishop = 0;
-    bool isOpening = false;
-    bool isMidgame = false;
-    int totalPieces = 0;
-
-    for (int row = 0; row < 8; row++) {
-        for (int column = 0; column < 8; column++) {
-            if (board.squares[row][column] != 0) totalPieces++;
-            isOpening = (totalPieces >= 28); // 28+ pieces = opening 
-            isMidgame = (totalPieces >= 16 && totalPieces < 28);
-            int p = board.squares[row][column];
-            if (p == 0) continue;
-            int absPiece = abs_int(p);
-            int sign = (p > 0) ? 1 : -1;
-
-            // Material
-            score += sign * PIECE_VALUES[absPiece];
-
-            // PST contribution — flip for black by using mirrored row
-            int pr = (p > 0) ? row : 7 - row;
-            switch (absPiece) {
-                case pawn:
-                {
-                    score += (p > 0) ? pawn_pst[row][column] : -pawn_pst[pr][column];
-                    bool isolated = true;
-                    if (column > 0) {
-                        for (int rr = 0; rr < 8; rr++) {
-                            int leftPiece = board.squares[rr][column-1];
-                            if (abs_int(leftPiece) == pawn && (leftPiece > 0) == (p > 0)) {
-                                isolated = false;
-                                break;
-                            }
-                        }
-                    }
-                    if (column < 7) {
-                        for (int rr = 0; rr < 8; rr++) {
-                            int rightPiece = board.squares[rr][column+1];
-                            if (abs_int(rightPiece) == pawn && (rightPiece > 0) == (p > 0)) {
-                                isolated = false;
-                                break;
-                            }
-                        }
-                    }
-                    if (isolated) {
-                        score += (p > 0) ? -15 : 15; // isolated pawn is bad
-                    }
-
-                    // Doubled pawns penalty
-                    for (int rr = row+1; rr < 8; rr++) {
-                        if (board.squares[rr][column] == p) {
-                            score += (p > 0) ? -20 : 20; // Doubled pawns are bad
-                            break;
-                        }
-                    }
-                    bool passed = true;
-                    int direction = (p > 0) ? -1 : 1;
-
-                    // Opposing pawns ahead on adjacent files block passed-pawn status.
-                    for (int checkCol = std::max(0, column - 1); checkCol <= std::min(7, column + 1); checkCol++) {
-                        for (int rr = row + direction; rr >= 0 && rr < 8; rr += direction) {
-                            int checkPiece = board.squares[rr][checkCol];
-                            if (checkPiece == -p) { // opponent pawn
-                                passed = false;
-                                break;
-                            }
-                        }
-                        if (!passed) break;
-                    }
-
-                    // If any piece blocks the path on this file, dampen the bonus.
-                    bool path_blocked = false;
-                    for (int rr = row + direction; rr >= 0 && rr < 8; rr += direction) {
-                        if (board.squares[rr][column] != 0) {
-                            path_blocked = true;
-                            break;
-                        }
-                    }
-
-                    if (passed) {
-                        int rank = (p > 0) ? (7 - row) : row;
-                        int bonus = rank * rank * 8; // softer growth to avoid over-valuing stuck pawns
-                        if (path_blocked) {
-                            bonus /= 4; // heavily discount if it cannot currently advance
-                        }
-                        score += (p > 0) ? bonus : -bonus;
-                    }
-                    break;
-                }
-                case knight:
-                    score += (p > 0) ? knight_pst[row][column] : -knight_pst[pr][column];
-                    if (p > 0) { whiteMinors++; whiteOther++; } else { blackMinors++; blackOther++; }
-                    break;
-                case bishop:
-                {
-                    bool isLightSquare = ((row + column) % 2 == 0) ? true : false; 
-                    if (p > 0) {
-                        if (isLightSquare) whitesWhiteBishop++;
-                        else whitesBlackBishop++;
-                        score += bishop_pst[row][column];
-                        whiteMinors++; whiteOther++;
-                    } 
-                    else {
-                        if (isLightSquare) blacksWhiteBishop++;
-                        else blacksBlackBishop++;
-                        score -= bishop_pst[pr][column];
-                        blackMinors++; blackOther++;
-                    }
-
-                    int forward = (p > 0) ? -1 : 1;
-                    int frontRow = row + forward;
-                    if (frontRow >= 0 && frontRow < 8) {
-                        if (column - 1 >= 0) { // left diagonal
-                            int blockingPiece1 = board.squares[frontRow][column - 1];
-                            if (abs_int(blockingPiece1) == pawn && (blockingPiece1 > 0) == (p > 0)) {
-                                score += (p > 0) ? -20 : 20;
-                            }
-                        }
-
-                        if (column + 1 < 8) { // right diagonal
-                            int blockingPiece2 = board.squares[frontRow][column + 1];
-                            if (abs_int(blockingPiece2) == pawn && (blockingPiece2 > 0) == (p > 0)) {
-                                score += (p > 0) ? -20 : 20;
-                            }
-                        }
-                    }
-                    break;
-                }
-                case rook:
-                {
-                    score += (p > 0) ? rook_pst[row][column] : -rook_pst[pr][column];
-                    if (p > 0) { whiteRooks++; whiteOther++; } else { blackRooks++; blackOther++; }
-                    bool openFile = true;
-                    bool semiOpenFile = true;
-                    for (int rr = 0; rr < 8; rr++) {
-                        int pieceOnFile = board.squares[rr][column];
-                        if (pieceOnFile != 0) {
-                            int absPiece = abs_int(pieceOnFile);
-                            if (absPiece == pawn) {
-                                if ((pieceOnFile > 0) == (p > 0)) {
-                                    // you got your own pawn on the file
-                                    semiOpenFile = false;
-                                    openFile = false;
-                                } else {
-                                    // opponent's pawn on the file
-                                    openFile = false;
-                                }
-                            }
-                        }
-                    }
-                    
-                    if (openFile) {
-                        score += (p > 0) ? 50 : -50; // Open file is very valuable
-                    } else if (semiOpenFile) {
-                        score += (p > 0) ? 25 : -25; // Semi open file is also good
-                    }
-                    // Connected rooks bonus
-                    for (int r = 0; r < 8; r++) {
-                        for (int c = 0; c < 8; c++) {
-                            int p = board.squares[r][c];
-                            if (abs_int(p) != rook) continue;
-                            
-                            // Any same file rook?
-                            for (int rr = r + 1; rr < 8; rr++) {
-                                int other = board.squares[rr][c];
-                                if (other == p) { // Same color rook
-                                    // Are there any pieces between them?
-                                    bool connected = true;
-                                    for (int between = r + 1; between < rr; between++) {
-                                        if (board.squares[between][c] != 0) {
-                                            connected = false;
-                                            break;
-                                        }
-                                    }
-                                    if (connected) {
-                                        score += (p > 0) ? 30 : -30;
-                                    }
-                                }
-                            }
-                            
-                            // Checking the same rank
-                            for (int cc = c + 1; cc < 8; cc++) {
-                                int other = board.squares[r][cc];
-                                if (other == p) { // Same color rook
-                                    // Are there any pieces between them?
-                                    bool connected = true;
-                                    for (int between = c + 1; between < cc; between++) {
-                                        if (board.squares[r][between] != 0) {
-                                            connected = false;
-                                            break;
-                                        }
-                                    }
-                                    if (connected) {
-                                        score += (p > 0) ? 30 : -30;
-                                    }
-                                }
-                            }
-
-                        }
-                    }
-
-                    break;
-                }
-                case queen:
-                    score += (p > 0) ? queen_pst[row][column] : -queen_pst[pr][column];
-                    if (p > 0) whiteQueens++; else blackQueens++;
-                    break;
-                case king:
-                    {
-                        double centerDist = std::abs(row - 3.5) + std::abs(column - 3.5);
-                        if (p > 0) {
-                            whiteKingMgScore = mg_king_pst[row][column];
-                            whiteKingEgScore = eg_king_pst[row][column] + static_cast<int>((7 - centerDist) * 5);
-                        } else {
-                            blackKingMgScore = -mg_king_pst[pr][column];
-                            blackKingEgScore = -eg_king_pst[pr][column] - static_cast<int>((7 - centerDist) * 5);
-                        }
-                        break;
-                    }
-            }
-        }
-    }
-
-    // Decide phase once using tallied material
-    bool endgame = true;
-    if (whiteQueens > 0) {
-        if (!(whiteRooks == 0 && (whiteOther <= 1) && (whiteOther == 0 || whiteMinors == 1))) {
-            endgame = false;
-        }
-    }
-    if (blackQueens > 0) {
-        if (!(blackRooks == 0 && (blackOther <= 1) && (blackOther == 0 || blackMinors == 1))) {
-            endgame = false;
-        }
-    }
-
-    // Apply king scores now that phase is known
-    score += endgame ? (whiteKingEgScore + blackKingEgScore) : (whiteKingMgScore + blackKingMgScore);
-
-    if (endgame && (score > 200 || score < -200)) {  
-        bool whiteWinning = (score > 0);
-        int winningKingRow = whiteWinning ? board.whiteKingRow : board.blackKingRow;
-        int winningKingCol = whiteWinning ? board.whiteKingCol : board.blackKingCol;
-        int losingKingRow  = whiteWinning ? board.blackKingRow : board.whiteKingRow;
-        int losingKingCol  = whiteWinning ? board.blackKingCol : board.whiteKingCol;
-        
-        int enemyDistFromCenter = center_distance(losingKingRow, losingKingCol);
-        
-        int distanceBetweenKings = manhattan_distance(
-            winningKingRow, winningKingCol, 
-            losingKingRow, losingKingCol
-        );
-        
-        int mopUpScore = 0;
-        mopUpScore += enemyDistFromCenter * 10;
-        mopUpScore += (14 - distanceBetweenKings) * 5;
-        
-        score += whiteWinning ? mopUpScore : -mopUpScore;
-    }
-
-    // protect the pawns in front of the king
-    if (isMidgame || isOpening) {
-        int wKingFile = board.whiteKingCol;
-        int wKingRank = board.whiteKingRow;
-        int pawnShield = 0;
-        
-        // count pawns in front of the white king
-        for (int dc = -1; dc <= 1; dc++) {
-            int column = wKingFile + dc;
-            if (column < 0 || column >= 8) continue;
-            
-            // 2nd and 3rd ranks have pawns?
-            if (board.squares[6][column] == pawn) pawnShield += 20; // Right in front
-            else if (board.squares[5][column] == pawn) pawnShield += 10; // One square ahead
-        }
-        
-        score += pawnShield;
-        
-        // Same for black king
-        int bKingFile = board.blackKingCol;
-        int blackPawnShield = 0;
-        for (int dc = -1; dc <= 1; dc++) {
-            int column = bKingFile + dc;
-            if (column < 0 || column >= 8) continue;
-            if (board.squares[1][column] == -pawn) blackPawnShield += 20;
-            else if (board.squares[2][column] == -pawn) blackPawnShield += 10;
-        }
-        
-        score -= blackPawnShield;
-
-        // Penalty for open files next to king
-        int openFilePenalty = 0;
-        for (int dc = -1; dc <= 1; dc++) {
-            int column = wKingFile + dc;
-            if (column < 0 || column >= 8) continue;
-            
-            bool hasOwnPawn = false;
-            for (int r = 0; r < 8; r++) {
-                if (board.squares[r][column] == pawn) {
-                    hasOwnPawn = true;
-                    break;
-                }
-            }
-            
-            if (!hasOwnPawn) {
-                // Open file next to king is dangerous
-                openFilePenalty += 50;
-            }
-        }
-        int queenThreat = 0;
-        // Find enemy queen
-        for (int r = 0; r < 8; r++) {
-            for (int c = 0; c < 8; c++) {
-                if (board.squares[r][c] == -queen) {
-                    // Calculate distance to white king
-                    int distance = std::abs(r - wKingRank) + std::abs(c - wKingFile);
-                    if (distance <= 3) {
-                        // Enemy queen is VERY close to king
-                        queenThreat += (4 - distance) * 40; // Closer = worse
-                    }
-                }
-            }
-        }
-        
-        int backRankPenalty = 0;
-        if (wKingRank == 7) { // White king on back rank
-            bool trapped = true;
-            // Check if king can move forward
-            if (board.squares[6][wKingFile] == 0) {
-                trapped = false;
-            }
-            if (trapped) {
-                backRankPenalty = 60; // Trapped on back rank
-            }
-        }
-        
-        score += pawnShield;
-        score -= openFilePenalty;
-        score -= queenThreat;
-        score -= backRankPenalty;
-        
-        // Same for black king (mirror)
-        int bKingRank = board.blackKingRow;
-        for (int dc = -1; dc <= 1; dc++) {
-            int column = bKingFile + dc;
-            if (column < 0 || column >= 8) continue;
-            if (board.squares[1][column] == -pawn) blackPawnShield += 20;
-            else if (board.squares[2][column] == -pawn) blackPawnShield += 10;
-        }
-        
-        int blackOpenFilePenalty = 0;
-        for (int dc = -1; dc <= 1; dc++) {
-            int column = bKingFile + dc;
-            if (column < 0 || column >= 8) continue;
-            bool hasOwnPawn = false;
-            for (int r = 0; r < 8; r++) {
-                if (board.squares[r][column] == -pawn) {
-                    hasOwnPawn = true;
-                    break;
-                }
-            }
-            if (!hasOwnPawn) {
-                blackOpenFilePenalty += 50;
-            }
-        }
-        
-        int blackQueenThreat = 0;
-        for (int r = 0; r < 8; r++) {
-            for (int c = 0; c < 8; c++) {
-                if (board.squares[r][c] == queen) {
-                    int distance = std::abs(r - bKingRank) + std::abs(c - bKingFile);
-                    if (distance <= 3) {
-                        blackQueenThreat += (4 - distance) * 40;
-                    }
-                }
-            }
-        }
-        
-        int blackBackRankPenalty = 0;
-        if (bKingRank == 0) {
-            bool trapped = true;
-            if (board.squares[1][bKingFile] == 0) {
-                trapped = false;
-            }
-            if (trapped) {
-                blackBackRankPenalty = 60;
-            }
-        }
-        
-        score -= blackPawnShield;
-        score += blackOpenFilePenalty;
-        score += blackQueenThreat;
-        score += blackBackRankPenalty;
-    }
-
-    if (whitesWhiteBishop >= 1 && whitesBlackBishop >= 1) {
-        score += endgame ? 60 : 30;
-    }
-    if (blacksWhiteBishop >= 1 && blacksBlackBishop >= 1) {
-        score -= endgame ? 60 : 30;
-    }
-
-    if (!endgame) { // center control in opening/midgame
-        int whiteCenterPawns = 0;
-        int blackCenterPawns = 0;
-        
-        // Direct center pawn occupation
-        if (board.squares[4][4] == pawn) whiteCenterPawns += 40; // e4
-        if (board.squares[4][3] == pawn) whiteCenterPawns += 40; // d4
-        if (board.squares[3][4] == -pawn) blackCenterPawns += 40; // e5
-        if (board.squares[3][3] == -pawn) blackCenterPawns += 40; // d5
-        
-        // Extended center (c4, c5, f4, f5)
-        if (board.squares[4][2] == pawn) whiteCenterPawns += 25; // c4
-        if (board.squares[4][5] == pawn) whiteCenterPawns += 25; // f4
-        if (board.squares[3][2] == -pawn) blackCenterPawns += 25; // c5
-        if (board.squares[3][5] == -pawn) blackCenterPawns += 25; // f5
-        
-        score += whiteCenterPawns - blackCenterPawns;
-    }
-    score += board.isWhiteTurn ? TEMPO_BONUS : -TEMPO_BONUS; // static tempo bonus
-    return score;
+    return evaluate_board_pesto(board);
 }
 
 int repetition_draw_score(const Board& board) {
