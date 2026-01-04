@@ -78,7 +78,7 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
 
     if (move.isCastling) {
         // Castling is good for king safety, but keep the bonus modest so we don't prefer it over
-        // urgent defensive moves (like saving a hanging piece) at shallow depth.
+        // urgent defensive moves (like saving a hanging piece) at shallow depth
         moveScore += 500;
     }
 
