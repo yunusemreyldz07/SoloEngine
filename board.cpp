@@ -875,22 +875,30 @@ bool is_threefold_repetition(const std::vector<uint64_t>& history) {
 
 const int see_piece_values[] = {0, 100, 350, 350, 525, 900, 20000};
 
-static int get_least_valuable_attacker(Board& board, int square, int bySide) { // bySide: Attacker side
+static int get_least_valuable_attacker(Board& board, int square, int bySide, int& outRow, int& outCol) { // bySide: Attacker side
     int r = square / 8;
     int c = square % 8;
 
     // pawn attacks
     int pawnDir = (bySide == 1) ? 1 : -1; 
     
-    // check left and right diagonals
-    if (r + pawnDir >= 0 && r + pawnDir < 8) {
+    // check left and right diagonals - fix inverted pawn direction
+    if (r - pawnDir >= 0 && r - pawnDir < 8) {
         if (c - 1 >= 0) {
-            int p = board.squares[r + pawnDir][c - 1];
-            if (p == (bySide * pawn)) return p; // Attacker pawn found
+            int p = board.squares[r - pawnDir][c - 1];
+            if (p == (bySide * pawn)) {
+                outRow = r - pawnDir;
+                outCol = c - 1;
+                return p; // Attacker pawn found
+            }
         }
         if (c + 1 < 8) {
-            int p = board.squares[r + pawnDir][c + 1];
-            if (p == (bySide * pawn)) return p;
+            int p = board.squares[r - pawnDir][c + 1];
+            if (p == (bySide * pawn)) {
+                outRow = r - pawnDir;
+                outCol = c + 1;
+                return p;
+            }
         }
     }
 
@@ -900,7 +908,11 @@ static int get_least_valuable_attacker(Board& board, int square, int bySide) { /
         int nc = c + knight_moves[i][1];
         if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
             int p = board.squares[nr][nc];
-            if (p == (bySide * knight)) return p;
+            if (p == (bySide * knight)) {
+                outRow = nr;
+                outCol = nc;
+                return p;
+            }
         }
     }
 
@@ -911,7 +923,11 @@ static int get_least_valuable_attacker(Board& board, int square, int bySide) { /
         while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
             int p = board.squares[nr][nc];
             if (p != 0) {
-                if (p == (bySide * bishop) || p == (bySide * queen)) return p;
+                if (p == (bySide * bishop) || p == (bySide * queen)) {
+                    outRow = nr;
+                    outCol = nc;
+                    return p;
+                }
                 break; // Blocked by another piece
             }
             nr += bishop_directions[i][0];
@@ -926,7 +942,11 @@ static int get_least_valuable_attacker(Board& board, int square, int bySide) { /
         while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
             int p = board.squares[nr][nc];
             if (p != 0) {
-                if (p == (bySide * rook) || p == (bySide * queen)) return p;
+                if (p == (bySide * rook) || p == (bySide * queen)) {
+                    outRow = nr;
+                    outCol = nc;
+                    return p;
+                }
                 break; // Blocked by another piece
             }
             nr += rook_directions[i][0];
@@ -940,7 +960,11 @@ static int get_least_valuable_attacker(Board& board, int square, int bySide) { /
         int nc = c + king_moves[i][1];
         if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
             int p = board.squares[nr][nc];
-            if (p == (bySide * king)) return p;
+            if (p == (bySide * king)) {
+                outRow = nr;
+                outCol = nc;
+                return p;
+            }
         }
     }
 
@@ -963,47 +987,58 @@ int see_exchange(Board& board, Move& move) {
     int currentAttacker = board.squares[move.fromRow][move.fromCol];
     
     int toSq = move.toRow * 8 + move.toCol;
-    int fromSq = move.fromRow * 8 + move.fromCol;
     
-    // To follow temporary changes, store original pieces
-    int originalToPiece = board.squares[move.toRow][move.toCol];
-    int originalFromPiece = board.squares[move.fromRow][move.fromCol];
+    // Store all modified squares for restoration
+    struct BoardChange {
+        int row, col, piece;
+    };
+    BoardChange changes[32];
+    int changeCount = 0;
+    
+    // Store original state
+    changes[changeCount++] = {move.toRow, move.toCol, board.squares[move.toRow][move.toCol]};
+    changes[changeCount++] = {move.fromRow, move.fromCol, board.squares[move.fromRow][move.fromCol]};
     
     // Make the initial move
     board.squares[move.toRow][move.toCol] = currentAttacker;
     board.squares[move.fromRow][move.fromCol] = 0;
     attackerSide = -attackerSide; // Turn passes to the opponent
 
-    // Chain Reaction
+    // Chain Reaction - simulate the full exchange sequence
     while (true) {
-        int nextAttacker = get_least_valuable_attacker(board, toSq, attackerSide);
+        int nextAttackerRow, nextAttackerCol;
+        int nextAttacker = get_least_valuable_attacker(board, toSq, attackerSide, nextAttackerRow, nextAttackerCol);
         
         if (nextAttacker == 0) break; // No more attackers
-        int attackerVal = see_piece_values[std::abs(nextAttacker)];
         
-        scores[scoreIndex] = attackerVal;
-        scores[scoreIndex] = see_piece_values[std::abs(currentAttacker)];
-        scoreIndex++;
+        // Store the value of the piece being captured (currentAttacker)
+        scores[scoreIndex++] = see_piece_values[std::abs(currentAttacker)];
+
+        // Store the original state of the attacker's square before moving
+        changes[changeCount++] = {nextAttackerRow, nextAttackerCol, board.squares[nextAttackerRow][nextAttackerCol]};
+        
+        // Update board state: move the attacker to the target square
+        board.squares[move.toRow][move.toCol] = nextAttacker;
+        board.squares[nextAttackerRow][nextAttackerCol] = 0;
 
         currentAttacker = nextAttacker;
         attackerSide = -attackerSide;
         
-        if (scoreIndex > 30) break;  // to avoid endless loops, js in case
-        break;
+        if (scoreIndex > 30) break;  // to avoid endless loops
     }
 
-    board.squares[move.toRow][move.toCol] = originalToPiece;
-    board.squares[move.fromRow][move.fromCol] = originalFromPiece;
-    
-    int valVictim = see_piece_values[std::abs(move.capturedPiece)];
-    int valAttacker = see_piece_values[std::abs(board.squares[move.fromRow][move.fromCol])];
-
-    if (valVictim < valAttacker) {
-        if (is_square_attacked(board, move.toRow, move.toCol, !board.isWhiteTurn)) {
-            return valVictim - valAttacker; 
-        }
+    // Restore all board changes
+    for (int i = changeCount - 1; i >= 0; i--) {
+        board.squares[changes[i].row][changes[i].col] = changes[i].piece;
     }
     
-    // In other cases, return a positive value indicating a good capture
-    return 1000; // Positive value = Good capture
+    // Use negamax-style evaluation on the scores array
+    // Work backwards from the last capture
+    for (int i = scoreIndex - 1; i > 0; i--) {
+        // Each side chooses the best outcome: capture and get the opponent's continuation,
+        // or don't capture and keep 0
+        scores[i - 1] = std::max(-scores[i] + scores[i - 1], 0);
+    }
+    
+    return scores[0];
 }
