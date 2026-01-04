@@ -972,8 +972,10 @@ static int get_least_valuable_attacker(Board& board, int square, int bySide, int
 }
 
 int see_exchange(Board& board, Move& move) {
+    const int MAX_EXCHANGE_MOVES = 32;
+    
     // Initial gain: value of the piece on the target square
-    int scores[32];
+    int scores[MAX_EXCHANGE_MOVES];
     int scoreIndex = 0;
     
     // Get the value of the captured piece without simulating the move
@@ -992,7 +994,7 @@ int see_exchange(Board& board, Move& move) {
     struct BoardChange {
         int row, col, piece;
     };
-    BoardChange changes[32];
+    BoardChange changes[MAX_EXCHANGE_MOVES];
     int changeCount = 0;
     
     // Store original state
@@ -1024,7 +1026,7 @@ int see_exchange(Board& board, Move& move) {
         currentAttacker = nextAttacker;
         attackerSide = -attackerSide;
         
-        if (scoreIndex > 30) break;  // to avoid endless loops
+        if (scoreIndex >= MAX_EXCHANGE_MOVES - 1) break;  // to avoid endless loops
     }
 
     // Restore all board changes
@@ -1035,9 +1037,8 @@ int see_exchange(Board& board, Move& move) {
     // Use negamax-style evaluation on the scores array
     // Work backwards from the last capture
     for (int i = scoreIndex - 1; i > 0; i--) {
-        // Each side chooses the best outcome: capture and get the opponent's continuation,
-        // or don't capture and keep 0
-        scores[i - 1] = std::max(-scores[i] + scores[i - 1], 0);
+        // Each side chooses the best outcome: capture (gain - cost) or don't capture (0)
+        scores[i - 1] = std::max(scores[i - 1] - scores[i], 0);
     }
     
     return scores[0];
