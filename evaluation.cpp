@@ -168,8 +168,10 @@ int eg_king_table[64] = {
     -53, -34, -21, -11, -28, -14, -24, -43
 };
 
-inline int to_sq_a1(int row, int col) {
-    return row * 8 + col;
+inline int to_sq(int row, int col) {
+    // Tahtan (0=A1) ile Pesto (0=A8) ters olduğu için çeviriyoruz.
+    // Row 2 (Piyon) -> (7-2)=5. satıra (Index 40 civarı) denk gelecek.
+    return (7 - row) * 8 + col;
 }
 inline int flip_sq(int sq) {
     // Vertical flip (A1<->A8 etc). Matches the classic FLIP(sq) = sq ^ 56.
@@ -299,7 +301,7 @@ int evaluate_board(const Board& board) {
             const int idx = piece_to_table_index(piece);
             if (idx < 0) continue;
 
-            const int pesto_sq = to_sq_a1(r, c);
+            const int pesto_sq = to_sq(r, c);
             const int color = piece > 0 ? WHITE : BLACK;
 
             mg[color] += mg_table[idx][pesto_sq];
@@ -335,4 +337,40 @@ int repetition_draw_score(const Board& board) {
     
     // if my position is clearly worse, then a draw is good
     return 0;
+}
+
+#include <iostream> 
+
+// BU FONKSİYONU ÇAĞIRIP SONUCU BANA SÖYLE
+void debug_pesto_eval(const Board& board) {
+    ensure_tables_init();
+    
+    // Test: Beyaz Piyon E2 karesinde (Genellikle: Row 6, Col 4 veya Row 1, Col 4)
+    // Motorun kendi bulduğu kareyi ve puanı yazdıracağız.
+    
+    std::cout << "--- PESTO DEBUG ---" << std::endl;
+    
+    for (int r = 0; r < 8; ++r) {
+        for (int c = 0; c < 8; ++c) {
+            int pc = board.squares[r][c];
+            // Beyaz Piyonu Bul (Senin kodunda Piyon 0 veya 1 olabilir, kontrol et)
+            // Varsayım: Pozitif sayılar beyaz.
+            if (pc == 1 || pc == PAWN) { // Beyaz Piyon
+                int pesto_sq = to_sq(r, c); // Şu anki formülün
+                int table_val = mg_pesto_table[0][pesto_sq]; // Ham tablo değeri
+                
+                std::cout << "Beyaz Piyon Bulundu -> Row: " << r << " Col: " << c 
+                          << " | Pesto Index: " << pesto_sq 
+                          << " | Pesto Degeri: " << table_val << std::endl;
+                          
+                if (table_val > 50) {
+                    std::cout << "HATA: Piyon baslangicta ama 'Terfi Puani' aliyor! (Tahta TERS)" << std::endl;
+                } else {
+                    std::cout << "DOGRU: Piyon normal puan aliyor." << std::endl;
+                }
+                return; // İlk piyonu bulunca çık
+            }
+        }
+    }
+    std::cout << "Hic Beyaz Piyon Bulunamadi!" << std::endl;
 }
