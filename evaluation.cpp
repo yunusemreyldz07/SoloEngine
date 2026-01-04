@@ -21,6 +21,12 @@ int eg_value[6] = { 94, 281, 297, 512,  936,  0};
 
 // Standard centipawn material values aligned with Board's +/- piece encoding
 const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
+// Opening nudges for better central play
+constexpr int CENTER_STRONG_PAWN_BONUS = 40;   // d4/e4 (and mirrored)
+constexpr int CENTER_SOFT_PAWN_BONUS   = 18;   // d3/e3 (and mirrored)
+constexpr int CENTER_KNIGHT_BONUS      = 14;   // c3/f3 (c6/f6)
+constexpr int CENTER_KNIGHT_SOFT       = 8;    // squares that attack center (d2/e2/d7/e7 etc)
+constexpr int TEMPO_MG = 15;
 
 inline int abs_int(int x) {
     return x < 0 ? -x : x;
@@ -198,7 +204,7 @@ int* eg_pesto_table[6] =
     eg_king_table
 };
 
-int gamephaseInc[12] = {0, 1, 1, 2, 4, 0, 0, 1, 1, 2, 4, 0};
+int gamephaseIncType[6] = {0, 1, 1, 2, 4, 0}; // pawn, knight, bishop, rook, queen, king
 int mg_table[12][64]; // first six: white pieces, next six: black pieces
 int eg_table[12][64];
 
@@ -222,8 +228,9 @@ namespace {
             for (int c = 0; c < 8; ++c) {
                 const int piece = board.squares[r][c];
                 if (piece == 0) continue;
-                const int idx = piece_to_table_index(piece);
-                if (idx >= 0) phase += gamephaseInc[idx];
+                const int absPiece = std::abs(piece);
+                if (absPiece < pawn || absPiece > king) continue;
+                phase += gamephaseIncType[absPiece - 1];
             }
         }
         return phase;
@@ -290,7 +297,7 @@ int evaluate_board(const Board& board) {
     int mg[2] = {0, 0};
     int eg[2] = {0, 0};
     int gamePhase = 0;
-    int side2move = board.isWhiteTurn ? WHITE : BLACK;
+    int centerControl[2] = {0, 0};
 
     /* evaluate each piece */
     for (int r = 0; r < 8; ++r) {
@@ -306,13 +313,44 @@ int evaluate_board(const Board& board) {
 
             mg[color] += mg_table[idx][pesto_sq];
             eg[color] += eg_table[idx][pesto_sq];
-            gamePhase += gamephaseInc[idx];
+
+            const int absPiece = std::abs(piece);
+            if (absPiece >= pawn && absPiece <= king) {
+                gamePhase += gamephaseIncType[absPiece - 1];
+            }
+
+            // Light central control nudges to prefer d/e pawn pushes and knight development.
+            if (absPiece == pawn) {
+                // Strong: d4/e4 for side to move (mirrored by color via pesto_sq index)
+                if (pesto_sq == 27 || pesto_sq == 28 || pesto_sq == 35 || pesto_sq == 36) {
+                    centerControl[color] += CENTER_STRONG_PAWN_BONUS;
+                }
+                // Soft: d3/e3/c4/f4 (and mirrors) to gently prefer early central steps over f3/a3
+                else if (pesto_sq == 19 || pesto_sq == 20 || pesto_sq == 43 || pesto_sq == 44 ||
+                         pesto_sq == 26 || pesto_sq == 29 || pesto_sq == 34 || pesto_sq == 37) {
+                    centerControl[color] += CENTER_SOFT_PAWN_BONUS;
+                }
+            } else if (absPiece == knight) {
+                // Natural development squares hitting center
+                if (pesto_sq == 18 || pesto_sq == 21 || pesto_sq == 42 || pesto_sq == 45) {
+                    centerControl[color] += CENTER_KNIGHT_BONUS; // c3/f3/c6/f6
+                } else if (pesto_sq == 17 || pesto_sq == 22 || pesto_sq == 41 || pesto_sq == 46) {
+                    centerControl[color] += CENTER_KNIGHT_SOFT; // squares that still point to center
+                }
+            }
         }
     }
 
-    /* tapered eval */
-    int mgScore = mg[side2move] - mg[OTHER(side2move)];
-    int egScore = eg[side2move] - eg[OTHER(side2move)];
+    /* tapered eval from White's perspective */
+    int mgScore = mg[WHITE] - mg[BLACK];
+    int egScore = eg[WHITE] - eg[BLACK];
+
+    // Add modest opening-oriented center bonus and a small tempo term.
+    mgScore += centerControl[WHITE] - centerControl[BLACK];
+    egScore += (centerControl[WHITE] - centerControl[BLACK]) / 3; // fade harder in endgame
+
+    // Small tempo only in middlegame to avoid skewing deep endgames
+    mgScore += board.isWhiteTurn ? TEMPO_MG : -TEMPO_MG;
     
     int mgPhase = gamePhase;
     if (mgPhase > 24) mgPhase = 24; 
@@ -337,40 +375,4 @@ int repetition_draw_score(const Board& board) {
     
     // if my position is clearly worse, then a draw is good
     return 0;
-}
-
-#include <iostream> 
-
-// BU FONKSİYONU ÇAĞIRIP SONUCU BANA SÖYLE
-void debug_pesto_eval(const Board& board) {
-    ensure_tables_init();
-    
-    // Test: Beyaz Piyon E2 karesinde (Genellikle: Row 6, Col 4 veya Row 1, Col 4)
-    // Motorun kendi bulduğu kareyi ve puanı yazdıracağız.
-    
-    std::cout << "--- PESTO DEBUG ---" << std::endl;
-    
-    for (int r = 0; r < 8; ++r) {
-        for (int c = 0; c < 8; ++c) {
-            int pc = board.squares[r][c];
-            // Beyaz Piyonu Bul (Senin kodunda Piyon 0 veya 1 olabilir, kontrol et)
-            // Varsayım: Pozitif sayılar beyaz.
-            if (pc == 1 || pc == PAWN) { // Beyaz Piyon
-                int pesto_sq = to_sq(r, c); // Şu anki formülün
-                int table_val = mg_pesto_table[0][pesto_sq]; // Ham tablo değeri
-                
-                std::cout << "Beyaz Piyon Bulundu -> Row: " << r << " Col: " << c 
-                          << " | Pesto Index: " << pesto_sq 
-                          << " | Pesto Degeri: " << table_val << std::endl;
-                          
-                if (table_val > 50) {
-                    std::cout << "HATA: Piyon baslangicta ama 'Terfi Puani' aliyor! (Tahta TERS)" << std::endl;
-                } else {
-                    std::cout << "DOGRU: Piyon normal puan aliyor." << std::endl;
-                }
-                return; // İlk piyonu bulunca çık
-            }
-        }
-    }
-    std::cout << "Hic Beyaz Piyon Bulunamadi!" << std::endl;
 }

@@ -124,7 +124,6 @@ int main(int argc, char* argv[]) {
         else if (line.substr(0, 8) == "position") {
             if (line.find("startpos") != std::string::npos) {
                 board.resetBoard();
-                debug_pesto_eval(board);
             }
             else if (line.find("fen") != std::string::npos) {
                 size_t fenStart = line.find("fen") + 4;

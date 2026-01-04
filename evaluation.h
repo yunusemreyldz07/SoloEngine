@@ -14,6 +14,5 @@ bool is_endgame(const Board& board);
 int evaluate_board_pesto(const Board& board);
 int evaluate_board(const Board& board);
 int repetition_draw_score(const Board& board);
-void debug_pesto_eval(const Board& board);
 
 #endif
