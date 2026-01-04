@@ -29,6 +29,12 @@ constexpr int PESTO_EG_VALUE[6] = {94, 281, 297, 512, 936, 0};
 // Game phase increments per piece type (pawn..king).
 constexpr int PESTO_PHASE_INC[6] = {0, 1, 1, 2, 4, 0};
 
+// Passed-pawn bonuses must be modest: PESTO PSTs already reward advanced pawns.
+// These values are in centipawns, tuned to stay within typical PESTO scale.
+// Index is "rank from own side" using: rank = (7-row) for white, rank = row for black.
+constexpr int PASSED_PAWN_MG_BONUS[8] = {0, 5, 10, 20, 35, 55, 80, 0};
+constexpr int PASSED_PAWN_EG_BONUS[8] = {0, 10, 20, 35, 55, 80, 120, 0};
+
 inline int clamp_int(int x, int lo, int hi) {
     return (x < lo) ? lo : (x > hi) ? hi : x;
 }
@@ -238,8 +244,6 @@ int evaluate_board_pesto(const Board& board) {
 
     int whiteBishops = 0;
     int blackBishops = 0;
-    int whiteQueens = 0;
-    int blackQueens = 0;
 
     int whitePawnsPerFile[8] = {0};
     int blackPawnsPerFile[8] = {0};
@@ -271,8 +275,6 @@ int evaluate_board_pesto(const Board& board) {
 
             if (absPiece == bishop) {
                 if (p > 0) whiteBishops++; else blackBishops++;
-            } else if (absPiece == queen) {
-                if (p > 0) whiteQueens++; else blackQueens++;
             } else if (absPiece == pawn) {
                 if (p > 0) whitePawnsPerFile[col]++; else blackPawnsPerFile[col]++;
             } else if (absPiece == rook) {
@@ -312,11 +314,16 @@ int evaluate_board_pesto(const Board& board) {
             }
 
             if (is_passed_pawn(board, row, col, isWhitePawn)) {
-                int rank = isWhitePawn ? (7 - row) : row;
-                int bonus = rank * rank * 8;
-                if (pawn_path_blocked(board, row, col, isWhitePawn)) bonus /= 4;
-                mgScore += sign * (bonus / 4);
-                egScore += sign * bonus;
+                const int rank = clamp_int(isWhitePawn ? (7 - row) : row, 0, 7);
+                int mgBonus = PASSED_PAWN_MG_BONUS[rank];
+                int egBonus = PASSED_PAWN_EG_BONUS[rank];
+                if (pawn_path_blocked(board, row, col, isWhitePawn)) {
+                    // If it can't advance right now, it shouldn't dominate the eval.
+                    mgBonus /= 2;
+                    egBonus /= 4;
+                }
+                mgScore += sign * mgBonus;
+                egScore += sign * egBonus;
             }
         }
     }
@@ -454,35 +461,9 @@ int evaluate_board_pesto(const Board& board) {
             mgScore += blackQueenThreat;
         }
 
-        // Backrankish safety (very simple)
-        {
-            if (board.whiteKingRow == 7) {
-                const int f = board.whiteKingCol;
-                if (f >= 0 && f < 8 && board.squares[6][f] != 0) mgScore -= 60;
-            }
-            if (board.blackKingRow == 0) {
-                const int f = board.blackKingCol;
-                if (f >= 0 && f < 8 && board.squares[1][f] != 0) mgScore += 60;
-            }
-        }
-
-        // Center control (pawns)
-        {
-            int whiteCenterPawns = 0;
-            int blackCenterPawns = 0;
-
-            if (board.squares[4][4] == pawn) whiteCenterPawns += 40; // e4
-            if (board.squares[4][3] == pawn) whiteCenterPawns += 40; // d4
-            if (board.squares[3][4] == -pawn) blackCenterPawns += 40; // e5
-            if (board.squares[3][3] == -pawn) blackCenterPawns += 40; // d5
-
-            if (board.squares[4][2] == pawn) whiteCenterPawns += 25; // c4
-            if (board.squares[4][5] == pawn) whiteCenterPawns += 25; // f4
-            if (board.squares[3][2] == -pawn) blackCenterPawns += 25; // c5
-            if (board.squares[3][5] == -pawn) blackCenterPawns += 25; // f5
-
-            mgScore += (whiteCenterPawns - blackCenterPawns);
-        }
+        // NOTE: No manual "center control" bonus here.
+        // PESTO PSTs already encode centralization incentives; adding another layer
+        // tends to double-count and can cause suicidal center obsession.
     }
 
     // Mop-up (endgame conversion assistance)
