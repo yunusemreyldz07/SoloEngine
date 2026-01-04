@@ -108,6 +108,12 @@ int quiescence(Board& board, int alpha, int beta, int ply){
     });
 
     for (Move& move : captureMoves) {
+
+        int seeValue = see_exchange(board, move);
+        if (seeValue < 0) {
+            continue; // Bad capture, skip it
+        }
+
         // Delta Pruning
         // If even the most optimistic evaluation (stand_pat + value of captured piece + margin) is worse than alpha, skip 
         int capturedValue = PIECE_VALUES[std::abs(move.capturedPiece)];
@@ -141,9 +147,8 @@ int quiescence(Board& board, int alpha, int beta, int ply){
 // Negamax
 int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine) {
     nodeCount.fetch_add(1, std::memory_order_relaxed);
-
+    bool pvNode = (beta - alpha) > 1;
     bool firstMove = true;
-
     const int alphaOrig = alpha;
     int maxEval = -200000;
     int MATE_VALUE = 100000;
@@ -250,8 +255,27 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         const Move* ttMovePtr = ttHit ? &ttMove : nullptr;
         return scoreMove(board, a, ply, ttMovePtr) > scoreMove(board, b, ply, ttMovePtr);
     });
-
+    
     for (Move& move : possibleMoves) {
+        int lmpCount = (3 * depth * depth) + 4;
+        // Late Move Pruning (LMP) logic
+        if (!pvNode && depth > 3 && depth < 8 && movesSearched >= lmpCount && !inCheck && move.promotion == 0 && move.capturedPiece == 0) {
+            if (!move.isEnPassant) {
+                bool isKiller = false;
+                // Checking if the move is a killer move, they are important so we should not prune them
+                if (ply < 100) {
+                    if (move.fromCol == killerMove[0][ply].fromCol && move.fromRow == killerMove[0][ply].fromRow &&
+                        move.toCol == killerMove[0][ply].toCol && move.toRow == killerMove[0][ply].toRow) isKiller = true;
+                    else if (move.fromCol == killerMove[1][ply].fromCol && move.fromRow == killerMove[1][ply].fromRow &&
+                        move.toCol == killerMove[1][ply].toCol && move.toRow == killerMove[1][ply].toRow) isKiller = true;
+                }
+                
+                if (!isKiller) {
+                    continue; // skip this move (late move pruning)
+                }
+            }
+        }
+
         board.makeMove(move);
         movesSearched++;
         std::vector<Move> childPv;

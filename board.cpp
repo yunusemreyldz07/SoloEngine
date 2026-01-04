@@ -872,3 +872,174 @@ bool is_threefold_repetition(const std::vector<uint64_t>& history) {
     }
     return false;
 }
+
+const int see_piece_values[] = {0, 100, 350, 350, 525, 900, 20000};
+
+static int get_least_valuable_attacker(Board& board, int square, int bySide, int& outRow, int& outCol) { // bySide: Attacker side
+    int r = square / 8;
+    int c = square % 8;
+
+    // pawn attacks
+    int pawnDir = (bySide == 1) ? 1 : -1; 
+    
+    // check left and right diagonals - fix inverted pawn direction
+    if (r - pawnDir >= 0 && r - pawnDir < 8) {
+        if (c - 1 >= 0) {
+            int p = board.squares[r - pawnDir][c - 1];
+            if (p == (bySide * pawn)) {
+                outRow = r - pawnDir;
+                outCol = c - 1;
+                return p; // Attacker pawn found
+            }
+        }
+        if (c + 1 < 8) {
+            int p = board.squares[r - pawnDir][c + 1];
+            if (p == (bySide * pawn)) {
+                outRow = r - pawnDir;
+                outCol = c + 1;
+                return p;
+            }
+        }
+    }
+
+    // knight attacks
+    for (int i = 0; i < 8; ++i) {
+        int nr = r + knight_moves[i][0];
+        int nc = c + knight_moves[i][1];
+        if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+            int p = board.squares[nr][nc];
+            if (p == (bySide * knight)) {
+                outRow = nr;
+                outCol = nc;
+                return p;
+            }
+        }
+    }
+
+    // Bishop and Queen (Diagonals)
+    for (int i = 0; i < 4; ++i) {
+        int nr = r + bishop_directions[i][0];
+        int nc = c + bishop_directions[i][1];
+        while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+            int p = board.squares[nr][nc];
+            if (p != 0) {
+                if (p == (bySide * bishop) || p == (bySide * queen)) {
+                    outRow = nr;
+                    outCol = nc;
+                    return p;
+                }
+                break; // Blocked by another piece
+            }
+            nr += bishop_directions[i][0];
+            nc += bishop_directions[i][1];
+        }
+    }
+
+    // Rook and Queen (Straight lines)
+    for (int i = 0; i < 4; ++i) {
+        int nr = r + rook_directions[i][0];
+        int nc = c + rook_directions[i][1];
+        while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+            int p = board.squares[nr][nc];
+            if (p != 0) {
+                if (p == (bySide * rook) || p == (bySide * queen)) {
+                    outRow = nr;
+                    outCol = nc;
+                    return p;
+                }
+                break; // Blocked by another piece
+            }
+            nr += rook_directions[i][0];
+            nc += rook_directions[i][1];
+        }
+    }
+
+    // King attacks
+    for (int i = 0; i < 8; ++i) {
+        int nr = r + king_moves[i][0];
+        int nc = c + king_moves[i][1];
+        if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+            int p = board.squares[nr][nc];
+            if (p == (bySide * king)) {
+                outRow = nr;
+                outCol = nc;
+                return p;
+            }
+        }
+    }
+
+    return 0; // no attacker found
+}
+
+int see_exchange(Board& board, Move& move) {
+    const int MAX_EXCHANGE_MOVES = 32;
+    
+    // Initial gain: value of the piece on the target square
+    int scores[MAX_EXCHANGE_MOVES];
+    int scoreIndex = 0;
+    
+    // Get the value of the captured piece without simulating the move
+    int capturedVal = see_piece_values[std::abs(move.capturedPiece)];
+    // If en-passant, use pawn value
+    if (move.isEnPassant) capturedVal = see_piece_values[pawn];
+
+    scores[scoreIndex++] = capturedVal;
+    
+    int attackerSide = board.isWhiteTurn ? 1 : -1;
+    int currentAttacker = board.squares[move.fromRow][move.fromCol];
+    
+    int toSq = move.toRow * 8 + move.toCol;
+    
+    // Store all modified squares for restoration
+    struct BoardChange {
+        int row, col, piece;
+    };
+    BoardChange changes[MAX_EXCHANGE_MOVES];
+    int changeCount = 0;
+    
+    // Store original state
+    changes[changeCount++] = {move.toRow, move.toCol, board.squares[move.toRow][move.toCol]};
+    changes[changeCount++] = {move.fromRow, move.fromCol, board.squares[move.fromRow][move.fromCol]};
+    
+    // Make the initial move
+    board.squares[move.toRow][move.toCol] = currentAttacker;
+    board.squares[move.fromRow][move.fromCol] = 0;
+    attackerSide = -attackerSide; // Turn passes to the opponent
+
+    // Chain Reaction - simulate the full exchange sequence
+    while (true) {
+        int nextAttackerRow, nextAttackerCol;
+        int nextAttacker = get_least_valuable_attacker(board, toSq, attackerSide, nextAttackerRow, nextAttackerCol);
+        
+        if (nextAttacker == 0) break; // No more attackers
+        
+        // Store the value of the piece being captured (currentAttacker)
+        scores[scoreIndex++] = see_piece_values[std::abs(currentAttacker)];
+
+        // Store the original state of the attacker's square before moving
+        changes[changeCount++] = {nextAttackerRow, nextAttackerCol, board.squares[nextAttackerRow][nextAttackerCol]};
+        
+        // Update board state: move the attacker to the target square
+        board.squares[move.toRow][move.toCol] = nextAttacker;
+        board.squares[nextAttackerRow][nextAttackerCol] = 0;
+
+        currentAttacker = nextAttacker;
+        attackerSide = -attackerSide;
+        
+        if (scoreIndex >= MAX_EXCHANGE_MOVES - 1) break;  // to avoid endless loops
+    }
+
+    // Restore all board changes
+    for (int i = changeCount - 1; i >= 0; i--) {
+        board.squares[changes[i].row][changes[i].col] = changes[i].piece;
+    }
+    
+    // Use negamax-style evaluation on the scores array
+    // Work backwards from the last capture
+    for (int i = scoreIndex - 1; i > 0; i--) {
+        // Each side chooses the best outcome: capture (gain - cost) or don't capture (0)
+        scores[i - 1] = std::max(scores[i - 1] - scores[i], 0);
+    }
+    
+    return scores[0];
+}
