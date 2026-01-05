@@ -1,5 +1,6 @@
 #include "board.h"
 #include "search.h"
+#include "evaluation.h"
 #include <iostream>
 #include <string>
 #include <sstream>
