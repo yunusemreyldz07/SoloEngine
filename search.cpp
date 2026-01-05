@@ -12,6 +12,8 @@ int MATE_SCORE = 100000;
 
 int historyTable[64][64];
 
+const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
+
 Move killerMove[2][100];
 std::atomic<long long> nodeCount{0};
 void resetNodeCounter() {
@@ -110,7 +112,7 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
 
 int quiescence(Board& board, int alpha, int beta, int ply){
     // Do not stop until you reach a quiet position
-    int stand_pat = board.isWhiteTurn ? evaluate_board(board) : -evaluate_board(board);
+    int stand_pat = evaluate_board(board);
 
     // Alpha-Beta pruning
     if (stand_pat >= beta) {
@@ -195,7 +197,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     int eval = -MATE_VALUE;
 
     // Static evaluation (from side-to-move perspective). Used by forward/reverse pruning.
-    const int staticEval = board.isWhiteTurn ? evaluate_board(board) : -evaluate_board(board);
+    const int staticEval = evaluate_board(board);
     if (ttHit && ttDepth >= depth) {
         if (ttFlag == EXACT) {
             pvLine.clear();
@@ -214,7 +216,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     // Reverse Futility Pruning 
     // Only makes sense in non-PV nodes (null-window), otherwise it can prune good PV continuations.
-    if ((beta - alpha) == 1 && depth < 9 && !inCheck && !is_endgame(board) && beta < MATE_SCORE - 100) {
+    if ((beta - alpha) == 1 && depth < 9 && !inCheck && beta < MATE_SCORE - 100) {
         
         // margin: for every depth, we allow a margin of 100 centipawns
         // The deeper we go, the larger the margin should be
@@ -234,7 +236,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         // Check if side to move is currently in check
         bool inCheck = is_square_attacked(board, kingRow, kingCol, !board.isWhiteTurn);
 
-        if (!inCheck && depth >= 3 && (beta - alpha == 1) && !is_endgame(board)) {
+        if (!inCheck && depth >= 3 && (beta - alpha == 1)) {
             // Make a "null move" by flipping side to move
             board.isWhiteTurn = !board.isWhiteTurn;
 
