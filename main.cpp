@@ -231,10 +231,14 @@ int main(int argc, char* argv[]) {
                     if (timeToThink >= myTime) {
                         timeToThink = myTime - 50;
                     }
+                    // Ensure minimum 10ms to prevent effectively unlimited search
+                    if (timeToThink < 10) {
+                        timeToThink = 10;
+                    }
                 } else {
+                    // No time remaining: use minimal safe value
                     timeToThink = 10;
                 }
-                if (timeToThink < 10) timeToThink = 10;
                 searchDepth = 128;
             } else if (searchDepth == -1) {
                 searchDepth = 6;
