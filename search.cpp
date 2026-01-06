@@ -141,7 +141,7 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
 int quiescence(Board& board, int alpha, int beta, int ply){
     nodeCount.fetch_add(1, std::memory_order_relaxed);
     if (should_stop()) {
-        return 0; // Search was stopped
+        return alpha; // Search was stopped
     }
 
     if (ply >= 99) {
@@ -207,7 +207,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     nodeCount.fetch_add(1, std::memory_order_relaxed);
 
     if (should_stop()) {
-        return 0; // Search was stopped
+        return alpha; // Search was stopped
     }
 
     bool pvNode = (beta - alpha) > 1;
