@@ -252,11 +252,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             return ttScore;
         }
 
-        if (!is_repetition_candidate && ttFlag == ALPHA && ttScore <= alpha) {
+        if (ttFlag == ALPHA && ttScore <= alpha) {
             pvLine.clear();
             return alpha;
         }
-        if (!is_repetition_candidate && ttFlag == BETA && ttScore >= beta) {
+        if (ttFlag == BETA && ttScore >= beta) {
             pvLine.clear();
             return beta;
         }
