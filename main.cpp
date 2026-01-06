@@ -7,6 +7,8 @@
 #include <chrono>
 #include <vector>
 #include <algorithm>
+#include <thread>
+#include <atomic>
 
 static uint64_t perft(Board& board, int depth) {
     if (depth <= 0) return 1ULL;
@@ -82,7 +84,7 @@ void bench() {
 }
 
 int main(int argc, char* argv[]) {
-    
+    std::cout.setf(std::ios::unitbuf); // Disable output buffering
     if (argc > 1 && std::string(argv[1]) == "bench") {
         bench();
         return 0;
@@ -95,8 +97,36 @@ int main(int argc, char* argv[]) {
     gameHistory.reserve(512);
     std::string line;
 
-    // Normal UCI döngüsü buradan devam eder...
+    std::thread searchThread;
+    std::atomic<bool> searchRunning{false};
+
+    auto join_search_if_done = [&]() {
+        if (!searchRunning.load(std::memory_order_relaxed) && searchThread.joinable()) {
+            searchThread.join();
+        }
+    };
+
+    auto stop_and_join_search = [&]() {
+        if (searchRunning.load(std::memory_order_relaxed)) {
+            request_stop_search();
+        }
+        if (searchThread.joinable()) {
+            searchThread.join();
+        }
+        searchRunning.store(false, std::memory_order_relaxed);
+    };
+
+    // Normal UCI loop continues from here...
     while (std::getline(std::cin, line)) {
+
+        // If a previous search finished, clean up the thread.
+        join_search_if_done();
+
+        if (line == "stop") {
+            // GUI/OpenBench may send this when time is up.
+            request_stop_search();
+            continue;
+        }
         
         if (line == "uci") {
             std::cout << "id name SoloBot" << std::endl;
@@ -115,6 +145,7 @@ int main(int argc, char* argv[]) {
         }
 
         else if (line == "ucinewgame") {
+            stop_and_join_search();
             globalTT.clear();
             board.resetBoard();
             gameHistory.clear();
@@ -122,6 +153,7 @@ int main(int argc, char* argv[]) {
         }
 
         else if (line.substr(0, 8) == "position") {
+            stop_and_join_search();
             if (line.find("startpos") != std::string::npos) {
                 board.resetBoard();
             }
@@ -154,7 +186,9 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        if (line.substr(0, 2) == "go") {
+        else if (line.substr(0, 2) == "go") {
+            stop_and_join_search();
+
             int depth = -1;
             int movetime = -1;
             int wtime = -1, btime = -1;
@@ -162,69 +196,88 @@ int main(int argc, char* argv[]) {
             {
                 std::stringstream ss(line);
                 std::string token;
-                ss >> token; 
+                ss >> token;
                 while (ss >> token) {
-                if (token == "depth") {
-                    ss >> depth;
-                }
-                else if (token == "movetime") {
-                    ss >> movetime;
-                }
-                else if (token == "wtime") {
-                    ss >> wtime;
-                }
-                else if (token == "btime") {
-                    ss >> btime;
-                }
-                else if (token == "winc") {
-                    ss >> winc;
-                }
-                else if (token == "binc") {
-                    ss >> binc;
+                    if (token == "depth") {
+                        ss >> depth;
+                    } else if (token == "movetime") {
+                        ss >> movetime;
+                    } else if (token == "wtime") {
+                        ss >> wtime;
+                    } else if (token == "btime") {
+                        ss >> btime;
+                    } else if (token == "winc") {
+                        ss >> winc;
+                    } else if (token == "binc") {
+                        ss >> binc;
+                    }
                 }
             }
-            int timeToThink = 0;
+
+            int timeToThink = -1;
+            int searchDepth = depth;
 
             if (movetime != -1) {
                 timeToThink = movetime;
-                depth = 128;
-            }
-            else if (wtime != -1 || btime != -1) {
-                int myTime = board.isWhiteTurn ? wtime : btime;
-                int myInc = board.isWhiteTurn ? winc : binc;
+                searchDepth = 128;
+            } else if (wtime != -1 || btime != -1) {
+                const int myTime = board.isWhiteTurn ? wtime : btime;
+                const int myInc = board.isWhiteTurn ? winc : binc;
 
+                // Simple TC: allocate a fraction of remaining time + some increment.
+                // IMPORTANT: enforce a small minimum (currently 10 ms) so the engine always has
+                // some time to search and we avoid pathological cases where a 0-ms allocation
+                // would effectively disable time management in the search.
                 if (myTime > 0) {
                     timeToThink = (myTime / 20) + (myInc / 2);
                     if (timeToThink >= myTime) {
                         timeToThink = myTime - 50;
                     }
-                    if (timeToThink < 0) timeToThink = 10;
+                } else {
+                    timeToThink = 10;
                 }
-                depth = 128;
+                if (timeToThink < 10) timeToThink = 10;
+                searchDepth = 128;
+            } else if (searchDepth == -1) {
+                searchDepth = 6;
             }
-            else if (depth == -1) {
-                depth = 6;
-            }
-            
-            Move best = getBestMove(board, depth, timeToThink, gameHistory);
-            
-            std::cout << "bestmove " << columns[best.fromCol] << (8 - best.fromRow) 
-                 << columns[best.toCol] << (8 - best.toRow);
-            
-            if (best.promotion != 0) {
-                switch (abs(best.promotion)) {
-                    case queen: std::cout << 'q'; break;
-                    case rook: std::cout << 'r'; break;
-                    case bishop: std::cout << 'b'; break;
-                    case knight: std::cout << 'n'; break;
+
+            // Run search on a worker thread so we can still react to `stop` / `isready`.
+            searchRunning.store(true, std::memory_order_relaxed);
+            searchThread = std::thread([&board, &gameHistory, searchDepth, timeToThink, &searchRunning]() {
+                Move best = getBestMove(board, searchDepth, timeToThink, gameHistory);
+
+                // If no legal move was found (mate/stalemate), output UCI null move.
+                if (best.fromRow == 0 && best.fromCol == 0 && best.toRow == 0 && best.toCol == 0 && best.promotion == 0) {
+                    std::cout << "bestmove 0000" << std::endl;
+                } else {
+                    std::cout << "bestmove "
+                              << columns[best.fromCol] << (8 - best.fromRow)
+                              << columns[best.toCol] << (8 - best.toRow);
+                    if (best.promotion != 0) {
+                        switch (abs(best.promotion)) {
+                            case queen: std::cout << 'q'; break;
+                            case rook: std::cout << 'r'; break;
+                            case bishop: std::cout << 'b'; break;
+                            case knight: std::cout << 'n'; break;
+                            default: break;
+                        }
                     }
+                    std::cout << std::endl;
                 }
-            std::cout << std::endl;
-            }
+
+                searchRunning.store(false, std::memory_order_relaxed);
+            });
         }
         else if (line == "quit") {
+            request_stop_search();
+            stop_and_join_search();
             break;
         }
     }
+
+    // Clean shutdown if stdin closes.
+    request_stop_search();
+    stop_and_join_search();
     return 0;
 }

@@ -24,6 +24,33 @@ long long getNodeCounter() {
     return nodeCount.load(std::memory_order_relaxed);
 }
 
+std::atomic<bool> stop_search(false);
+std::atomic<long long> time_limit_ms{0};          // Time limit (atomic for thread-safety)
+std::atomic<long long> start_time_ms{0};          // Start time in milliseconds since epoch (atomic for thread-safety)
+std::atomic<bool> is_time_limited{false};         // Do we have time limit? (atomic for thread-safety)
+
+void request_stop_search() {
+    stop_search.store(true, std::memory_order_relaxed);
+}
+
+// Is the time limit reached?
+bool should_stop() {
+    if (stop_search.load(std::memory_order_relaxed)) return true;
+    
+    if (is_time_limited.load(std::memory_order_relaxed)) {
+        // Checking the system clock every time is expensive, so we filter with nodeCount
+        if ((nodeCount.load(std::memory_order_relaxed) & 2047) == 0) { // Check every 2048 nodes
+            auto now = std::chrono::steady_clock::now();
+            long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+            long long elapsed = now_ms - start_time_ms.load(std::memory_order_relaxed);
+            if (elapsed >= time_limit_ms.load(std::memory_order_relaxed)) {
+                stop_search.store(true, std::memory_order_relaxed);
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 static std::string move_to_uci(const Move& m) {
     std::string s;
@@ -111,6 +138,15 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
 }
 
 int quiescence(Board& board, int alpha, int beta, int ply){
+    nodeCount.fetch_add(1, std::memory_order_relaxed);
+    if (should_stop()) {
+        return 0; // Search was stopped
+    }
+
+    if (ply >= 99) {
+        return evaluate_board(board); // Prevent infinite quiescence depth and overflows
+    }
+
     // Do not stop until you reach a quiet position
     int stand_pat = evaluate_board(board);
 
@@ -168,13 +204,18 @@ int quiescence(Board& board, int alpha, int beta, int ply){
 // Negamax
 int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine) {
     nodeCount.fetch_add(1, std::memory_order_relaxed);
+
+    if (should_stop()) {
+        return 0; // Search was stopped
+    }
+
     bool pvNode = (beta - alpha) > 1;
     bool firstMove = true;
     const int alphaOrig = alpha;
     int maxEval = -200000;
     int MATE_VALUE = 100000;
 
-    if (depth == 0) {
+    if (depth <= 0) {
         pvLine.clear();
         return quiescence(board, alpha, beta, ply);
     }
@@ -191,23 +232,32 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     Move ttMove;
     const bool ttHit = globalTT.probe(currentHash, ttScore, ttDepth, ttFlag, ttMove);
 
-    auto history_pop = [&history]() { if (!history.empty()) history.pop_back(); };
-
     int movesSearched = 0;
     int eval = -MATE_VALUE;
+    bool is_repetition_candidate = false;
+
+    if (history.size() > 1) {
+        for (int i = static_cast<int>(history.size()) - 2; i >= 0; i--) {
+            if (history[i] == currentHash) {
+                is_repetition_candidate = true;
+                break;
+            }
+        }
+    }
 
     // Static evaluation (from side-to-move perspective). Used by forward/reverse pruning.
     const int staticEval = evaluate_board(board);
-    if (ttHit && ttDepth >= depth) {
+    if (!is_repetition_candidate && ttHit && ttDepth >= depth) {
         if (ttFlag == EXACT) {
             pvLine.clear();
             return ttScore;
         }
-        if (ttFlag == ALPHA && ttScore <= alpha) {
+
+        if (!is_repetition_candidate && ttFlag == ALPHA && ttScore <= alpha) {
             pvLine.clear();
             return alpha;
         }
-        if (ttFlag == BETA && ttScore >= beta) {
+        if (!is_repetition_candidate && ttFlag == BETA && ttScore >= beta) {
             pvLine.clear();
             return beta;
         }
@@ -264,7 +314,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     Move bestMove = possibleMoves.empty() ? Move() : possibleMoves[0];
 
     if (possibleMoves.empty()) {
-        history_pop();
         if (is_square_attacked(board, board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow, 
                                board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol, !board.isWhiteTurn)) 
             return -MATE_VALUE + ply; // Mate
@@ -364,8 +413,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
     }
 
-    history_pop();
-    
     TTFlag flag;
     if (maxEval <= alphaOrig) flag = ALPHA;
     else if (maxEval >= beta) flag = BETA;
@@ -376,6 +423,24 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 }
 
 Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<uint64_t>& history, int ply) {
+
+    // Reset variables
+    resetNodeCounter();
+    stop_search.store(false, std::memory_order_relaxed);
+    
+    // Time settings
+    auto now = std::chrono::steady_clock::now();
+    start_time_ms.store(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count(), std::memory_order_relaxed);
+    if (movetimeMs > 0) {
+        is_time_limited.store(true, std::memory_order_relaxed);
+        long long time_limit = movetimeMs; // Do not use the entire time given by the GUI leave a small margin
+        if (time_limit > 50) time_limit -= 20; // 20ms safety margin
+        time_limit_ms.store(time_limit, std::memory_order_relaxed);
+    } else {
+        is_time_limited.store(false, std::memory_order_relaxed);
+        time_limit_ms.store(0, std::memory_order_relaxed);
+    }
+
     bool isWhite = board.isWhiteTurn;
     std::vector<Move> possibleMoves = get_all_moves(board, isWhite);
     std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
@@ -391,18 +456,17 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
     auto gTimeLimitMs = gTimeLimited ? movetimeMs : std::numeric_limits<int>::max();
     const int effectiveMaxDepth = gTimeLimited ? 128 : maxDepth;
     int bestValue;
-    bool timeExpired = false;
+
+    std::vector<uint64_t> localHistory;
+    localHistory.reserve(std::min((size_t)100, history.size()) + 1);
+    auto startIt = (history.size() > 100) ? (history.end() - 100) : history.begin(); // Keep only last 100 entries
+    localHistory.assign(startIt, history.end());
 
     int lastScore = 0; // for aspiration windows
 
     for (int depth = 1; depth <= effectiveMaxDepth; depth++) {
-        
-        if (gTimeLimited) {
-            auto now = std::chrono::steady_clock::now();
-            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - gSearchStart).count() >= gTimeLimitMs) {
-                break;
-            }
-        }
+
+        if (stop_search.load(std::memory_order_relaxed)) break;
 
         int delta = 50; // Aspiration window margin
         int alpha = -2000000000;
@@ -423,7 +487,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             if (depth > 1) {
                 // Here we use bestMoveSoFar because it was the winner of the previous depth
                 Move pvMove = bestMoveSoFar; 
-                std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
+                std::stable_sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
                     const bool aIsPV = (a.fromRow == pvMove.fromRow && a.fromCol == pvMove.fromCol && a.toRow == pvMove.toRow && a.toCol == pvMove.toCol && a.promotion == pvMove.promotion);
                     const bool bIsPV = (b.fromRow == pvMove.fromRow && b.fromCol == pvMove.fromCol && b.toRow == pvMove.toRow && b.toCol == pvMove.toCol && b.promotion == pvMove.promotion);
 
@@ -444,25 +508,26 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             }
 
             for (Move move : possibleMoves) {
-                // In-loop time check
-                if (gTimeLimited) {
-                    auto nowInner = std::chrono::steady_clock::now();
-                    if (std::chrono::duration_cast<std::chrono::milliseconds>(nowInner - gSearchStart).count() >= gTimeLimitMs) {
-                        timeExpired = true;
-                        thisDepthCompleted = false; // Depth incomplete
-                        break; 
-                    }
+                if (stop_search.load(std::memory_order_relaxed)) {
+                    thisDepthCompleted = false;
+                    break; 
                 }
 
                 board.makeMove(move);
 
                 std::vector<Move> childPv;
-                std::vector<uint64_t> localHistory = history; // make a mutable copy for search
+
                 uint64_t newHash = position_key(board);
                 localHistory.push_back(newHash);
                 int val = -negamax(board, depth - 1, -beta, -alpha, ply + 1, localHistory, childPv);
+                localHistory.pop_back();
                 
                 board.unmakeMove(move);
+
+                if (stop_search.load(std::memory_order_relaxed)) {
+                    thisDepthCompleted = false;
+                    break; 
+                }
 
                 if (val > bestValue) {
                     bestValue = val;
@@ -472,11 +537,14 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                         alpha = bestValue;
 
                         if (alpha >= beta) {
-                            // Beta cutoff occurred, this shouldnt have happened in aspiration window so we need to re-search
                             break;
                         }
                     }
                     
+                    if (stop_search.load(std::memory_order_relaxed)) {
+                        break; 
+                    }
+
                     if (thisDepthCompleted) { 
                         lastScore = bestValue;
                         bestMoveSoFar = currentDepthBestMove;
@@ -485,8 +553,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                         std::cout << "info depth " << depth 
                                     << " score cp " << bestValue 
                                     << " time " << duration 
-                                    << " pv " << move_to_uci(bestMoveSoFar) << std::endl;
-                        std::cout << move_to_uci(move) << " ";
+                                    << " pv " << move_to_uci(bestMoveSoFar) << " ";
                         for (const Move& pvMove : childPv) {
                             std::cout << move_to_uci(pvMove) << " ";
                         }
@@ -495,9 +562,10 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                 }
             }
 
-            if (timeExpired) {
+            if (stop_search.load(std::memory_order_relaxed)) {
                 break; 
             }
+
             // Aspiration window re-search logic
             if (depth >= 5 && (bestValue <= alphaStart || bestValue >= betaStart)) {
                 // Fail-low or fail-high: widen the window and re-search this depth.
@@ -514,8 +582,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             break; // Exit aspiration window loop
         }
         
-
-        if (bestValue >= MATE_SCORE - 50) {
+        if (stop_search.load(std::memory_order_relaxed) || bestValue >= 100000 - 50) {
             break;
         }
     }
