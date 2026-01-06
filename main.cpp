@@ -241,9 +241,13 @@ int main(int argc, char* argv[]) {
             }
 
             // Run search on a worker thread so we can still react to `stop` / `isready`.
+            // CRITICAL: Copy board and gameHistory by value to avoid data race when the main thread
+            // processes a new "position" command while the search is still running.
             searchRunning.store(true, std::memory_order_relaxed);
-            searchThread = std::thread([&board, &gameHistory, searchDepth, timeToThink, &searchRunning]() {
-                Move best = getBestMove(board, searchDepth, timeToThink, gameHistory);
+            Board boardCopy = board;
+            std::vector<uint64_t> historyCopy = gameHistory;
+            searchThread = std::thread([boardCopy, historyCopy, searchDepth, timeToThink, &searchRunning]() mutable {
+                Move best = getBestMove(boardCopy, searchDepth, timeToThink, historyCopy);
 
                 // If no legal move was found (mate/stalemate), output UCI null move.
                 if (best.fromRow == 0 && best.fromCol == 0 && best.toRow == 0 && best.toCol == 0 && best.promotion == 0) {
