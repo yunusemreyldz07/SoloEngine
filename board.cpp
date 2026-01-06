@@ -876,13 +876,11 @@ bool is_threefold_repetition(const std::vector<uint64_t>& history) {
 const int see_piece_values[] = {0, 100, 350, 350, 525, 900, 20000};
 
 static int get_least_valuable_attacker(Board& board, int square, int bySide, int& attackerSq) {
-    attackerSq = -1; // Kareyi sıfırla
+    attackerSq = -1; // reset attacker square
     int r = square / 8;
     int c = square % 8;
 
-    // 1. Piyon Saldırıları
-    // Not: "bySide" tarafının piyonunun nerede olduğunu bulmak için, piyonun hareket yönünün TERSİNE bakmalıyız.
-    // Beyaz (1) yukarı (-1) gider, yani beyaz piyon aşağıdan (r+1) saldırır.
+    // Pawn attacks
     int pawnDir = (bySide == 1) ? 1 : -1; 
     
     if (r + pawnDir >= 0 && r + pawnDir < 8) {
@@ -902,7 +900,7 @@ static int get_least_valuable_attacker(Board& board, int square, int bySide, int
         }
     }
 
-    // 2. At Saldırıları
+    // knight attacks
     for (int i = 0; i < 8; ++i) {
         int nr = r + knight_moves[i][0];
         int nc = c + knight_moves[i][1];
@@ -915,7 +913,7 @@ static int get_least_valuable_attacker(Board& board, int square, int bySide, int
         }
     }
 
-    // 3. Fil ve Vezir (Çaprazlar)
+    // bishop and queen (diagonals)
     for (int i = 0; i < 4; ++i) {
         int nr = r + bishop_directions[i][0];
         int nc = c + bishop_directions[i][1];
@@ -926,14 +924,14 @@ static int get_least_valuable_attacker(Board& board, int square, int bySide, int
                     attackerSq = nr * 8 + nc;
                     return p;
                 }
-                break; // Başka taş engelliyor
+                break; // blocked
             }
             nr += bishop_directions[i][0];
             nc += bishop_directions[i][1];
         }
     }
 
-    // 4. Kale ve Vezir (Düzler)
+    // rook and queen (straight lines)
     for (int i = 0; i < 4; ++i) {
         int nr = r + rook_directions[i][0];
         int nc = c + rook_directions[i][1];
@@ -951,7 +949,7 @@ static int get_least_valuable_attacker(Board& board, int square, int bySide, int
         }
     }
 
-    // 5. Şah Saldırısı
+    // king attacks
     for (int i = 0; i < 8; ++i) {
         int nr = r + king_moves[i][0];
         int nc = c + king_moves[i][1];
@@ -964,7 +962,7 @@ static int get_least_valuable_attacker(Board& board, int square, int bySide, int
         }
     }
 
-    return 0; // Saldıran yok
+    return 0; // no attackers
 }
 
 int see_exchange(Board& board, Move& move) {

@@ -82,7 +82,7 @@ void bench() {
 }
 
 int main(int argc, char* argv[]) {
-    
+    std::cout.setf(std::ios::unitbuf); // Disable output buffering
     if (argc > 1 && std::string(argv[1]) == "bench") {
         bench();
         return 0;

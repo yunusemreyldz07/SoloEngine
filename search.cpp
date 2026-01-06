@@ -138,6 +138,10 @@ int quiescence(Board& board, int alpha, int beta, int ply){
         return 0; // Search was stopped
     }
 
+    if (ply >= 99) {
+        return evaluate_board(board); // Prevent infinite quiescence depth and overflows
+    }
+
     // Do not stop until you reach a quiet position
     int stand_pat = evaluate_board(board);
 
@@ -223,8 +227,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     Move ttMove;
     const bool ttHit = globalTT.probe(currentHash, ttScore, ttDepth, ttFlag, ttMove);
 
-    auto history_pop = [&history]() { if (!history.empty()) history.pop_back(); };
-
     int movesSearched = 0;
     int eval = -MATE_VALUE;
     bool is_repetition_candidate = false;
@@ -307,7 +309,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     Move bestMove = possibleMoves.empty() ? Move() : possibleMoves[0];
 
     if (possibleMoves.empty()) {
-        history_pop();
         if (is_square_attacked(board, board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow, 
                                board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol, !board.isWhiteTurn)) 
             return -MATE_VALUE + ply; // Mate
@@ -407,8 +408,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
     }
 
-    history_pop();
-    
     TTFlag flag;
     if (maxEval <= alphaOrig) flag = ALPHA;
     else if (maxEval >= beta) flag = BETA;
