@@ -29,6 +29,10 @@ long long time_limit_ms = 0;          // Time limit
 auto start_time = std::chrono::steady_clock::now();
 bool is_time_limited = false;         // Do we have time limit?
 
+void request_stop_search() {
+    stop_search.store(true, std::memory_order_relaxed);
+}
+
 // Is the time limit reached?
 bool should_stop() {
     if (stop_search.load(std::memory_order_relaxed)) return true;
