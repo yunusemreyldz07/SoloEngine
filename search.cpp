@@ -25,9 +25,9 @@ long long getNodeCounter() {
 }
 
 std::atomic<bool> stop_search(false);
-long long time_limit_ms = 0;          // Time limit
-auto start_time = std::chrono::steady_clock::now();
-bool is_time_limited = false;         // Do we have time limit?
+std::atomic<long long> time_limit_ms{0};          // Time limit (atomic for thread-safety)
+std::atomic<long long> start_time_ms{0};          // Start time in milliseconds since epoch (atomic for thread-safety)
+std::atomic<bool> is_time_limited{false};         // Do we have time limit? (atomic for thread-safety)
 
 void request_stop_search() {
     stop_search.store(true, std::memory_order_relaxed);
@@ -37,12 +37,13 @@ void request_stop_search() {
 bool should_stop() {
     if (stop_search.load(std::memory_order_relaxed)) return true;
     
-    if (is_time_limited) {
+    if (is_time_limited.load(std::memory_order_relaxed)) {
         // Checking the system clock every time is expensive, so we filter with nodeCount
         if ((nodeCount.load(std::memory_order_relaxed) & 2047) == 0) { // Check every 2048 nodes
             auto now = std::chrono::steady_clock::now();
-            long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
-            if (elapsed >= time_limit_ms) {
+            long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+            long long elapsed = now_ms - start_time_ms.load(std::memory_order_relaxed);
+            if (elapsed >= time_limit_ms.load(std::memory_order_relaxed)) {
                 stop_search.store(true, std::memory_order_relaxed);
                 return true;
             }
@@ -428,14 +429,16 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
     stop_search.store(false, std::memory_order_relaxed);
     
     // Time settings
-    start_time = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    start_time_ms.store(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count(), std::memory_order_relaxed);
     if (movetimeMs > 0) {
-        is_time_limited = true;
-        time_limit_ms = movetimeMs; // Do not use the entire time given by the GUI leave a small margin
-        if (time_limit_ms > 50) time_limit_ms -= 20; // 20ms safety margin
+        is_time_limited.store(true, std::memory_order_relaxed);
+        long long time_limit = movetimeMs; // Do not use the entire time given by the GUI leave a small margin
+        if (time_limit > 50) time_limit -= 20; // 20ms safety margin
+        time_limit_ms.store(time_limit, std::memory_order_relaxed);
     } else {
-        is_time_limited = false;
-        time_limit_ms = 0;
+        is_time_limited.store(false, std::memory_order_relaxed);
+        time_limit_ms.store(0, std::memory_order_relaxed);
     }
 
     bool isWhite = board.isWhiteTurn;
