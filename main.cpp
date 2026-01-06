@@ -225,7 +225,9 @@ int main(int argc, char* argv[]) {
                 const int myInc = board.isWhiteTurn ? winc : binc;
 
                 // Simple TC: allocate a fraction of remaining time + some increment.
-                // IMPORTANT: never let this drop to 0, otherwise search becomes effectively unlimited.
+                // IMPORTANT: enforce a small minimum (currently 10 ms) so the engine always has
+                // some time to search and we avoid pathological cases where a 0-ms allocation
+                // would effectively disable time management in the search.
                 if (myTime > 0) {
                     timeToThink = (myTime / 20) + (myInc / 2);
                     if (timeToThink >= myTime) {
