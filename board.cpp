@@ -979,7 +979,6 @@ int see_exchange(Board& board, Move& move) {
     
     
     int toSq = move.toRow * 8 + move.toCol;
-    int fromSq = move.fromRow * 8 + move.fromCol;
     
     int pieceOnTarget = board.squares[move.toRow][move.toCol];
     int pieceOnSource = board.squares[move.fromRow][move.fromCol];
