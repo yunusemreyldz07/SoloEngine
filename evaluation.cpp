@@ -152,6 +152,31 @@ const int eg_king_table[64] = {
     -53, -34, -21, -11, -28, -14, -24, -43
 };
 
+const int mg_double_pawn_penalty = -7;
+const int eg_double_pawn_penalty = -11;
+
+const int mg_isolated_pawn_penalty = -8;
+const int eg_isolated_pawn_penalty = -12;
+
+const int mg_passed_pawn_bonus[64] = {  0, 0, 0, 0, 0, 0, 0, 0,
+                                        36, 42, 42, 42, 42, 42, 42, 36,
+                                        14, 17, 17, 17, 17, 17, 17, 14,
+                                        5, 7, 7, 7, 7, 7, 7, 5,
+                                        0, 0, 0, 0, 0, 0, 0, 0,
+                                        0, 0, 0, 0, 0, 0, 0, 0,
+                                        0, 0, 0, 0, 0, 0, 0, 0,
+                                        0, 0, 0, 0, 0, 0, 0, 0,};
+
+const int eg_passed_pawn_bonus[64] = {  0, 0, 0, 0, 0, 0, 0, 0,
+                                        80, 85, 90, 103, 103, 90, 85, 80,
+                                        20, 27, 30, 34, 34, 30, 27, 20,
+                                        10, 12, 15, 20, 20, 15, 12, 10,
+                                        0, 10, 10, 10, 10, 10, 10, 0,
+                                        -3, 0, 0, 0, 0, 0, 0, 0,
+                                        -2, 0, 0, 0, 0, 0, -1, -2,
+                                        0, 0, 0, 0, 0, 0, 0, 0};
+
+
 // Pointer arrays for easy access
 const int* mg_pesto_tables[6] = { mg_pawn_table, mg_knight_table, mg_bishop_table, mg_rook_table, mg_queen_table, mg_king_table };
 const int* eg_pesto_tables[6] = { eg_pawn_table, eg_knight_table, eg_bishop_table, eg_rook_table, eg_queen_table, eg_king_table };
@@ -190,6 +215,100 @@ void ensure_tables_init() {
 }
 }
 
+
+int add_bonuses(const Board& board, int piece, int row, int col, int mgPhase, int egPhase) {
+    // Passed pawn bonus
+    int bonus = 0;
+    const int color = piece > 0 ? WHITE : BLACK;
+    const int enemyPawn = -piece;
+    for (row = 0; row < 8; ++row) {
+        for (col = 0; col < 8; ++col) {
+            // Only evaluate pawns of the requested side
+            if (board.squares[row][col] != piece) continue;
+
+            bool isPassed = true;
+
+            // White pawns advance toward row 0 black pawns toward row 7
+            if (color == WHITE) {
+                for (int r = row - 1; r >= 0 && isPassed; --r) {
+                    for (int dc = -1; dc <= 1; ++dc) {
+                        const int c = col + dc;
+                        if (c < 0 || c > 7) continue;
+                        if (board.squares[r][c] == enemyPawn) {
+                            isPassed = false;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                for (int r = row + 1; r < 8 && isPassed; ++r) {
+                    for (int dc = -1; dc <= 1; ++dc) {
+                        const int c = col + dc;
+                        if (c < 0 || c > 7) continue;
+                        if (board.squares[r][c] == enemyPawn) {
+                            isPassed = false;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (isPassed) {
+                const int sq = row * 8 + col;
+                // Bonus arrays are oriented for White + mirror for Black.
+                const int idx = (color == WHITE) ? sq : mirror_sq(sq);
+                // tapered eval
+                bonus += (mg_passed_pawn_bonus[idx] * mgPhase + eg_passed_pawn_bonus[idx] * egPhase) / 24;
+            }
+        }
+    }
+
+    // Additional bonuses will be added here later
+
+    return bonus;
+}
+
+int add_penalties(const Board& board, int piece, int mgPhase, int egPhase) {
+    // Only pawn penalties
+    if (std::abs(piece) != pawn) return 0;
+
+    int fileCount[8] = {0};
+    for (int r = 0; r < 8; ++r) {
+        for (int c = 0; c < 8; ++c) {
+            if (board.squares[r][c] == piece) {
+                ++fileCount[c];
+            }
+        }
+    }
+
+    const int taperedDouble = ((mg_double_pawn_penalty * mgPhase) + (eg_double_pawn_penalty * egPhase)) / 24;
+    const int taperedIsolated = ((mg_isolated_pawn_penalty * mgPhase) + (eg_isolated_pawn_penalty * egPhase)) / 24;
+
+    int penalty = 0;
+
+    // penalty per extra pawn on file.
+    for (int file = 0; file < 8; ++file) {
+        const int cnt = fileCount[file];
+        if (cnt > 1) {
+            penalty += (cnt - 1) * taperedDouble;
+        }
+    }
+
+    // each pawn on an isolated file gets penalized
+    for (int file = 0; file < 8; ++file) {
+        const int cnt = fileCount[file];
+        if (cnt == 0) continue;
+        const bool hasLeft = (file > 0) && (fileCount[file - 1] > 0);
+        const bool hasRight = (file < 7) && (fileCount[file + 1] > 0);
+        if (!hasLeft && !hasRight) {
+            penalty += cnt * taperedIsolated;
+        }
+    }
+
+    return penalty;
+}
+
+
 int evaluate_board(const Board& board) {
     ensure_tables_init();
 
@@ -227,12 +346,27 @@ int evaluate_board(const Board& board) {
     if (mgPhase > 24) mgPhase = 24; 
     
     int egPhase = 24 - mgPhase;
-    
-    return (mgScore * mgPhase + egScore * egPhase) / 24;
+
+    const int base = (mgScore * mgPhase + egScore * egPhase) / 24;
+
+    // Tapered (MG/EG) bonuses/penalties from pawn structure
+    // i keep these in separate functions so i can extend them later
+    const int bonusW = add_bonuses(board, pawn, 0, 0, mgPhase, egPhase);
+    const int bonusB = add_bonuses(board, -pawn, 0, 0, mgPhase, egPhase);
+    const int penW = add_penalties(board, pawn, mgPhase, egPhase);
+    const int penB = add_penalties(board, -pawn, mgPhase, egPhase);
+
+    const int myExtra = (side2move == WHITE) ? (bonusW + penW) : (bonusB + penB);
+    const int opExtra = (side2move == WHITE) ? (bonusB + penB) : (bonusW + penW);
+
+    return base + (myExtra - opExtra);
 }
 
-int evaluate_board_pesto(const Board& board) {
-    return evaluate_board(board);
+int evaluate_board_final(const Board& board) {
+    int score = evaluate_board(board);
+    
+
+    return score;
 }
 
 int repetition_draw_score(const Board& board) {

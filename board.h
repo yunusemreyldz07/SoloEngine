@@ -27,6 +27,13 @@ extern int bishop_directions[4][2];
 extern int rook_directions[4][2];
 extern int queen_directions[8][2];
 
+/* struct Piece {
+    int type;
+    int color;
+    int sq; // 0..63
+}; */
+
+
 struct Move {
     int fromRow, fromCol;
     int toRow, toCol;
