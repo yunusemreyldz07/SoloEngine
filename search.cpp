@@ -174,7 +174,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     int maxEval = -200000;
     int MATE_VALUE = 100000;
 
-    if (depth == 0) {
+    if (depth <= 0) {
         pvLine.clear();
         return quiescence(board, alpha, beta, ply);
     }
@@ -195,19 +195,30 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     int movesSearched = 0;
     int eval = -MATE_VALUE;
+    bool is_repetition_candidate = false;
+
+    if (history.size() > 1) {
+        for (int i = static_cast<int>(history.size()) - 2; i >= 0; i--) {
+            if (history[i] == currentHash) {
+                is_repetition_candidate = true;
+                break;
+            }
+        }
+    }
 
     // Static evaluation (from side-to-move perspective). Used by forward/reverse pruning.
     const int staticEval = evaluate_board(board);
-    if (ttHit && ttDepth >= depth) {
+    if (!is_repetition_candidate && ttHit && ttDepth >= depth) {
         if (ttFlag == EXACT) {
             pvLine.clear();
             return ttScore;
         }
-        if (ttFlag == ALPHA && ttScore <= alpha) {
+        
+        if (!is_repetition_candidate && ttFlag == ALPHA && ttScore <= alpha) {
             pvLine.clear();
             return alpha;
         }
-        if (ttFlag == BETA && ttScore >= beta) {
+        if (!is_repetition_candidate && ttFlag == BETA && ttScore >= beta) {
             pvLine.clear();
             return beta;
         }
@@ -457,7 +468,12 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                 board.makeMove(move);
 
                 std::vector<Move> childPv;
-                std::vector<uint64_t> localHistory = history; // make a mutable copy for search
+                std::vector<uint64_t> localHistory;
+
+                localHistory.reserve(std::min((size_t)100, history.size()));
+                auto startIt = (history.size() > 100) ? (history.end() - 100) : history.begin(); // Keep only last 100 entries
+                localHistory.assign(startIt, history.end());
+
                 uint64_t newHash = position_key(board);
                 localHistory.push_back(newHash);
                 int val = -negamax(board, depth - 1, -beta, -alpha, ply + 1, localHistory, childPv);
