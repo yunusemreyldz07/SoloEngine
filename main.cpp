@@ -116,7 +116,7 @@ int main(int argc, char* argv[]) {
         searchRunning.store(false, std::memory_order_relaxed);
     };
 
-    // Normal UCI döngüsü buradan devam eder...
+    // Normal UCI loop continues from here...
     while (std::getline(std::cin, line)) {
 
         // If a previous search finished, clean up the thread.
