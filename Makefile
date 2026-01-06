@@ -1,4 +1,4 @@
-EXE = main
+EXE = SoloEngine
 
 SOURCES = main.cpp board.cpp search.cpp evaluation.cpp
 
