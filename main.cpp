@@ -9,6 +9,10 @@
 #include <algorithm>
 #include <thread>
 #include <atomic>
+#include <mutex>
+
+// Defined here (main TU) and referenced from search.cpp via search.h
+std::mutex g_uci_out_mutex;
 
 static uint64_t perft(Board& board, int depth) {
     if (depth <= 0) return 1ULL;
@@ -62,11 +66,14 @@ void bench() {
         workNodes += nodes;
         totalTimeMs += elapsed;
 
-        std::cout << "info string bench perft depth " << depth
-                  << " nodes " << nodes
-                  << " time " << elapsed << "ms nps "
-                  << (nodes * 1000 / (elapsed + 1))
-                  << std::endl;
+        {
+            std::lock_guard<std::mutex> lock(g_uci_out_mutex);
+            std::cout << "info string bench perft depth " << depth
+                      << " nodes " << nodes
+                      << " time " << elapsed << "ms nps "
+                      << (nodes * 1000 / (elapsed + 1))
+                      << std::endl;
+        }
     }
 
     long long benchDuration = std::max<long long>(1, totalTimeMs);
@@ -78,9 +85,12 @@ void bench() {
 
     // Important: OpenBench typically parses the first "<number> nodes" line as the
     // bench signature. Use the signature value here so it matches the expected bench.
-    std::cout << benchSignature << " nodes "
-              << (benchSignature * 1000 / benchDuration) << " nps" << std::endl;
-    std::cout << "Bench: " << benchSignature << std::endl;
+    {
+        std::lock_guard<std::mutex> lock(g_uci_out_mutex);
+        std::cout << benchSignature << " nodes "
+                  << (benchSignature * 1000 / benchDuration) << " nps" << std::endl;
+        std::cout << "Bench: " << benchSignature << std::endl;
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -129,6 +139,7 @@ int main(int argc, char* argv[]) {
         }
         
         if (line == "uci") {
+            std::lock_guard<std::mutex> lock(g_uci_out_mutex);
             std::cout << "id name SoloBot" << std::endl;
             std::cout << "id author xsolod3v" << std::endl;
             std::cout << "option name Hash type spin default 16 min 1 max 2048" << std::endl;
@@ -137,6 +148,7 @@ int main(int argc, char* argv[]) {
         }
         
         else if (line == "isready") {
+            std::lock_guard<std::mutex> lock(g_uci_out_mutex);
             std::cout << "readyok" << std::endl;
         }
 
@@ -253,21 +265,25 @@ int main(int argc, char* argv[]) {
 
                 // If no legal move was found (mate/stalemate), output UCI null move.
                 if (best.fromRow == 0 && best.fromCol == 0 && best.toRow == 0 && best.toCol == 0 && best.promotion == 0) {
+                    std::lock_guard<std::mutex> lock(g_uci_out_mutex);
                     std::cout << "bestmove 0000" << std::endl;
                 } else {
-                    std::cout << "bestmove "
-                              << columns[best.fromCol] << (8 - best.fromRow)
-                              << columns[best.toCol] << (8 - best.toRow);
+                    std::string line = "bestmove ";
+                    line += columns[best.fromCol];
+                    line += static_cast<char>('0' + (8 - best.fromRow));
+                    line += columns[best.toCol];
+                    line += static_cast<char>('0' + (8 - best.toRow));
                     if (best.promotion != 0) {
                         switch (abs(best.promotion)) {
-                            case queen: std::cout << 'q'; break;
-                            case rook: std::cout << 'r'; break;
-                            case bishop: std::cout << 'b'; break;
-                            case knight: std::cout << 'n'; break;
+                            case queen: line += 'q'; break;
+                            case rook: line += 'r'; break;
+                            case bishop: line += 'b'; break;
+                            case knight: line += 'n'; break;
                             default: break;
                         }
                     }
-                    std::cout << std::endl;
+                    std::lock_guard<std::mutex> lock(g_uci_out_mutex);
+                    std::cout << line << std::endl;
                 }
 
                 searchRunning.store(false, std::memory_order_relaxed);

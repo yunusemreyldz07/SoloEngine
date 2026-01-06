@@ -7,6 +7,7 @@
 #include <limits>
 #include <iostream>
 #include <atomic>
+#include <sstream>
 
 int MATE_SCORE = 100000;
 
@@ -481,6 +482,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             const int betaStart = beta;
             bestValue = std::numeric_limits<int>::min() / 2;
             Move currentDepthBestMove; // Only the best move found at this depth
+            std::vector<Move> currentDepthBestPv;
             bool thisDepthCompleted = true; // Is this depth completed?
 
             // PV Move Ordering (Put the best move from the previous depth first)
@@ -532,6 +534,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                 if (val > bestValue) {
                     bestValue = val;
                     currentDepthBestMove = move;
+                    currentDepthBestPv = childPv;
                     
                     if (bestValue > alpha) {
                         alpha = bestValue;
@@ -545,20 +548,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                         break; 
                     }
 
-                    if (thisDepthCompleted) { 
-                        lastScore = bestValue;
-                        bestMoveSoFar = currentDepthBestMove;
-                        auto searchEnd = std::chrono::steady_clock::now();
-                        long long duration = std::chrono::duration_cast<std::chrono::milliseconds>(searchEnd - gSearchStart).count();
-                        std::cout << "info depth " << depth 
-                                    << " score cp " << bestValue 
-                                    << " time " << duration 
-                                    << " pv " << move_to_uci(bestMoveSoFar) << " ";
-                        for (const Move& pvMove : childPv) {
-                            std::cout << move_to_uci(pvMove) << " ";
-                        }
-                        std::cout << std::endl;
-                    }
+                    // Delay UCI info printing until the depth finishes.
                 }
             }
 
@@ -575,9 +565,23 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                 continue; // Restart the depth search
             }
 
-
             if (thisDepthCompleted && (bestValue > std::numeric_limits<int>::min() / 2)) {
                 bestMoveSoFar = currentDepthBestMove;
+                lastScore = bestValue;
+
+                auto searchEnd = std::chrono::steady_clock::now();
+                long long duration = std::chrono::duration_cast<std::chrono::milliseconds>(searchEnd - gSearchStart).count();
+                std::ostringstream oss;
+                oss << "info depth " << depth
+                    << " score cp " << bestValue
+                    << " time " << duration
+                    << " pv " << move_to_uci(bestMoveSoFar);
+                for (const Move& pvMove : currentDepthBestPv) {
+                    oss << " " << move_to_uci(pvMove);
+                }
+
+                std::lock_guard<std::mutex> lock(g_uci_out_mutex);
+                std::cout << oss.str() << std::endl;
             }
             break; // Exit aspiration window loop
         }

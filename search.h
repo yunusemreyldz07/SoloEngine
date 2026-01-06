@@ -5,6 +5,11 @@
 #include <vector>
 #include <cstdint>
 #include <atomic>
+#include <mutex>
+
+// Global mutex for any UCI/stdout output.
+// Needed because search runs on a worker thread and both threads may write to stdout.
+extern std::mutex g_uci_out_mutex;
 extern char columns[];
 extern Move killerMove[2][100]; // 2 slots, max 100 ply
 extern int historyTable[64][64]; // fromSquare x toSquare
