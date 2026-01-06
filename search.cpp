@@ -448,7 +448,6 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
     Move bestMoveSoFar = possibleMoves[0]; 
 
-    auto gSearchStart = std::chrono::steady_clock::now();
     auto gTimeLimited = (movetimeMs > 0);
     auto gTimeLimitMs = gTimeLimited ? movetimeMs : std::numeric_limits<int>::max();
     const int effectiveMaxDepth = gTimeLimited ? 128 : maxDepth;
@@ -546,7 +545,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                         lastScore = bestValue;
                         bestMoveSoFar = currentDepthBestMove;
                         auto searchEnd = std::chrono::steady_clock::now();
-                        long long duration = std::chrono::duration_cast<std::chrono::milliseconds>(searchEnd - gSearchStart).count();
+                        long long duration = std::chrono::duration_cast<std::chrono::milliseconds>(searchEnd - start_time).count();
                         std::cout << "info depth " << depth 
                                     << " score cp " << bestValue 
                                     << " time " << duration 
