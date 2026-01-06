@@ -81,7 +81,6 @@ std::vector<Move> get_capture_moves(const Board& board);
 // Attack detection
 bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttacker);
 int see_exchange(Board& board, Move& move);
-static int get_least_valuable_attacker(Board& board, int square, int bySide, int& attackerSq);
 // Utility functions
 void printBoard(const Board& board);
 Move uci_to_move(const std::string& uci);
