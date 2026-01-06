@@ -881,6 +881,9 @@ static int get_least_valuable_attacker(Board& board, int square, int bySide, int
     int c = square % 8;
 
     // Pawn attacks
+    // Board rows: 0 is rank 8, 7 is rank 1.
+    // White pawns attack "up" (toward smaller row indices), so to see if a target square
+    // is attacked by a white pawn, we must look at (r + 1, c +/- 1). For black, (r - 1, ...).
     int pawnDir = (bySide == 1) ? 1 : -1; 
     
     if (r + pawnDir >= 0 && r + pawnDir < 8) {
@@ -985,15 +988,35 @@ int see_exchange(Board& board, Move& move) {
     
 
     int currentAttackerPiece = pieceOnSource;
-    board.squares[move.toRow][move.toCol] = currentAttackerPiece; 
-    board.squares[move.fromRow][move.fromCol] = 0;               
+
+    // Apply the initial capture on the board for attacker discovery.
+    board.squares[move.toRow][move.toCol] = currentAttackerPiece;
+    board.squares[move.fromRow][move.fromCol] = 0;
 
     struct Change { int r, c, val; };
-    Change changes[32];
+    // Each capture step can touch multiple squares; 32 was too small and could overflow.
+    Change changes[128];
     int changeCount = 0;
 
     changes[changeCount++] = {move.toRow, move.toCol, pieceOnTarget};
     changes[changeCount++] = {move.fromRow, move.fromCol, pieceOnSource};
+
+    // En-passant: captured pawn is not on target square; remove it for correct x-ray/attacker discovery.
+    int epCapturedRow = -1;
+    int epCapturedCol = -1;
+    int epCapturedPiece = 0;
+    if (move.isEnPassant) {
+        epCapturedRow = move.fromRow;
+        epCapturedCol = move.toCol;
+        if (epCapturedRow >= 0 && epCapturedRow < 8 && epCapturedCol >= 0 && epCapturedCol < 8) {
+            epCapturedPiece = board.squares[epCapturedRow][epCapturedCol];
+            // Record and remove.
+            if (changeCount + 1 < static_cast<int>(sizeof(changes) / sizeof(changes[0]))) {
+                changes[changeCount++] = {epCapturedRow, epCapturedCol, epCapturedPiece};
+                board.squares[epCapturedRow][epCapturedCol] = 0;
+            }
+        }
+    }
 
     attackerSide = -attackerSide;
 
@@ -1003,13 +1026,14 @@ int see_exchange(Board& board, Move& move) {
         
         if (nextAttacker == 0) break;
 
-        int attackerVal = see_piece_values[std::abs(nextAttacker)];
-        
-
         scores[scoreIndex] = see_piece_values[std::abs(currentAttackerPiece)];
         scoreIndex++;
 
         if (scoreIndex > 30) break;
+        if (attackerSq < 0) break;
+
+        // Ensure we don't overflow the change log.
+        if (changeCount + 2 >= static_cast<int>(sizeof(changes) / sizeof(changes[0]))) break;
 
         int ar = attackerSq / 8;
         int ac = attackerSq % 8;
