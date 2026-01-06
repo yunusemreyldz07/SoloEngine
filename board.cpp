@@ -1005,7 +1005,6 @@ int see_exchange(Board& board, Move& move) {
 
         int attackerVal = see_piece_values[std::abs(nextAttacker)];
         
-        scores[scoreIndex] = attackerVal;
 
         scores[scoreIndex] = see_piece_values[std::abs(currentAttackerPiece)];
         scoreIndex++;
