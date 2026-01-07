@@ -1,5 +1,3 @@
-# Summary: Unified build targets and ensured strip command runs safely with newline termination.
-# Linux build
 .PHONY: build default
 
 EXE := soloengine_linux
@@ -7,7 +5,8 @@ EXE := soloengine_linux
 SOURCES := main.cpp \
            board.cpp \
            search.cpp \
-           evaluation.cpp
+           evaluation.cpp \
+           bitboard.cpp
 
 CXX := g++
 CXXFLAGS := -O3 -std=c++23 -ffast-math -pthread
@@ -27,7 +26,6 @@ $(EXE): $(SOURCES)
 	echo "Strip tool '$(STRIP)' not found; skipping."; \
 	fi
 
-# AddressSanitizer ile debug build
 asan:
 	$(CXX) $(SOURCES) -std=c++23 -g -O1 -fsanitize=address -fno-omit-frame-pointer -pthread -o $(EXE)_asan $(LINKER)
 	@echo "ASAN build created as $(EXE)_asan (symbols preserved, no strip)"

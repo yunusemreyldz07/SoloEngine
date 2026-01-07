@@ -1,22 +1,20 @@
-# Summary: Normalized targets and wrapped strip tool invocation for safer execution.
-.PHONY: build default
+.PHONY: build default asan debug
 
 EXE := soloengine_windows
 
 SOURCES := main.cpp \
            board.cpp \
            search.cpp \
-           evaluation.cpp
+           evaluation.cpp \
+           bitboard.cpp
 
-CXX := /opt/homebrew/opt/mingw-w64/bin/x86_64-w64-mingw32-g++
+CXX := g++
 
-CXXFLAGS := -O3 -mavx2 -std=c++23 -ffast-math -pthread
+CXXFLAGS := -O3 -std=c++23 -ffast-math -pthread
 
 LINKER := -static -static-libgcc -static-libstdc++
 
 OUT := $(EXE).exe
-
-STRIP := llvm-strip
 
 build: $(EXE)
 
@@ -24,15 +22,9 @@ default: build
 
 $(EXE): $(SOURCES)
 	$(CXX) $^ $(CXXFLAGS) -o $(OUT) $(LINKER)
-	@if command -v $(STRIP) >/dev/null 2>&1; then \
-	$(STRIP) $(OUT); \
-	else \
-	echo "Strip tool '$(STRIP)' not found; skipping."; \
-	fi
 
-# AddressSanitizer ile debug build
 asan:
 	$(CXX) $(SOURCES) -std=c++23 -g -O1 -fsanitize=address -fno-omit-frame-pointer -pthread -o $(EXE)_asan.exe $(LINKER)
-	@echo "ASAN build created as $(EXE)_asan.exe (symbols preserved, no strip)"
+	@echo "ASAN build created as $(EXE)_asan.exe (symbols preserved)"
 
 debug: asan

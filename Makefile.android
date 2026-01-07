@@ -1,4 +1,3 @@
-# Summary: Consolidated build workflow and guarded strip step for Android target.
 .PHONY: build default
 
 EXE := soloengine_android
@@ -6,7 +5,8 @@ EXE := soloengine_android
 SOURCES := main.cpp \
            board.cpp \
            search.cpp \
-           evaluation.cpp
+           evaluation.cpp \
+           bitboard.cpp
 
 CXX := /Users/berkegulacar/Library/Android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android35-clang++
 CXXFLAGS := -O3 -std=c++23 -ffast-math -pthread -march=armv8-a
@@ -28,7 +28,7 @@ $(EXE): $(SOURCES)
 	else \
 	echo "Strip tool '$(STRIP)' not found; skipping."; \
 	fi
-# AddressSanitizer ile debug build
+
 asan:
 	$(CXX) $(SOURCES) -std=c++23 -g -O1 -fsanitize=address -fno-omit-frame-pointer -pthread -march=armv8-a -o $(EXE)_asan $(LINKER)
 	@echo "ASAN build created as $(EXE)_asan (symbols preserved, no strip)"

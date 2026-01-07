@@ -1,11 +1,3 @@
-# Unified clean Makefile for removing build artifacts across platforms
-# Usage:
-#   make -f Makefile.clean all     # remove all known artifacts
-#   make -f Makefile.clean mac     # remove only mac binary
-#   make -f Makefile.clean linux   # remove only linux binary
-#   make -f Makefile.clean windows # remove only windows .exe
-#   make -f Makefile.clean android # remove only android binaries
-
 .PHONY: all mac linux windows android debug distclean list
 
 MAC_BIN := soloengine_mac
@@ -14,7 +6,6 @@ WIN_BIN := soloengine_windows.exe
 ANDROID_BIN := soloengine_android
 ANDROID_DEBUG_BIN := soloengine_android_debug
 
-# Fathom tablebase objects may appear under fathom/src in some builds; add patterns
 EXTRA_OBJS := $(wildcard *.o)
 
 mac:
@@ -54,4 +45,3 @@ list:
 	@echo "  $(WIN_BIN)"
 	@echo "  $(ANDROID_BIN) $(ANDROID_DEBUG_BIN)"
 	@echo "Use: make -f Makefile.clean all"
-

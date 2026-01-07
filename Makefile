@@ -32,7 +32,6 @@ all:
 
 default: mac
 
-# Debug/ASAN build targets
 debug-mac:
 	@echo "Building debug/ASAN for macOS..."
 	$(MAKE) -f Makefile.mac asan
