@@ -4,9 +4,10 @@
 
 EXE := soloengine_linux
 
-SOURCES := src/soloengine.cpp \
-           fathom/src/tbprobe.cpp \
-           fathom/src/tbchess.cpp
+SOURCES := main.cpp \
+           board.cpp \
+           search.cpp \
+           evaluation.cpp
 
 CXX := g++
 CXXFLAGS := -O3 -std=c++23 -ffast-math -pthread

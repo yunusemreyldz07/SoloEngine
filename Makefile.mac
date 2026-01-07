@@ -5,9 +5,10 @@
 
 EXE := soloengine_mac
 
-SOURCES := src/soloengine.cpp \
-           fathom/src/tbprobe.cpp \
-           fathom/src/tbchess.cpp
+SOURCES := main.cpp \
+           board.cpp \
+           search.cpp \
+           evaluation.cpp
 
 CXX := clang++
 CXXFLAGS := -O3 -std=c++23 -ffast-math -march=armv8-a -pthread

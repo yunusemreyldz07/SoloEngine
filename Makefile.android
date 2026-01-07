@@ -3,9 +3,10 @@
 
 EXE := soloengine_android
 
-SOURCES := src/soloengine.cpp \
-           fathom/src/tbprobe.cpp \
-           fathom/src/tbchess.cpp
+SOURCES := main.cpp \
+           board.cpp \
+           search.cpp \
+           evaluation.cpp
 
 CXX := /Users/berkegulacar/Library/Android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android35-clang++
 CXXFLAGS := -O3 -std=c++23 -ffast-math -pthread -march=armv8-a
