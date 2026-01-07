@@ -1,7 +1,30 @@
 .PHONY : build mac windows android linux clean all
 
+ifeq ($(OS),Windows_NT)
+    DETECTED_OS := windows
+else
+
+    UNAME_S := $(shell uname -s)
+    ifeq ($(UNAME_S),Linux)
+        DETECTED_OS := linux
+    endif
+    ifeq ($(UNAME_S),Darwin)
+        DETECTED_OS := mac
+    endif
+endif
+
+ifndef DETECTED_OS
+    DETECTED_OS := unknown_os
+endif
+
 build:
-	@echo "Please use one of the following targets: mac, windows, android, linux"
+	@echo "Detected OS: $(DETECTED_OS)"
+ifeq ($(DETECTED_OS),unknown_os)
+	@echo "Error: Could not detect OS. Please use: make windows, make linux, or make mac"
+	@exit 1
+else
+	$(MAKE) $(DETECTED_OS)
+endif
 
 mac:
 	@echo "Building for macOS..."
@@ -30,8 +53,6 @@ all:
 	$(MAKE) -f Makefile.android
 	$(MAKE) -f Makefile.linux
 
-default: mac
-
 # Debug/ASAN build targets
 debug-mac:
 	@echo "Building debug/ASAN for macOS..."
@@ -48,3 +69,6 @@ debug-windows:
 debug-android:
 	@echo "Building debug/ASAN for Android..."
 	$(MAKE) -f Makefile.android asan
+
+unknown_os:
+	@:
