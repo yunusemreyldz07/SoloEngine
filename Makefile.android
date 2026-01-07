@@ -1,12 +1,13 @@
 # Summary: Consolidated build workflow and guarded strip step for Android target.
 .PHONY: build default
 
-EXE := soloengine_android
+EXE ?= soloengine_android
 
 SOURCES := main.cpp \
            board.cpp \
            search.cpp \
-           evaluation.cpp
+		   evaluation.cpp \
+		   bitboard.cpp
 
 # Configure via environment or make variables:
 #   ANDROID_NDK_HOME=/path/to/ndk make android
@@ -32,11 +33,11 @@ OUT := $(EXE)
 
 STRIP := llvm-strip
 
-build: $(EXE)
+build: $(OUT)
 
 default: build
 
-$(EXE): $(SOURCES)
+$(OUT): $(SOURCES)
 	$(CXX) $^ $(CXXFLAGS) -o $(OUT) $(LINKER)
 	@if command -v $(STRIP) >/dev/null 2>&1; then \
 	$(STRIP) $(OUT); \

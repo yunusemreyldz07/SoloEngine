@@ -1,6 +1,6 @@
 .PHONY: all asan
 
-EXE := soloengine_mac
+EXE ?= soloengine_mac
 
 SOURCES := main.cpp \
            board.cpp \

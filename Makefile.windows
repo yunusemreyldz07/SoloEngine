@@ -1,7 +1,7 @@
 # Summary: Normalized targets and wrapped strip tool invocation for safer execution.
 .PHONY: build default
 
-EXE := soloengine_windows
+EXE ?= soloengine_windows
 
 ifeq ($(OS),Windows_NT)
 EXEEXT := .exe
@@ -12,7 +12,8 @@ endif
 SOURCES := main.cpp \
            board.cpp \
            search.cpp \
-           evaluation.cpp
+		   evaluation.cpp \
+		   bitboard.cpp
 
 # Override at call-site if needed, e.g.:
 #   make -f Makefile.windows CXX=x86_64-w64-mingw32-g++

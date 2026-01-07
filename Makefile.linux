@@ -2,7 +2,7 @@
 # Linux build
 .PHONY: build default
 
-EXE := soloengine_linux
+EXE ?= soloengine_linux
 
 ifeq ($(OS),Windows_NT)
 EXEEXT := .exe
@@ -13,7 +13,8 @@ endif
 SOURCES := main.cpp \
            board.cpp \
            search.cpp \
-           evaluation.cpp
+		   evaluation.cpp \
+		   bitboard.cpp
 
 CXX := g++
 CXXFLAGS := -O3 -std=c++23 -ffast-math -pthread
