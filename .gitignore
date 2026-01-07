@@ -1,8 +1,0 @@
-# Build artifacts
-main
-*.o
-*.exe
-
-# Temporary files
-/tmp/
-*.tmp
