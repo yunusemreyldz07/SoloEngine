@@ -171,8 +171,8 @@ void init_tables() {
         const int bIdx = p * 2 + 1;
         for (int sq = 0; sq < 64; ++sq) {
             const int msq = mirror_sq(sq);
-            // Tables are indexed A1..H8; board squares are A8..H1.
-            // White needs a vertical flip; black uses the raw square.
+            // PSTs are A8..H1; board squares are A1..H8.
+            // White uses mirrored squares, black uses raw squares.
             mg_table[wIdx][sq] = mg_value[p] + mg_pesto_tables[p][msq];
             eg_table[wIdx][sq] = eg_value[p] + eg_pesto_tables[p][msq];
             mg_table[bIdx][sq] = mg_value[p] + mg_pesto_tables[p][sq];
