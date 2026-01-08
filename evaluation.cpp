@@ -173,9 +173,8 @@ void init_tables() {
             mg_table[wIdx][sq] = mg_value[p] + mg_pesto_tables[p][sq];
             eg_table[wIdx][sq] = eg_value[p] + eg_pesto_tables[p][sq];
 
-            const int msq = mirror_sq(sq);
-            mg_table[bIdx][sq] = mg_value[p] + mg_pesto_tables[p][msq];
-            eg_table[bIdx][sq] = eg_value[p] + eg_pesto_tables[p][msq];
+            mg_table[bIdx][sq] = mg_value[p] + mg_pesto_tables[p][sq];
+            eg_table[bIdx][sq] = eg_value[p] + eg_pesto_tables[p][sq];
         }
     }
 }
