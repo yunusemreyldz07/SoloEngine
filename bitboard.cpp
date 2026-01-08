@@ -112,9 +112,7 @@ U64 mask_pawn_attacks(int side, int square) { // side: 0 for white, 1 for black
         if ((bitboard >> 7) & not_a_file) attacks |= (bitboard >> 7); // right diagonal
         if ((bitboard >> 9) & not_h_file) attacks |= (bitboard >> 9); // left diagonal
     }
-    
-    
-    attacks = 0ULL;
+
     int rank = square / 8;
     int file = square % 8;
     
