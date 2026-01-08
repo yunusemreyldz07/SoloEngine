@@ -170,9 +170,11 @@ void init_tables() {
         const int wIdx = p * 2;
         const int bIdx = p * 2 + 1;
         for (int sq = 0; sq < 64; ++sq) {
-            mg_table[wIdx][sq] = mg_value[p] + mg_pesto_tables[p][sq];
-            eg_table[wIdx][sq] = eg_value[p] + eg_pesto_tables[p][sq];
-
+            const int msq = mirror_sq(sq);
+            // Tables are indexed A1..H8; board squares are A8..H1.
+            // White needs a vertical flip; black uses the raw square.
+            mg_table[wIdx][sq] = mg_value[p] + mg_pesto_tables[p][msq];
+            eg_table[wIdx][sq] = eg_value[p] + eg_pesto_tables[p][msq];
             mg_table[bIdx][sq] = mg_value[p] + mg_pesto_tables[p][sq];
             eg_table[bIdx][sq] = eg_value[p] + eg_pesto_tables[p][sq];
         }
@@ -202,10 +204,9 @@ int evaluate_board(const Board& board) {
             while (bb) {
                 int sq = lsb(bb);
                 bb &= bb - 1;
-                int pesto_sq = sq ^ 56;
-                mg[color] += mg_table[tableIdx][pesto_sq];
-                eg[color] += eg_table[tableIdx][pesto_sq];
-                gamePhase += gamephaseInc[p];
+            mg[color] += mg_table[tableIdx][sq];
+            eg[color] += eg_table[tableIdx][sq];
+            gamePhase += gamephaseInc[p];
             }
         }
     }
