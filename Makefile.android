@@ -4,9 +4,11 @@
 EXE := soloengine_android
 
 SOURCES := main.cpp \
-           board.cpp \
+           board_bb.cpp \
+           movegen.cpp \
            search.cpp \
-           evaluation.cpp
+           evaluation.cpp \
+           bitboard.cpp
 
 # Configure via environment or make variables:
 #   ANDROID_NDK_HOME=/path/to/ndk make android

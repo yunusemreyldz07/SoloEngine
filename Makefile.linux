@@ -11,7 +11,8 @@ EXEEXT :=
 endif
 
 SOURCES := main.cpp \
-           board.cpp \
+           board_bb.cpp \
+           movegen.cpp \
            search.cpp \
            evaluation.cpp \
 		   bitboard.cpp

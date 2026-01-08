@@ -6,9 +6,11 @@
 EXE := soloengine_mac
 
 SOURCES := main.cpp \
-           board.cpp \
+           board_bb.cpp \
+           movegen.cpp \
            search.cpp \
-           evaluation.cpp
+           evaluation.cpp \
+           bitboard.cpp
 
 CXX := clang++
 CXXFLAGS := -O3 -std=c++23 -ffast-math -march=armv8-a -pthread

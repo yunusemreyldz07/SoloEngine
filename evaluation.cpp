@@ -4,8 +4,6 @@
 #include <iostream>
 
 namespace {
-constexpr int WHITE = 0;
-constexpr int BLACK = 1;
 
 constexpr int OTHER(int side) { return side ^ 1; }
 
@@ -198,24 +196,18 @@ int evaluate_board(const Board& board) {
     int gamePhase = 0;
     int side2move = board.isWhiteTurn ? WHITE : BLACK;
 
-    /* evaluate each piece */
-    for (int r = 0; r < 8; ++r) {
-        for (int c = 0; c < 8; ++c) {
-            const int piece = board.squares[r][c];
-            if (piece == 0) continue;
-
-            const int pType = piece_to_table_index(piece);
-            if (pType < 0) continue;
-
-            const int pesto_sq = r * 8 + c; 
-            
-            const int color = piece > 0 ? WHITE : BLACK;
-
-            const int tableIdx = pType * 2 + (color == BLACK ? 1 : 0);
-
-            mg[color] += mg_table[tableIdx][pesto_sq];
-            eg[color] += eg_table[tableIdx][pesto_sq];
-            gamePhase += gamephaseInc[pType];
+    for (int color = 0; color < 2; color++) {
+        for (int p = 0; p < 6; p++) {
+            Bitboard bb = board.piece[p] & board.color[color];
+            const int tableIdx = p * 2 + (color == BLACK ? 1 : 0);
+            while (bb) {
+                int sq = lsb(bb);
+                bb &= bb - 1;
+                int pesto_sq = sq ^ 56;
+                mg[color] += mg_table[tableIdx][pesto_sq];
+                eg[color] += eg_table[tableIdx][pesto_sq];
+                gamePhase += gamephaseInc[p];
+            }
         }
     }
 

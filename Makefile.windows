@@ -10,9 +10,11 @@ EXEEXT :=
 endif
 
 SOURCES := main.cpp \
-           board.cpp \
+           board_bb.cpp \
+           movegen.cpp \
            search.cpp \
-           evaluation.cpp
+           evaluation.cpp \
+           bitboard.cpp
 
 # Override at call-site if needed, e.g.:
 #   make -f Makefile.windows CXX=x86_64-w64-mingw32-g++
@@ -40,7 +42,14 @@ $(OUT): $(SOURCES)
 
 # AddressSanitizer ile debug build
 asan:
-	$(CXX) $(SOURCES) -std=c++23 -g -O1 -fsanitize=address -fno-omit-frame-pointer -pthread -o $(EXE)_asan$(EXEEXT) $(LINKER)
+	@asan_lib_a=`$(CXX) -print-file-name=libasan.a`; \
+	asan_lib_dll=`$(CXX) -print-file-name=libasan.dll.a`; \
+	if [ "$$asan_lib_a" = "libasan.a" ] && [ "$$asan_lib_dll" = "libasan.dll.a" ]; then \
+		echo "ASAN runtime not found; building non-ASAN debug binary instead."; \
+		$(CXX) $(SOURCES) -std=c++23 -g -O1 -fno-omit-frame-pointer -pthread -o $(EXE)_asan$(EXEEXT); \
+	else \
+		$(CXX) $(SOURCES) -std=c++23 -g -O1 -fsanitize=address -fno-omit-frame-pointer -pthread -o $(EXE)_asan$(EXEEXT); \
+	fi
 	@echo "ASAN build created as $(EXE)_asan$(EXEEXT) (symbols preserved, no strip)"
 
 debug: asan
