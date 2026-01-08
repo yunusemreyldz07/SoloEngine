@@ -1,4 +1,5 @@
 #include "board.h"
+#include "bitboard.h"
 #include "search.h"
 #include "evaluation.h"
 #include <iostream>
@@ -10,6 +11,8 @@
 #include <thread>
 #include <atomic>
 
+#define VERSION "1.0.0"
+
 static uint64_t perft(Board& board, int depth) {
     if (depth <= 0) return 1ULL;
 
@@ -18,8 +21,12 @@ static uint64_t perft(Board& board, int depth) {
     for (Move& move : moves) {
         board.makeMove(move);
 
-        int kingRow = board.isWhiteTurn ? board.blackKingRow : board.whiteKingRow;
-        int kingCol = board.isWhiteTurn ? board.blackKingCol : board.whiteKingCol;
+        int kingRow = 0;
+        int kingCol = 0;
+        if (!king_square(board, !board.isWhiteTurn, kingRow, kingCol)) {
+            board.unmakeMove(move);
+            continue;
+        }
         const bool illegal = is_square_attacked(board, kingRow, kingCol, board.isWhiteTurn);
 
         if (!illegal) {
@@ -85,6 +92,7 @@ void bench() {
 
 int main(int argc, char* argv[]) {
     std::cout.setf(std::ios::unitbuf); // Disable output buffering
+    init_bitboards();
     if (argc > 1 && std::string(argv[1]) == "bench") {
         bench();
         return 0;
@@ -133,6 +141,7 @@ int main(int argc, char* argv[]) {
             std::cout << "id author xsolod3v" << std::endl;
             std::cout << "option name Hash type spin default 16 min 1 max 2048" << std::endl;
             std::cout << "option name Threads type spin default 1 min 1 max 8" << std::endl;
+            std::cout << "option name UseTT type check default true" << std::endl;
             std::cout << "uciok" << std::endl;
         }
         
@@ -142,6 +151,51 @@ int main(int argc, char* argv[]) {
 
         else if (line == "bench") {
             bench();
+        }
+        else if (line.rfind("setoption", 0) == 0) {
+            std::stringstream ss(line);
+            std::string token;
+            std::string name;
+            std::string value;
+            ss >> token; // setoption
+            while (ss >> token) {
+                if (token == "name") {
+                    name.clear();
+                    while (ss >> token && token != "value") {
+                        if (!name.empty()) name += " ";
+                        name += token;
+                    }
+                    if (token != "value") break;
+                }
+                if (token == "value") {
+                    std::getline(ss, value);
+                    if (!value.empty() && value[0] == ' ') value.erase(0, 1);
+                    break;
+                }
+            }
+            if (name == "Hash") {
+                int mb = std::max(1, std::stoi(value));
+                globalTT.resize(mb);
+                globalTT.clear();
+            } else if (name == "UseTT") {
+                std::string v = value;
+                std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+                set_use_tt(v == "true" || v == "1" || v == "on");
+            }
+        }
+        
+        else if (line.rfind("perft", 0) == 0) {
+            stop_and_join_search();
+            std::stringstream ss(line);
+            std::string token;
+            int depth = 0;
+            ss >> token >> depth;
+            if (depth <= 0) {
+                std::cout << "info string perft depth missing or invalid" << std::endl;
+            } else {
+                uint64_t nodes = perft(board, depth);
+                std::cout << "perft " << depth << " nodes " << nodes << std::endl;
+            }
         }
 
         else if (line == "ucinewgame") {

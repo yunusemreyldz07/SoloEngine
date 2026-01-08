@@ -1,6 +1,7 @@
 #include "evaluation.h"
 #include "board.h"
 #include "search.h"
+#include "bitboard.h"
 #include <vector>
 #include <algorithm>
 #include <chrono>
@@ -28,10 +29,43 @@ std::atomic<bool> stop_search(false);
 std::atomic<long long> time_limit_ms{0};          // Time limit (atomic for thread-safety)
 std::atomic<long long> start_time_ms{0};          // Start time in milliseconds since epoch (atomic for thread-safety)
 std::atomic<bool> is_time_limited{false};         // Do we have time limit? (atomic for thread-safety)
+std::atomic<bool> use_tt(true);
 
 void request_stop_search() {
     stop_search.store(true, std::memory_order_relaxed);
 }
+
+void set_use_tt(bool enabled) {
+    use_tt.store(enabled, std::memory_order_relaxed);
+}
+
+static bool is_square_attacked_otf(const Board& board, int row, int col, bool byWhite) {
+    int sq = row_col_to_sq(row, col);
+    const int us = byWhite ? WHITE : BLACK;
+    Bitboard occ = board.color[WHITE] | board.color[BLACK];
+
+    Bitboard pawns = board.piece[pawn - 1] & board.color[us];
+    Bitboard knights = board.piece[knight - 1] & board.color[us];
+    Bitboard bishops = board.piece[bishop - 1] & board.color[us];
+    Bitboard rooks = board.piece[rook - 1] & board.color[us];
+    Bitboard queens = board.piece[queen - 1] & board.color[us];
+    Bitboard kings = board.piece[king - 1] & board.color[us];
+
+    if (byWhite) {
+        if (pawn_attacks[BLACK][sq] & pawns) return true;
+    } else {
+        if (pawn_attacks[WHITE][sq] & pawns) return true;
+    }
+
+    if (knight_attacks[sq] & knights) return true;
+    if (king_attacks[sq] & kings) return true;
+
+    if (bishop_attacks_on_the_fly(sq, occ) & (bishops | queens)) return true;
+    if (rook_attacks_on_the_fly(sq, occ) & (rooks | queens)) return true;
+
+    return false;
+}
+
 
 // Is the time limit reached?
 bool should_stop() {
@@ -72,13 +106,13 @@ static std::string move_to_uci(const Move& m) {
 
 int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove) {
     int moveScore = 0;
-    int from = move.fromRow * 8 + move.fromCol;
-    int to = move.toRow * 8 + move.toCol;
+    int from = row_col_to_sq(move.fromRow, move.fromCol);
+    int to = row_col_to_sq(move.toRow, move.toCol);
     if (move.capturedPiece != 0 || move.isEnPassant) {
         int victimPiece = move.isEnPassant ? pawn : std::abs(move.capturedPiece);
         int victimValue = PIECE_VALUES[victimPiece];
 
-        int attackerPiece = board.squares[move.fromRow][move.fromCol];
+        int attackerPiece = piece_at_sq(board, from);
         int attackerValue = PIECE_VALUES[std::abs(attackerPiece)];
         moveScore += 10000 + (victimValue * 10) - attackerValue;
     }
@@ -112,7 +146,7 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
             moveScore += 500;
         }
         // Encourage knights toward center (Nb1-c3, Ng1-f3 and mirrors for black)
-        int piece = board.squares[move.fromRow][move.fromCol];
+        int piece = piece_at_sq(board, from);
         if (std::abs(piece) == knight) {
             // White: b1->c3, g1->f3; Black: b8->c6, g8->f6
             if ((move.fromRow == 7 && move.fromCol == 1 && move.toRow == 5 && move.toCol == 2) ||
@@ -165,7 +199,6 @@ int quiescence(Board& board, int alpha, int beta, int ply){
     });
 
     for (Move& move : captureMoves) {
-
         int seeValue = see_exchange(board, move);
         if (seeValue < 0) {
             continue; // Bad capture, skip it
@@ -179,9 +212,13 @@ int quiescence(Board& board, int alpha, int beta, int ply){
         }
 
         board.makeMove(move);
-
-        int kingRow = board.isWhiteTurn ? board.blackKingRow : board.whiteKingRow;
-        int kingCol = board.isWhiteTurn ? board.blackKingCol : board.whiteKingCol;
+        int kingRow = 0;
+        int kingCol = 0;
+        bool checkBlackKing = board.isWhiteTurn;
+        if (!king_square(board, !checkBlackKing, kingRow, kingCol)) {
+            board.unmakeMove(move);
+            continue;
+        }
         
         if (is_square_attacked(board, kingRow, kingCol, board.isWhiteTurn)) {
             board.unmakeMove(move);
@@ -224,13 +261,22 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         pvLine.clear();
         return 0; // Draw
     }
-    bool inCheck = is_square_attacked(board, board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow, board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol, !board.isWhiteTurn);
+    int kRow = 0;
+    int kCol = 0;
+    if (!king_square(board, board.isWhiteTurn, kRow, kCol)) {
+        pvLine.clear();
+        return 0;
+    }
+    bool inCheck = is_square_attacked(board, kRow, kCol, !board.isWhiteTurn);
     uint64_t currentHash = position_key(board);
     int ttScore = 0;
     int ttDepth = 0;
     TTFlag ttFlag = TTFlag::EXACT;
     Move ttMove;
-    const bool ttHit = globalTT.probe(currentHash, ttScore, ttDepth, ttFlag, ttMove);
+    bool ttHit = false;
+    if (use_tt.load(std::memory_order_relaxed)) {
+        ttHit = globalTT.probe(currentHash, ttScore, ttDepth, ttFlag, ttMove);
+    }
 
     int movesSearched = 0;
     int eval = -MATE_VALUE;
@@ -281,13 +327,19 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     // Null move pruning
     {
-        int kingRow = board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow;
-        int kingCol = board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol;
+        int kingRow = 0;
+        int kingCol = 0;
+        if (!king_square(board, board.isWhiteTurn, kingRow, kingCol)) {
+            pvLine.clear();
+            return 0;
+        }
         // Check if side to move is currently in check
         bool inCheck = is_square_attacked(board, kingRow, kingCol, !board.isWhiteTurn);
 
         if (!inCheck && depth >= 3 && (beta - alpha == 1)) {
             // Make a "null move" by flipping side to move
+            const int prevEnPassantCol = board.enPassantCol;
+            board.enPassantCol = -1; // En passant rights vanish after a null move.
             board.isWhiteTurn = !board.isWhiteTurn;
 
             // Push new position key to history so threefold repetition checks remain correct
@@ -302,6 +354,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             // Undo history change and null move
             if (!history.empty()) history.pop_back();
             board.isWhiteTurn = !board.isWhiteTurn;
+            board.enPassantCol = prevEnPassantCol;
 
             if (nullScore >= beta) {
                 pvLine.clear();
@@ -314,8 +367,12 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     Move bestMove = possibleMoves.empty() ? Move() : possibleMoves[0];
 
     if (possibleMoves.empty()) {
-        if (is_square_attacked(board, board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow, 
-                               board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol, !board.isWhiteTurn)) 
+        int kingRow = 0;
+        int kingCol = 0;
+        if (!king_square(board, board.isWhiteTurn, kingRow, kingCol)) {
+            return 0;
+        }
+        if (is_square_attacked(board, kingRow, kingCol, !board.isWhiteTurn)) 
             return -MATE_VALUE + ply; // Mate
         return 0; // Stalemate
     }
@@ -402,8 +459,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                     killerMove[0][ply] = move;
                 }
             }
-            int from = move.fromRow * 8 + move.fromCol;
-            int to = move.toRow * 8 + move.toCol;
+            int from = row_col_to_sq(move.fromRow, move.fromCol);
+            int to = row_col_to_sq(move.toRow, move.toCol);
             
             if (from >= 0 && from < 64 && to >= 0 && to < 64) {
                  historyTable[from][to] += depth * depth;
@@ -418,7 +475,9 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     else if (maxEval >= beta) flag = BETA;
     else flag = EXACT;
     
-    globalTT.store(currentHash, maxEval, depth, flag, bestMove);
+    if (use_tt.load(std::memory_order_relaxed)) {
+        globalTT.store(currentHash, maxEval, depth, flag, bestMove);
+    }
     return maxEval;
 }
 
@@ -507,6 +566,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                 });
             }
 
+            std::vector<Move> bestPvForDepth;
             for (Move move : possibleMoves) {
                 if (stop_search.load(std::memory_order_relaxed)) {
                     thisDepthCompleted = false;
@@ -532,6 +592,9 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                 if (val > bestValue) {
                     bestValue = val;
                     currentDepthBestMove = move;
+                    bestPvForDepth.clear();
+                    bestPvForDepth.push_back(move);
+                    bestPvForDepth.insert(bestPvForDepth.end(), childPv.begin(), childPv.end());
                     
                     if (bestValue > alpha) {
                         alpha = bestValue;
@@ -539,25 +602,6 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                         if (alpha >= beta) {
                             break;
                         }
-                    }
-                    
-                    if (stop_search.load(std::memory_order_relaxed)) {
-                        break; 
-                    }
-
-                    if (thisDepthCompleted) { 
-                        lastScore = bestValue;
-                        bestMoveSoFar = currentDepthBestMove;
-                        auto searchEnd = std::chrono::steady_clock::now();
-                        long long duration = std::chrono::duration_cast<std::chrono::milliseconds>(searchEnd - gSearchStart).count();
-                        std::cout << "info depth " << depth 
-                                    << " score cp " << bestValue 
-                                    << " time " << duration 
-                                    << " pv " << move_to_uci(bestMoveSoFar) << " ";
-                        for (const Move& pvMove : childPv) {
-                            std::cout << move_to_uci(pvMove) << " ";
-                        }
-                        std::cout << std::endl;
                     }
                 }
             }
@@ -578,6 +622,42 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
             if (thisDepthCompleted && (bestValue > std::numeric_limits<int>::min() / 2)) {
                 bestMoveSoFar = currentDepthBestMove;
+                lastScore = bestValue;
+                auto searchEnd = std::chrono::steady_clock::now();
+                long long duration = std::chrono::duration_cast<std::chrono::milliseconds>(searchEnd - gSearchStart).count();
+                std::cout << "info depth " << depth << " ";
+                long long nps = 0;
+                if (duration > 0) {
+                    nps = (getNodeCounter() * 1000LL) / duration;
+                }
+                bool mateConfirmed = false;
+                if (std::abs(bestValue) >= MATE_SCORE - 1000) {
+                    board.makeMove(bestMoveSoFar);
+                    int kRow = 0;
+                    int kCol = 0;
+                    if (!king_square(board, board.isWhiteTurn, kRow, kCol)) {
+                        board.unmakeMove(bestMoveSoFar);
+                    } else {
+                        bool inCheck = is_square_attacked_otf(board, kRow, kCol, !board.isWhiteTurn);
+                        std::vector<Move> replies = get_all_moves(board, board.isWhiteTurn);
+                        mateConfirmed = inCheck && replies.empty();
+                        board.unmakeMove(bestMoveSoFar);
+                    }
+                }
+                if (mateConfirmed) {
+                    int mateIn = (MATE_SCORE - std::abs(bestValue) + 1) / 2;
+                    if (bestValue < 0) mateIn = -mateIn;
+                    std::cout << "score mate " << mateIn;
+                } else {
+                    std::cout << "score cp " << bestValue;
+                }
+                std::cout << " time " << duration
+                            << " nps " << nps
+                            << " pv ";
+                for (const Move& pvMove : bestPvForDepth) {
+                    std::cout << move_to_uci(pvMove) << " ";
+                }
+                std::cout << std::endl;
             }
             break; // Exit aspiration window loop
         }

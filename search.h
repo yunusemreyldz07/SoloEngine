@@ -27,5 +27,6 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs = -1, const std::vec
 // Request the current search to stop as soon as possible.
 // Safe to call even if no search is running.
 void request_stop_search();
+void set_use_tt(bool enabled);
 
 #endif
