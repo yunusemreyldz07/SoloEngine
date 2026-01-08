@@ -103,15 +103,6 @@ U64 set_occupancy(int index, int bits_in_mask, U64 attack_mask) {
 
 U64 mask_pawn_attacks(int side, int square) { // side: 0 for white, 1 for black
     U64 attacks = 0ULL;
-    U64 bitboard = 0ULL;
-    
-    set_bit(bitboard, square);
-    U64 not_a_file = 0xFEFEFEFEFEFEFEFE; // to avoid wrapping from a-file to h-file
-    U64 not_h_file = 0x7F7F7F7F7F7F7F7F; // to avoid wrapping from h-file to a-file
-    if (side == WHITE) {
-        if ((bitboard >> 7) & not_a_file) attacks |= (bitboard >> 7); // right diagonal
-        if ((bitboard >> 9) & not_h_file) attacks |= (bitboard >> 9); // left diagonal
-    }
 
     int rank = square / 8;
     int file = square % 8;
