@@ -4,3 +4,22 @@ SOURCES = main.cpp board.cpp search.cpp evaluation.cpp bitboard.cpp params.cpp
 CXXFLAGS = -O3 -std=c++23 -ffast-math -pthread -march=armv8-a
 LDFLAGS = -lm -static-libstdc++
 STRIP = llvm-strip
+
+all: $(TARGET)
+
+$(TARGET): $(SOURCES)
+	$(CXX) $(SOURCES) $(CXXFLAGS) -o $(TARGET) $(LDFLAGS)
+	@if command -v $(STRIP) >/dev/null 2>&1; then \
+		$(STRIP) $(TARGET); \
+	else \
+		echo "Strip tool not found; skipping."; \
+	fi
+
+asan:
+	$(CXX) $(SOURCES) -std=c++23 -g -O1 -fsanitize=address -fno-omit-frame-pointer \
+		-pthread -march=armv8-a -o $(TARGET)_asan $(LDFLAGS)
+
+clean:
+	rm -f $(TARGET) $(TARGET)_asan
+
+.PHONY: all asan clean
