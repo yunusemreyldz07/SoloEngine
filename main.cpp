@@ -133,7 +133,7 @@ int main(int argc, char **argv) {
 
   while (std::getline(std::cin, line)) {
     if (line == "uci") {
-      std::cout << "id name SoloEngine\nid author YunusEmreYildiz\n";
+      std::cout << "id name SoloEngine 0.9 A\nid author YunusEmreYildiz\n";
       std::cout << "option name Hash type spin default 16 min 1 max 65536\n";
       std::cout << "option name Threads type spin default 1 min 1 max 256\n";
       std::cout
