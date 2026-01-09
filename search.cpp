@@ -17,7 +17,7 @@ static SearchParams gSearchParams{
     /*use_lmr=*/true,
     /*use_lmp=*/true,
     /*use_aspiration=*/true,
-    /*use_qsearch_see=*/false,
+    /*use_qsearch_see=*/true,
     /*lmr_min_depth=*/3,
     /*lmr_min_moves=*/6,
     /*lmp_min_depth=*/4,
