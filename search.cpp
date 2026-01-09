@@ -11,6 +11,17 @@
 
 int MATE_SCORE = 100000;
 
+// Global search tuning knobs. Updated via set_search_params for A/B tests.
+static SearchParams gSearchParams{};
+
+const SearchParams& get_search_params() {
+    return gSearchParams;
+}
+
+void set_search_params(const SearchParams& params) {
+    gSearchParams = params;
+}
+
 int historyTable[64][64];
 
 const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
@@ -199,7 +210,13 @@ int quiescence(Board& board, int alpha, int beta, int ply){
     });
 
     for (Move& move : captureMoves) {
-        // Keep all captures in quiescence; no SEE-based pruning.
+        // Optional SEE-based pruning for quiescence (off by default for testing).
+        if (gSearchParams.use_qsearch_see) {
+            Move seeMove = move;
+            if (see_exchange(board, seeMove) < -100) {
+                continue;
+            }
+        }
 
         // Delta Pruning
         // If even the most optimistic evaluation (stand_pat + value of captured piece + margin) is worse than alpha, skip 
@@ -365,7 +382,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     
     for (Move& move : possibleMoves) {
         int lmpCount = (3 * depth * depth) + 4;
-        if (false && !pvNode && depth > 3 && depth < 8 && movesSearched >= lmpCount && !inCheck && move.promotion == 0 && move.capturedPiece == 0) {
+        if (gSearchParams.use_lmp && !pvNode && depth >= gSearchParams.lmp_min_depth && depth <= gSearchParams.lmp_max_depth && movesSearched >= lmpCount && !inCheck && move.promotion == 0 && move.capturedPiece == 0) {
             if (!move.isEnPassant) {
                 bool isKiller = false;
                 if (ply < 100) {
@@ -394,7 +411,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             // Late Move Reduction (LMR)
             int reduction = 0;
             std::vector<Move> nullWindowPv;
-            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && depth >= 3 && movesSearched > 4) {
+            if (gSearchParams.use_lmr && move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && depth >= gSearchParams.lmr_min_depth && movesSearched > gSearchParams.lmr_min_moves) {
                 reduction = 1 + (depth / 6); // Increase reduction with depth
 
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we don't search negative depth
@@ -503,9 +520,16 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
         if (stop_search.load(std::memory_order_relaxed)) break;
 
-        int delta = 50; // Aspiration window margin
-        int alpha = -2000000000;
-        int beta = 2000000000;
+        const bool useAsp = gSearchParams.use_aspiration;
+        const int INF = 2000000000;
+        int delta = gSearchParams.aspiration_delta; // Aspiration window half-width
+        int alpha = -INF;
+        int beta = INF;
+
+        if (useAsp && depth > 1) {
+            alpha = std::max(-INF, lastScore - delta);
+            beta = std::min(INF, lastScore + delta);
+        }
         while (true) {
             const int alphaStart = alpha;
             const int betaStart = beta;
@@ -583,10 +607,10 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             }
 
             // Aspiration window re-search logic
-            if (depth >= 5 && (bestValue <= alphaStart || bestValue >= betaStart)) {
+            if (useAsp && depth >= 5 && (bestValue <= alphaStart || bestValue >= betaStart)) {
                 // Fail-low or fail-high: widen the window and re-search this depth.
-                alpha = std::max(-2000000000, bestValue - delta);
-                beta = std::min(2000000000, bestValue + delta);
+                alpha = std::max(-INF, bestValue - delta);
+                beta = std::min(INF, bestValue + delta);
                 delta += delta / 2;
                 continue; // Restart the depth search
             }
