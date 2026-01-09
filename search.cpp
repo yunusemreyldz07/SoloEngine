@@ -370,7 +370,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     
     for (Move& move : possibleMoves) {
         int lmpCount = (3 * depth * depth) + 4;
-        if (!pvNode && depth > 3 && depth < 8 && movesSearched >= lmpCount && !inCheck && move.promotion == 0 && move.capturedPiece == 0) {
+        if (false && !pvNode && depth > 3 && depth < 8 && movesSearched >= lmpCount && !inCheck && move.promotion == 0 && move.capturedPiece == 0) {
             if (!move.isEnPassant) {
                 bool isKiller = false;
                 if (ply < 100) {
