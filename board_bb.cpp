@@ -544,46 +544,35 @@ bool TranspositionTable::probe(uint64_t key, int& outScore, int& outDepth, TTFla
     return true;
 }
 
-const int see_piece_values[] = {0, 100, 350, 350, 525, 900, 20000};
+// SEE piece values; keep close to MVV/LVA ordering, not evaluation values.
+const int see_piece_values[] = {0, 100, 320, 330, 500, 900, 20000};
 
 static Bitboard attackers_to_sq(Bitboard pieces[2][6], int sq, int side, Bitboard occ) {
     Bitboard attackers = 0ULL;
-    Bitboard pawns = pieces[side][pawn - 1];
-    Bitboard knights = pieces[side][knight - 1];
-    Bitboard bishops = pieces[side][bishop - 1];
-    Bitboard rooks = pieces[side][rook - 1];
-    Bitboard queens = pieces[side][queen - 1];
-    Bitboard kings = pieces[side][king - 1];
 
-    if (side == WHITE) {
-        attackers |= pawn_attacks[BLACK][sq] & pawns;
-    } else {
-        attackers |= pawn_attacks[WHITE][sq] & pawns;
-    }
-
-    attackers |= knight_attacks[sq] & knights;
-    attackers |= king_attacks[sq] & kings;
-    attackers |= get_bishop_attacks(sq, occ) & (bishops | queens);
-    attackers |= get_rook_attacks(sq, occ) & (rooks | queens);
+    // Pawns: to find pawns of 'side' that attack 'sq', use pawn_attacks of the opposite side.
+    attackers |= ((side == WHITE) ? pawn_attacks[BLACK][sq] : pawn_attacks[WHITE][sq]) & pieces[side][pawn - 1];
+    attackers |= knight_attacks[sq] & pieces[side][knight - 1];
+    attackers |= king_attacks[sq] & pieces[side][king - 1];
+    attackers |= bishop_attacks_otf(sq, occ) & (pieces[side][bishop - 1] | pieces[side][queen - 1]);
+    attackers |= rook_attacks_otf(sq, occ) & (pieces[side][rook - 1] | pieces[side][queen - 1]);
     return attackers;
 }
 
+// A safer SEE (swap algorithm): recompute sliding attacks after each removal to respect x-rays.
 int see_exchange(Board& board, Move& move) {
     if (move.capturedPiece == 0 && !move.isEnPassant) return 0;
 
-    int side = board.isWhiteTurn ? WHITE : BLACK;
-    int opp = side ^ 1;
+    const int stm = board.isWhiteTurn ? WHITE : BLACK; // side to move (who makes 'move')
     int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
     int toSq = row_col_to_sq(move.toRow, move.toCol);
 
     int movingPiece = piece_at_sq(board, fromSq);
     if (movingPiece == 0) return 0;
 
-    int captured = move.isEnPassant ? pawn : std::abs(move.capturedPiece);
-    int gain[32];
-    int depth = 0;
-    gain[depth++] = see_piece_values[captured];
+    int capturedPieceType = move.isEnPassant ? pawn : std::abs(move.capturedPiece);
 
+    // Local copies of occupancy and piece maps
     Bitboard occ = board.color[WHITE] | board.color[BLACK];
     Bitboard pieces[2][6];
     for (int c = 0; c < 2; c++) {
@@ -592,71 +581,81 @@ int see_exchange(Board& board, Move& move) {
         }
     }
 
-    if (!move.isEnPassant && move.capturedPiece != 0) {
-        occ &= ~bit_at_sq(toSq);
-        pieces[opp][std::abs(move.capturedPiece) - 1] &= ~bit_at_sq(toSq);
-    }
-
+    // Remove captured piece from target (or en-passant captured pawn behind target)
     if (move.isEnPassant) {
         int capRow = move.fromRow;
         int capSq = row_col_to_sq(capRow, move.toCol);
         occ &= ~bit_at_sq(capSq);
-        pieces[opp][pawn - 1] &= ~bit_at_sq(capSq);
+        pieces[stm ^ 1][pawn - 1] &= ~bit_at_sq(capSq);
+    } else if (move.capturedPiece != 0) {
+        occ &= ~bit_at_sq(toSq);
+        pieces[stm ^ 1][capturedPieceType - 1] &= ~bit_at_sq(toSq);
     }
 
+    // Remove moving piece from its from-square
     occ &= ~bit_at_sq(fromSq);
-    pieces[side][std::abs(movingPiece) - 1] &= ~bit_at_sq(fromSq);
+    pieces[stm][std::abs(movingPiece) - 1] &= ~bit_at_sq(fromSq);
 
-    int promoteType = move.promotion != 0 ? std::abs(move.promotion) : std::abs(movingPiece);
-    pieces[side][promoteType - 1] |= bit_at_sq(toSq);
+    // Place moving piece (or promoted piece) on target square
+    int placedType = move.promotion ? std::abs(move.promotion) : std::abs(movingPiece);
+    pieces[stm][placedType - 1] |= bit_at_sq(toSq);
     occ |= bit_at_sq(toSq);
 
-    int attackerSide = opp;
+    int depth = 0;
+    int gain[64];
+    gain[depth] = see_piece_values[capturedPieceType];
+
+    int side = stm ^ 1; // opponent tries to recapture
+    Bitboard attackers[2];
+
+    auto refill_attackers = [&](Bitboard currentOcc) {
+        attackers[WHITE] = attackers_to_sq(pieces, toSq, WHITE, currentOcc);
+        attackers[BLACK] = attackers_to_sq(pieces, toSq, BLACK, currentOcc);
+    };
+
+    refill_attackers(occ);
 
     while (true) {
+        Bitboard sideAttackers = attackers[side];
+        if (!sideAttackers) break;
+
+        // Pick least valuable attacker of this side.
+        int attackerType = -1;
         int attackerSq = -1;
-
-        if (pieces[attackerSide][pawn - 1] & attackers_to_sq(pieces, toSq, attackerSide, occ)) {
-            Bitboard atk = attackers_to_sq(pieces, toSq, attackerSide, occ) & pieces[attackerSide][pawn - 1];
-            attackerSq = lsb(atk);
-            movingPiece = (attackerSide == WHITE) ? pawn : -pawn;
-        } else if (pieces[attackerSide][knight - 1] & attackers_to_sq(pieces, toSq, attackerSide, occ)) {
-            Bitboard atk = attackers_to_sq(pieces, toSq, attackerSide, occ) & pieces[attackerSide][knight - 1];
-            attackerSq = lsb(atk);
-            movingPiece = (attackerSide == WHITE) ? knight : -knight;
-        } else if (pieces[attackerSide][bishop - 1] & attackers_to_sq(pieces, toSq, attackerSide, occ)) {
-            Bitboard atk = attackers_to_sq(pieces, toSq, attackerSide, occ) & pieces[attackerSide][bishop - 1];
-            attackerSq = lsb(atk);
-            movingPiece = (attackerSide == WHITE) ? bishop : -bishop;
-        } else if (pieces[attackerSide][rook - 1] & attackers_to_sq(pieces, toSq, attackerSide, occ)) {
-            Bitboard atk = attackers_to_sq(pieces, toSq, attackerSide, occ) & pieces[attackerSide][rook - 1];
-            attackerSq = lsb(atk);
-            movingPiece = (attackerSide == WHITE) ? rook : -rook;
-        } else if (pieces[attackerSide][queen - 1] & attackers_to_sq(pieces, toSq, attackerSide, occ)) {
-            Bitboard atk = attackers_to_sq(pieces, toSq, attackerSide, occ) & pieces[attackerSide][queen - 1];
-            attackerSq = lsb(atk);
-            movingPiece = (attackerSide == WHITE) ? queen : -queen;
-        } else if (pieces[attackerSide][king - 1] & attackers_to_sq(pieces, toSq, attackerSide, occ)) {
-            Bitboard atk = attackers_to_sq(pieces, toSq, attackerSide, occ) & pieces[attackerSide][king - 1];
-            attackerSq = lsb(atk);
-            movingPiece = (attackerSide == WHITE) ? king : -king;
-        } else {
-            break;
+        for (int pt = pawn; pt <= king; ++pt) {
+            Bitboard bb = sideAttackers & pieces[side][pt - 1];
+            if (bb) {
+                attackerType = pt;
+                attackerSq = lsb(bb);
+                break;
+            }
         }
+        if (attackerType == -1) break;
 
-        gain[depth] = see_piece_values[std::abs(movingPiece)] - gain[depth - 1];
+        depth++;
+        gain[depth] = see_piece_values[attackerType] - gain[depth - 1];
+
+        // Early break if exchange already clearly bad for the side to move in this ply
         if (std::max(-gain[depth - 1], gain[depth]) < 0) break;
 
+        // Remove the capturing piece and update occupancy/attackers (x-ray effects)
         occ &= ~bit_at_sq(attackerSq);
-        pieces[attackerSide][std::abs(movingPiece) - 1] &= ~bit_at_sq(attackerSq);
+        pieces[side][attackerType - 1] &= ~bit_at_sq(attackerSq);
 
-        attackerSide ^= 1;
-        depth++;
-        if (depth >= 31) break;
+        // Promote-type stays as attackerType (king stays king etc.) when placed on toSq
+        pieces[side][attackerType - 1] |= bit_at_sq(toSq);
+
+        refill_attackers(occ);
+        pieces[side][attackerType - 1] &= ~bit_at_sq(toSq); // reset placement for next iteration logic
+
+        side ^= 1; // other side to move
+        if (depth >= 63) break;
     }
 
-    while (--depth) {
+    // Back-propagate best outcomes
+    while (depth > 0) {
         gain[depth - 1] = -std::max(-gain[depth - 1], gain[depth]);
+        depth--;
     }
 
     return gain[0];
