@@ -559,20 +559,29 @@ static Bitboard attackers_to_sq(Bitboard pieces[2][6], int sq, int side, Bitboar
     return attackers;
 }
 
-// A safer SEE (swap algorithm): recompute sliding attacks after each removal to respect x-rays.
 int see_exchange(Board& board, Move& move) {
     if (move.capturedPiece == 0 && !move.isEnPassant) return 0;
 
-    const int stm = board.isWhiteTurn ? WHITE : BLACK; // side to move (who makes 'move')
     int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
     int toSq = row_col_to_sq(move.toRow, move.toCol);
 
     int movingPiece = piece_at_sq(board, fromSq);
-    if (movingPiece == 0) return 0;
+    // capturedPiece her zaman 0 değil, movegen.cpp içinde doğru set edildiğinden emin olmalıyız.
+    // Eğer move listesinden geliyorsa capturedPiece doğrudur.
+    int captured = move.isEnPassant ? pawn : std::abs(move.capturedPiece);
+    
+    // HATA DÜZELTME 1: Başlangıç kurban değerini al
+    int victimValue = see_piece_values[captured];
 
-    int capturedPieceType = move.isEnPassant ? pawn : std::abs(move.capturedPiece);
+    int gain[32];
+    int depth = 0;
+    
+    // İlk kazanç: Hedefteki taşı yedik
+    gain[depth++] = victimValue;
 
-    // Local copies of occupancy and piece maps
+    // Bitboard kopyaları ve simülasyon...
+    int side = board.isWhiteTurn ? WHITE : BLACK;
+    int opp = side ^ 1;
     Bitboard occ = board.color[WHITE] | board.color[BLACK];
     Bitboard pieces[2][6];
     for (int c = 0; c < 2; c++) {
@@ -581,81 +590,80 @@ int see_exchange(Board& board, Move& move) {
         }
     }
 
-    // Remove captured piece from target (or en-passant captured pawn behind target)
+    if (!move.isEnPassant && move.capturedPiece != 0) {
+        occ &= ~bit_at_sq(toSq);
+        pieces[opp][std::abs(move.capturedPiece) - 1] &= ~bit_at_sq(toSq);
+    }
     if (move.isEnPassant) {
         int capRow = move.fromRow;
         int capSq = row_col_to_sq(capRow, move.toCol);
         occ &= ~bit_at_sq(capSq);
-        pieces[stm ^ 1][pawn - 1] &= ~bit_at_sq(capSq);
-    } else if (move.capturedPiece != 0) {
-        occ &= ~bit_at_sq(toSq);
-        pieces[stm ^ 1][capturedPieceType - 1] &= ~bit_at_sq(toSq);
+        pieces[opp][pawn - 1] &= ~bit_at_sq(capSq);
     }
-
-    // Remove moving piece from its from-square
     occ &= ~bit_at_sq(fromSq);
-    pieces[stm][std::abs(movingPiece) - 1] &= ~bit_at_sq(fromSq);
-
-    // Place moving piece (or promoted piece) on target square
-    int placedType = move.promotion ? std::abs(move.promotion) : std::abs(movingPiece);
-    pieces[stm][placedType - 1] |= bit_at_sq(toSq);
+    pieces[side][std::abs(movingPiece) - 1] &= ~bit_at_sq(fromSq);
+    int promoteType = move.promotion != 0 ? std::abs(move.promotion) : std::abs(movingPiece);
+    pieces[side][promoteType - 1] |= bit_at_sq(toSq);
     occ |= bit_at_sq(toSq);
 
-    int depth = 0;
-    int gain[64];
-    gain[depth] = see_piece_values[capturedPieceType];
-
-    int side = stm ^ 1; // opponent tries to recapture
-    Bitboard attackers[2];
-
-    auto refill_attackers = [&](Bitboard currentOcc) {
-        attackers[WHITE] = attackers_to_sq(pieces, toSq, WHITE, currentOcc);
-        attackers[BLACK] = attackers_to_sq(pieces, toSq, BLACK, currentOcc);
-    };
-
-    refill_attackers(occ);
+    // İlk hareket eden taş artık yeni "Kurban" oldu.
+    victimValue = see_piece_values[promoteType];
+    
+    int attackerSide = opp;
 
     while (true) {
-        Bitboard sideAttackers = attackers[side];
-        if (!sideAttackers) break;
-
-        // Pick least valuable attacker of this side.
-        int attackerType = -1;
         int attackerSq = -1;
-        for (int pt = pawn; pt <= king; ++pt) {
-            Bitboard bb = sideAttackers & pieces[side][pt - 1];
-            if (bb) {
-                attackerType = pt;
-                attackerSq = lsb(bb);
-                break;
-            }
+        int nextVictimPiece = 0; // Bir sonraki turda kurban olacak taş (şu anki saldıran)
+
+        // HIZ OPTİMİZASYONU: attackers_to_sq fonksiyonunu her parça için ayrı ayrı çağırma.
+        // Tek seferde tüm saldıranları al.
+        Bitboard allAttackers = attackers_to_sq(pieces, toSq, attackerSide, occ);
+
+        if ((pieces[attackerSide][pawn - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][pawn - 1] & allAttackers);
+            nextVictimPiece = pawn;
+        } else if ((pieces[attackerSide][knight - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][knight - 1] & allAttackers);
+            nextVictimPiece = knight;
+        } else if ((pieces[attackerSide][bishop - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][bishop - 1] & allAttackers);
+            nextVictimPiece = bishop;
+        } else if ((pieces[attackerSide][rook - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][rook - 1] & allAttackers);
+            nextVictimPiece = rook;
+        } else if ((pieces[attackerSide][queen - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][queen - 1] & allAttackers);
+            nextVictimPiece = queen;
+        } else if ((pieces[attackerSide][king - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][king - 1] & allAttackers);
+            nextVictimPiece = king;
+        } else {
+            break; // Saldıran kalmadı
         }
-        if (attackerType == -1) break;
 
-        depth++;
-        gain[depth] = see_piece_values[attackerType] - gain[depth - 1];
+        // HATA DÜZELTME 2: 
+        // gain[depth] hesaplarken saldıran taşı (nextVictimPiece) DEĞİL, 
+        // şu an karede duran kurbanı (victimValue) kullanmalısın!
+        gain[depth] = victimValue - gain[depth - 1];
 
-        // Early break if exchange already clearly bad for the side to move in this ply
         if (std::max(-gain[depth - 1], gain[depth]) < 0) break;
 
-        // Remove the capturing piece and update occupancy/attackers (x-ray effects)
+        // Saldıranı yerinden kaldır
         occ &= ~bit_at_sq(attackerSq);
-        pieces[side][attackerType - 1] &= ~bit_at_sq(attackerSq);
+        pieces[attackerSide][nextVictimPiece - 1] &= ~bit_at_sq(attackerSq);
 
-        // Promote-type stays as attackerType (king stays king etc.) when placed on toSq
-        pieces[side][attackerType - 1] |= bit_at_sq(toSq);
-
-        refill_attackers(occ);
-        pieces[side][attackerType - 1] &= ~bit_at_sq(toSq); // reset placement for next iteration logic
-
-        side ^= 1; // other side to move
-        if (depth >= 63) break;
+        // Sıra değişiyor
+        attackerSide ^= 1;
+        depth++;
+        
+        // Şu an saldıran taş, bir sonraki turun kurbanı olacak
+        victimValue = see_piece_values[nextVictimPiece];
+        
+        if (depth >= 31) break;
     }
 
-    // Back-propagate best outcomes
-    while (depth > 0) {
+    while (--depth) {
         gain[depth - 1] = -std::max(-gain[depth - 1], gain[depth]);
-        depth--;
     }
 
     return gain[0];
