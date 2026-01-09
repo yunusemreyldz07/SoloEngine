@@ -1,36 +1,25 @@
-# Makefile.mac — macOS için
-# Normal ve ASAN build hedefleri
+CXX = clang++
+TARGET = soloengine_mac
+SOURCES = main.cpp board.cpp search.cpp evaluation.cpp bitboard.cpp params.cpp
+CXXFLAGS = -O3 -std=c++23 -ffast-math -march=armv8-a -pthread
+LDFLAGS = -lm
+STRIP = llvm-strip
 
-.PHONY: all asan
+all: $(TARGET)
 
-EXE := soloengine_mac
-
-SOURCES := main.cpp \
-           board.cpp \
-           search.cpp \
-           evaluation.cpp
-
-CXX := clang++
-CXXFLAGS := -O3 -std=c++23 -ffast-math -march=armv8-a -pthread
-LINKER := -lm
-STRIP := llvm-strip
-
-# Varsayılan release build
-all:
-	@echo "Building for macOS..."
-	$(CXX) $(SOURCES) $(CXXFLAGS) -o $(EXE) $(LINKER)
+$(TARGET): $(SOURCES)
+	$(CXX) $(SOURCES) $(CXXFLAGS) -o $(TARGET) $(LDFLAGS)
 	@if command -v $(STRIP) >/dev/null 2>&1; then \
-		$(STRIP) $(EXE); \
+		$(STRIP) $(TARGET); \
 	else \
-		echo "Strip tool '$(STRIP)' not found; skipping."; \
+		echo "Strip tool not found; skipping."; \
 	fi
 
-# AddressSanitizer ile debug build
 asan:
-	@echo "Building ASAN version for macOS..."
-	$(CXX) $(SOURCES) \
-		-std=c++23 -g -O1 -fsanitize=address -fno-omit-frame-pointer \
-		-march=armv8-a -pthread -o $(EXE)_asan $(LINKER)
-	@echo "ASAN build created as $(EXE)_asan (symbols preserved, no strip)"
+	$(CXX) $(SOURCES) -std=c++23 -g -O1 -fsanitize=address -fno-omit-frame-pointer \
+		-march=armv8-a -pthread -o $(TARGET)_asan $(LDFLAGS)
 
-debug: asan
+clean:
+	rm -f $(TARGET) $(TARGET)_asan
+
+.PHONY: all asan clean
