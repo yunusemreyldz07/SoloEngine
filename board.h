@@ -52,6 +52,7 @@ public:
     Bitboard color[2];
 
     int mailbox[64]; // Redundant mailbox for O(1) piece lookups
+    uint64_t currentHash; // Incremental Zobrist hash of the current position
 
     bool whiteCanCastleKingSide;
     bool whiteCanCastleQueenSide;

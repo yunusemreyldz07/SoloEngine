@@ -108,9 +108,13 @@ void Board::resetBoard() {
     enPassantCol = -1;
     whiteKingRow = 7; whiteKingCol = 4;
     blackKingRow = 0; blackKingCol = 4;
+
+    currentHash = position_key(*this);
 }
 
 void Board::makeMove(Move& move) {
+    const Zobrist& z = zobrist();
+
     move.prevW_KingSide = whiteCanCastleKingSide;
     move.prevW_QueenSide = whiteCanCastleQueenSide;
     move.prevB_KingSide = blackCanCastleKingSide;
@@ -122,64 +126,84 @@ void Board::makeMove(Move& move) {
 
     const int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
     const int toSq = row_col_to_sq(move.toRow, move.toCol);
-    int piece = mailbox[fromSq];
+    const int movingPiece = mailbox[fromSq];
     int target_piece = mailbox[toSq];
 
     move.capturedPiece = target_piece;
 
-    bb_clear(*this, piece, fromSq);
-    if (target_piece != 0) bb_clear(*this, target_piece, toSq);
-    bb_set(*this, piece, toSq);
+    // Hash: remove side-to-move, old ep and old castling
+    currentHash ^= z.side;
+    if (enPassantCol != -1) currentHash ^= z.epFile[enPassantCol];
+    int oldCastling = 0;
+    if (whiteCanCastleKingSide) oldCastling |= 1;
+    if (whiteCanCastleQueenSide) oldCastling |= 2;
+    if (blackCanCastleKingSide) oldCastling |= 4;
+    if (blackCanCastleQueenSide) oldCastling |= 8;
+    currentHash ^= z.castling[oldCastling];
+
+    // Remove moving piece from origin
+    currentHash ^= z.piece[piece_to_zobrist_index(movingPiece)][fromSq];
+
+    bb_clear(*this, movingPiece, fromSq);
+    if (target_piece != 0) {
+        bb_clear(*this, target_piece, toSq);
+        currentHash ^= z.piece[piece_to_zobrist_index(target_piece)][toSq];
+    }
+    bb_set(*this, movingPiece, toSq);
 
     mailbox[fromSq] = 0;
     if (target_piece != 0) mailbox[toSq] = 0;
 
-    if (std::abs(piece) == pawn && move.fromCol != move.toCol && move.capturedPiece == 0) {
+    if (std::abs(movingPiece) == pawn && move.fromCol != move.toCol && move.capturedPiece == 0) {
         move.isEnPassant = true;
         int captureRow = move.fromRow;
         int captureSq = row_col_to_sq(captureRow, move.toCol);
-        int capturedPawn = (piece > 0) ? -pawn : pawn;
+        int capturedPawn = (movingPiece > 0) ? -pawn : pawn;
         bb_clear(*this, capturedPawn, captureSq);
         mailbox[captureSq] = 0;
+        currentHash ^= z.piece[piece_to_zobrist_index(capturedPawn)][captureSq];
         move.capturedPiece = capturedPawn;
     }
 
-    if (std::abs(piece) == king && std::abs(move.fromCol - move.toCol) == 2) {
+    if (std::abs(movingPiece) == king && std::abs(move.fromCol - move.toCol) == 2) {
         if (move.toCol > move.fromCol) {
             int rookFromSq = row_col_to_sq(move.toRow, move.toCol + 1);
             int rookToSq = row_col_to_sq(move.toRow, move.toCol - 1);
-            int rookPiece = (piece > 0) ? rook : -rook;
+            int rookPiece = (movingPiece > 0) ? rook : -rook;
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookToSq] = mailbox[rookFromSq];
             mailbox[rookFromSq] = 0;
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
         } else {
             int rookFromSq = row_col_to_sq(move.toRow, move.toCol - 2);
             int rookToSq = row_col_to_sq(move.toRow, move.toCol + 1);
-            int rookPiece = (piece > 0) ? rook : -rook;
+            int rookPiece = (movingPiece > 0) ? rook : -rook;
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookToSq] = mailbox[rookFromSq];
             mailbox[rookFromSq] = 0;
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
         }
         move.isCastling = true;
     }
 
-    if (std::abs(piece) == pawn) {
-        int promotionRank = piece > 0 ? 0 : 7;
+    int placedPiece = movingPiece;
+    if (std::abs(movingPiece) == pawn) {
+        int promotionRank = movingPiece > 0 ? 0 : 7;
         if (move.toRow == promotionRank && move.promotion != 0) {
-            int promoted = (piece > 0) ? move.promotion : -move.promotion;
-            bb_clear(*this, piece, toSq);
-            bb_set(*this, promoted, toSq);
-            mailbox[toSq] = promoted;
-        } else {
-            mailbox[toSq] = piece;
+            placedPiece = (movingPiece > 0) ? move.promotion : -move.promotion;
+            bb_clear(*this, movingPiece, toSq);
+            bb_set(*this, placedPiece, toSq);
         }
-    } else {
-        mailbox[toSq] = piece;
     }
 
-    if (std::abs(piece) == pawn && std::abs(move.fromRow - move.toRow) == 2) {
+    mailbox[toSq] = placedPiece;
+    currentHash ^= z.piece[piece_to_zobrist_index(placedPiece)][toSq];
+
+    if (std::abs(movingPiece) == pawn && std::abs(move.fromRow - move.toRow) == 2) {
         const bool opponentWhite = !isWhiteTurn;
         const int epRow = opponentWhite ? 2 : 5;
         const int epSq = row_col_to_sq(epRow, move.toCol);
@@ -194,26 +218,26 @@ void Board::makeMove(Move& move) {
 
     isWhiteTurn = !isWhiteTurn;
 
-    if (piece == rook && move.fromRow == 7 && move.fromCol == 7){
+    if (movingPiece == rook && move.fromRow == 7 && move.fromCol == 7){
         whiteCanCastleKingSide = false;
     }
-    else if (piece == rook && move.fromRow == 7 && move.fromCol == 0){
+    else if (movingPiece == rook && move.fromRow == 7 && move.fromCol == 0){
         whiteCanCastleQueenSide = false;
     }
-    else if (piece == -rook && move.fromRow == 0 && move.fromCol == 7){
+    else if (movingPiece == -rook && move.fromRow == 0 && move.fromCol == 7){
         blackCanCastleKingSide = false;
     }
-    else if (piece == -rook && move.fromRow == 0 && move.fromCol == 0){
+    else if (movingPiece == -rook && move.fromRow == 0 && move.fromCol == 0){
         blackCanCastleQueenSide = false;
     }
 
-    if (piece == king) {
+    if (movingPiece == king) {
         whiteCanCastleKingSide = false;
         whiteCanCastleQueenSide = false;
         whiteKingRow = move.toRow;
         whiteKingCol = move.toCol;
     }
-    if (piece == -king) {
+    if (movingPiece == -king) {
         blackCanCastleKingSide = false;
         blackCanCastleQueenSide = false;
         blackKingRow = move.toRow;
@@ -232,36 +256,49 @@ void Board::makeMove(Move& move) {
     if (move.capturedPiece == -rook && move.toRow == 0 && move.toCol == 0) {
         blackCanCastleQueenSide = false;
     }
+
+    int newCastling = 0;
+    if (whiteCanCastleKingSide) newCastling |= 1;
+    if (whiteCanCastleQueenSide) newCastling |= 2;
+    if (blackCanCastleKingSide) newCastling |= 4;
+    if (blackCanCastleQueenSide) newCastling |= 8;
+    currentHash ^= z.castling[newCastling];
+
+    if (enPassantCol != -1) {
+        currentHash ^= z.epFile[enPassantCol];
+    }
 }
 
 void Board::unmakeMove(Move& move) {
+    const Zobrist& z = zobrist();
+
     isWhiteTurn = !isWhiteTurn;
+
+    // Hash out side, current ep, current castling (state after move, before undo)
+    currentHash ^= z.side;
+    if (enPassantCol != -1) currentHash ^= z.epFile[enPassantCol];
+    int currCastling = 0;
+    if (whiteCanCastleKingSide) currCastling |= 1;
+    if (whiteCanCastleQueenSide) currCastling |= 2;
+    if (blackCanCastleKingSide) currCastling |= 4;
+    if (blackCanCastleQueenSide) currCastling |= 8;
+    currentHash ^= z.castling[currCastling];
 
     const int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
     const int toSq = row_col_to_sq(move.toRow, move.toCol);
 
     int pieceOnTo = mailbox[toSq];
-    int piece = pieceOnTo;
-
+    int pieceBase = pieceOnTo;
     if (move.promotion != 0) {
-        piece = (piece > 0) ? pawn : -pawn;
+        pieceBase = (pieceOnTo > 0) ? pawn : -pawn;
     }
 
+    // Remove moved piece from destination
     bb_clear(*this, pieceOnTo, toSq);
-    bb_set(*this, piece, fromSq);
     mailbox[toSq] = 0;
-    mailbox[fromSq] = piece;
+    currentHash ^= z.piece[piece_to_zobrist_index(pieceOnTo)][toSq];
 
-    if (move.isEnPassant) {
-        int capturedPawn = isWhiteTurn ? -pawn : pawn;
-        int captureSq = row_col_to_sq(move.fromRow, move.toCol);
-        bb_set(*this, capturedPawn, captureSq);
-        mailbox[captureSq] = capturedPawn;
-    } else if (move.capturedPiece != 0) {
-        bb_set(*this, move.capturedPiece, toSq);
-        mailbox[toSq] = move.capturedPiece;
-    }
-
+    // Undo castling rook move if needed
     if (move.isCastling) {
         if (move.toCol > move.fromCol) {
             int rookFromSq = row_col_to_sq(move.toRow, move.toCol - 1);
@@ -271,6 +308,8 @@ void Board::unmakeMove(Move& move) {
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookFromSq] = 0;
             mailbox[rookToSq] = rookPiece;
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
         } else {
             int rookFromSq = row_col_to_sq(move.toRow, move.toCol + 1);
             int rookToSq = row_col_to_sq(move.toRow, move.toCol - 2);
@@ -279,7 +318,27 @@ void Board::unmakeMove(Move& move) {
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookFromSq] = 0;
             mailbox[rookToSq] = rookPiece;
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
         }
+    }
+
+    // Restore moving piece to origin
+    bb_set(*this, pieceBase, fromSq);
+    mailbox[fromSq] = pieceBase;
+    currentHash ^= z.piece[piece_to_zobrist_index(pieceBase)][fromSq];
+
+    // Restore captured piece
+    if (move.isEnPassant) {
+        int capturedPawn = isWhiteTurn ? -pawn : pawn;
+        int captureSq = row_col_to_sq(move.fromRow, move.toCol);
+        bb_set(*this, capturedPawn, captureSq);
+        mailbox[captureSq] = capturedPawn;
+        currentHash ^= z.piece[piece_to_zobrist_index(capturedPawn)][captureSq];
+    } else if (move.capturedPiece != 0) {
+        bb_set(*this, move.capturedPiece, toSq);
+        mailbox[toSq] = move.capturedPiece;
+        currentHash ^= z.piece[piece_to_zobrist_index(move.capturedPiece)][toSq];
     }
 
     whiteCanCastleKingSide = move.prevW_KingSide;
@@ -288,14 +347,23 @@ void Board::unmakeMove(Move& move) {
     blackCanCastleQueenSide = move.prevB_QueenSide;
     enPassantCol = move.prevEnPassantCol;
 
-    if (piece == king) {
+    if (pieceBase == king) {
         whiteKingRow = move.fromRow;
         whiteKingCol = move.fromCol;
     }
-    if (piece == -king) {
+    if (pieceBase == -king) {
         blackKingRow = move.fromRow;
         blackKingCol = move.fromCol;
     }
+
+    int prevCastling = 0;
+    if (whiteCanCastleKingSide) prevCastling |= 1;
+    if (whiteCanCastleQueenSide) prevCastling |= 2;
+    if (blackCanCastleKingSide) prevCastling |= 4;
+    if (blackCanCastleQueenSide) prevCastling |= 8;
+    currentHash ^= z.castling[prevCastling];
+
+    if (enPassantCol != -1) currentHash ^= z.epFile[enPassantCol];
 }
 
 void Board::loadFromFEN(const std::string& fen) {
@@ -359,6 +427,8 @@ void Board::loadFromFEN(const std::string& fen) {
     } else {
         enPassantCol = -1;
     }
+
+    currentHash = position_key(*this);
 }
 
 void printBoard(const Board& board) {
