@@ -51,6 +51,8 @@ public:
     Bitboard piece[6];
     Bitboard color[2];
 
+    int mailbox[64]; // Redundant mailbox for O(1) piece lookups
+
     bool whiteCanCastleKingSide;
     bool whiteCanCastleQueenSide;
     bool blackCanCastleKingSide;
@@ -80,20 +82,7 @@ inline int sq_to_col(int sq) {
 }
 
 inline int piece_at_sq(const Board& board, int sq) {
-    Bitboard mask = 1ULL << sq;
-    if (board.color[WHITE] & mask) {
-        for (int i = 0; i < 6; i++) {
-            if (board.piece[i] & mask) return i + 1;
-        }
-        return 0;
-    }
-    if (board.color[BLACK] & mask) {
-        for (int i = 0; i < 6; i++) {
-            if (board.piece[i] & mask) return -(i + 1);
-        }
-        return 0;
-    }
-    return 0;
+    return board.mailbox[sq];
 }
 
 inline bool king_square(const Board& board, bool white, int& outRow, int& outCol) {
