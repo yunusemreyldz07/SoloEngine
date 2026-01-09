@@ -1,46 +1,25 @@
-# Summary: Normalized targets and wrapped strip tool invocation for safer execution.
-.PHONY: build default
+CXX = x86_64-w64-mingw32-g++
+TARGET = soloengine_windows.exe
+SOURCES = main.cpp board.cpp search.cpp evaluation.cpp bitboard.cpp params.cpp
+CXXFLAGS = -O3 -std=c++23 -ffast-math -pthread
+LDFLAGS = -lm -static -static-libgcc -static-libstdc++
+STRIP = x86_64-w64-mingw32-strip
 
-EXE := soloengine_windows
+all: $(TARGET)
 
-ifeq ($(OS),Windows_NT)
-EXEEXT := .exe
-else
-EXEEXT :=
-endif
-
-SOURCES := main.cpp \
-           board.cpp \
-           search.cpp \
-           evaluation.cpp
-
-# Override at call-site if needed, e.g.:
-#   make -f Makefile.windows CXX=x86_64-w64-mingw32-g++
-CXX ?= g++
-
-CXXFLAGS := -O3 -mavx2 -std=c++23 -ffast-math -pthread
-
-LINKER := -static -static-libgcc -static-libstdc++
-
-OUT := $(EXE)$(EXEEXT)
-
-STRIP ?= strip
-
-build: $(OUT)
-
-default: build
-
-$(OUT): $(SOURCES)
-	$(CXX) $^ $(CXXFLAGS) -o $(OUT) $(LINKER)
+$(TARGET): $(SOURCES)
+	$(CXX) $(SOURCES) $(CXXFLAGS) -o $(TARGET) $(LDFLAGS)
 	@if command -v $(STRIP) >/dev/null 2>&1; then \
-	$(STRIP) $(OUT); \
+		$(STRIP) $(TARGET); \
 	else \
-	echo "Strip tool '$(STRIP)' not found; skipping."; \
+		echo "Strip tool not found; skipping."; \
 	fi
 
-# AddressSanitizer ile debug build
 asan:
-	$(CXX) $(SOURCES) -std=c++23 -g -O1 -fsanitize=address -fno-omit-frame-pointer -pthread -o $(EXE)_asan$(EXEEXT) $(LINKER)
-	@echo "ASAN build created as $(EXE)_asan$(EXEEXT) (symbols preserved, no strip)"
+	$(CXX) $(SOURCES) -std=c++23 -g -O1 -fsanitize=address -fno-omit-frame-pointer \
+		-pthread -o $(TARGET:.exe=_asan.exe) $(LDFLAGS)
 
-debug: asan
+clean:
+	rm -f $(TARGET) $(TARGET:.exe=_asan.exe)
+
+.PHONY: all asan clean
