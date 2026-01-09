@@ -12,8 +12,9 @@ endif
 SOURCES := main.cpp \
            board.cpp \
            search.cpp \
-		   evaluation.cpp \
-		   bitboard.cpp
+	   evaluation.cpp \
+	   bitboard.cpp \
+	   params.cpp
 
 # Override at call-site if needed, e.g.:
 #   make -f Makefile.windows CXX=x86_64-w64-mingw32-g++

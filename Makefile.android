@@ -7,7 +7,8 @@ SOURCES := main.cpp \
            board.cpp \
            search.cpp \
 		   evaluation.cpp \
-		   bitboard.cpp
+	   bitboard.cpp \
+	   params.cpp
 
 # Configure via environment or make variables:
 #   ANDROID_NDK_HOME=/path/to/ndk make android
