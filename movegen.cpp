@@ -6,7 +6,7 @@
 
 namespace {
 
-inline Move make_move(int fromSq, int toSq, int capturedPiece = 0, int promotion = 0, bool isEnPassant = false, bool isCastling = false) {
+inline void push_move(std::vector<Move>& moves, int fromSq, int toSq, int capturedPiece = 0, int promotion = 0, bool isEnPassant = false, bool isCastling = false) {
     Move m;
     m.fromRow = sq_to_row(fromSq);
     m.fromCol = sq_to_col(fromSq);
@@ -16,18 +16,23 @@ inline Move make_move(int fromSq, int toSq, int capturedPiece = 0, int promotion
     m.promotion = promotion;
     m.isEnPassant = isEnPassant;
     m.isCastling = isCastling;
-    return m;
+    moves.push_back(m);
 }
 
-inline int capture_piece_at(const Board& board, int sq, int them) {
+inline int piece_on_square_bb(const Board& board, int sq) {
     Bitboard mask = 1ULL << sq;
-    if ((board.color[them] & mask) == 0) return 0;
-    if (board.piece[pawn - 1] & mask) return them == WHITE ? pawn : -pawn;
-    if (board.piece[knight - 1] & mask) return them == WHITE ? knight : -knight;
-    if (board.piece[bishop - 1] & mask) return them == WHITE ? bishop : -bishop;
-    if (board.piece[rook - 1] & mask) return them == WHITE ? rook : -rook;
-    if (board.piece[queen - 1] & mask) return them == WHITE ? queen : -queen;
-    if (board.piece[king - 1] & mask) return them == WHITE ? king : -king;
+    if (board.color[WHITE] & mask) {
+        for (int i = 0; i < 6; i++) {
+            if (board.piece[i] & mask) return i + 1;
+        }
+        return 0;
+    }
+    if (board.color[BLACK] & mask) {
+        for (int i = 0; i < 6; i++) {
+            if (board.piece[i] & mask) return -(i + 1);
+        }
+        return 0;
+    }
     return 0;
 }
 
@@ -71,8 +76,7 @@ inline bool is_square_attacked_bb(const Board& board, int sq, bool byWhite) {
 -----------------------------------
 */
 
-template <typename Emit>
-static inline void generate_moves_bb(const Board& board, Emit emit) {
+static inline void generate_moves_bb(const Board& board, std::vector<Move>& moves) {
     int source_square = 0;
     int target_square = 0;
     Bitboard bitboard = 0ULL;
@@ -98,17 +102,17 @@ static inline void generate_moves_bb(const Board& board, Emit emit) {
                 bool isPromo = whiteToMove ? (source_square >= 48) : (source_square <= 15);
                 if (isPromo) {
                     for (int promo : {queen, rook, bishop, knight}) {
-                        emit(make_move(source_square, target_square, 0, promo, false));
+                        push_move(moves, source_square, target_square, 0, promo, false);
                     }
                 } else {
-                    emit(make_move(source_square, target_square));
+                    push_move(moves, source_square, target_square);
                     bool onStartRank = whiteToMove ? (source_square >= 8 && source_square <= 15)
                                                    : (source_square >= 48 && source_square <= 55);
                     if (onStartRank) {
                         int to2 = whiteToMove ? (source_square + 16) : (source_square - 16);
                         Bitboard to2Mask = 1ULL << to2;
                         if ((occ & to2Mask) == 0) {
-                            emit(make_move(source_square, to2));
+                            push_move(moves, source_square, to2);
                         }
                     }
                 }
@@ -119,15 +123,15 @@ static inline void generate_moves_bb(const Board& board, Emit emit) {
         while (attacks) {
             target_square = lsb(attacks);
             attacks &= attacks - 1;
-            int captured = capture_piece_at(board, target_square, them);
+            int captured = piece_on_square_bb(board, target_square);
             if (is_king_piece(captured)) continue;
             bool isPromo = whiteToMove ? (target_square >= 56) : (target_square <= 7);
             if (isPromo) {
                 for (int promo : {queen, rook, bishop, knight}) {
-                    emit(make_move(source_square, target_square, captured, promo, false));
+                    push_move(moves, source_square, target_square, captured, promo, false);
                 }
             } else {
-                emit(make_move(source_square, target_square, captured, 0, false));
+                push_move(moves, source_square, target_square, captured, 0, false);
             }
         }
 
@@ -136,7 +140,7 @@ static inline void generate_moves_bb(const Board& board, Emit emit) {
             int epSq = row_col_to_sq(epRow, board.enPassantCol);
             if (pawn_attacks[us][source_square] & (1ULL << epSq)) {
                 int captured = whiteToMove ? -pawn : pawn;
-                emit(make_move(source_square, epSq, captured, 0, true));
+                push_move(moves, source_square, epSq, captured, 0, true);
             }
         }
     }
@@ -151,9 +155,9 @@ static inline void generate_moves_bb(const Board& board, Emit emit) {
         while (attacks) {
             target_square = lsb(attacks);
             attacks &= attacks - 1;
-            int captured = (opp & (1ULL << target_square)) ? capture_piece_at(board, target_square, them) : 0;
+            int captured = (opp & (1ULL << target_square)) ? piece_on_square_bb(board, target_square) : 0;
             if (is_king_piece(captured)) continue;
-            emit(make_move(source_square, target_square, captured, 0, false));
+            push_move(moves, source_square, target_square, captured, 0, false);
         }
     }
 
@@ -167,9 +171,9 @@ static inline void generate_moves_bb(const Board& board, Emit emit) {
         while (attacks) {
             target_square = lsb(attacks);
             attacks &= attacks - 1;
-            int captured = (opp & (1ULL << target_square)) ? capture_piece_at(board, target_square, them) : 0;
+            int captured = (opp & (1ULL << target_square)) ? piece_on_square_bb(board, target_square) : 0;
             if (is_king_piece(captured)) continue;
-            emit(make_move(source_square, target_square, captured, 0, false));
+            push_move(moves, source_square, target_square, captured, 0, false);
         }
     }
 
@@ -183,9 +187,9 @@ static inline void generate_moves_bb(const Board& board, Emit emit) {
         while (attacks) {
             target_square = lsb(attacks);
             attacks &= attacks - 1;
-            int captured = (opp & (1ULL << target_square)) ? capture_piece_at(board, target_square, them) : 0;
+            int captured = (opp & (1ULL << target_square)) ? piece_on_square_bb(board, target_square) : 0;
             if (is_king_piece(captured)) continue;
-            emit(make_move(source_square, target_square, captured, 0, false));
+            push_move(moves, source_square, target_square, captured, 0, false);
         }
     }
 
@@ -199,9 +203,9 @@ static inline void generate_moves_bb(const Board& board, Emit emit) {
         while (attacks) {
             target_square = lsb(attacks);
             attacks &= attacks - 1;
-            int captured = (opp & (1ULL << target_square)) ? capture_piece_at(board, target_square, them) : 0;
+            int captured = (opp & (1ULL << target_square)) ? piece_on_square_bb(board, target_square) : 0;
             if (is_king_piece(captured)) continue;
-            emit(make_move(source_square, target_square, captured, 0, false));
+            push_move(moves, source_square, target_square, captured, 0, false);
         }
     }
 
@@ -213,9 +217,9 @@ static inline void generate_moves_bb(const Board& board, Emit emit) {
         while (attacks) {
             target_square = lsb(attacks);
             attacks &= attacks - 1;
-            int captured = (opp & (1ULL << target_square)) ? capture_piece_at(board, target_square, them) : 0;
+            int captured = (opp & (1ULL << target_square)) ? piece_on_square_bb(board, target_square) : 0;
             if (is_king_piece(captured)) continue;
-            emit(make_move(source_square, target_square, captured, 0, false));
+            push_move(moves, source_square, target_square, captured, 0, false);
         }
 
         const bool opponentIsWhite = !whiteToMove;
@@ -228,7 +232,7 @@ static inline void generate_moves_bb(const Board& board, Emit emit) {
                     !is_square_attacked_bb(board, 5, opponentIsWhite) &&
                     !is_square_attacked_bb(board, 6, opponentIsWhite) &&
                     rookPresent) {
-                    emit(make_move(4, 6, 0, 0, false, true));
+                    push_move(moves, 4, 6, 0, 0, false, true);
                 }
             }
             if (board.whiteCanCastleQueenSide) {
@@ -239,7 +243,7 @@ static inline void generate_moves_bb(const Board& board, Emit emit) {
                     !is_square_attacked_bb(board, 3, opponentIsWhite) &&
                     !is_square_attacked_bb(board, 2, opponentIsWhite) &&
                     rookPresent) {
-                    emit(make_move(4, 2, 0, 0, false, true));
+                    push_move(moves, 4, 2, 0, 0, false, true);
                 }
             }
         }
@@ -253,7 +257,7 @@ static inline void generate_moves_bb(const Board& board, Emit emit) {
                     !is_square_attacked_bb(board, 61, opponentIsWhite) &&
                     !is_square_attacked_bb(board, 62, opponentIsWhite) &&
                     rookPresent) {
-                    emit(make_move(60, 62, 0, 0, false, true));
+                    push_move(moves, 60, 62, 0, 0, false, true);
                 }
             }
             if (board.blackCanCastleQueenSide) {
@@ -264,7 +268,7 @@ static inline void generate_moves_bb(const Board& board, Emit emit) {
                     !is_square_attacked_bb(board, 59, opponentIsWhite) &&
                     !is_square_attacked_bb(board, 58, opponentIsWhite) &&
                     rookPresent) {
-                    emit(make_move(60, 58, 0, 0, false, true));
+                    push_move(moves, 60, 58, 0, 0, false, true);
                 }
             }
         }
@@ -278,38 +282,43 @@ bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttack
 }
 
 std::vector<Move> get_all_moves(Board& board, bool isWhiteTurn) {
+    std::vector<Move> pseudoMoves;
     std::vector<Move> legalMoves;
-    legalMoves.reserve(256);
+    pseudoMoves.reserve(256);
     (void)isWhiteTurn;
     const bool sideToMove = board.isWhiteTurn;
 
-    generate_moves_bb(board, [&](const Move& m) {
-        Move tmp = m;
-        board.makeMove(tmp);
+    generate_moves_bb(board, pseudoMoves);
+
+    for (auto& m : pseudoMoves) {
+        board.makeMove(m);
         int kingRow = 0;
         int kingCol = 0;
         if (!king_square(board, sideToMove, kingRow, kingCol)) {
-            board.unmakeMove(tmp);
-            return;
+            board.unmakeMove(m);
+            continue;
         }
         if (!is_square_attacked(board, kingRow, kingCol, !sideToMove)) {
-            legalMoves.push_back(tmp);
+            legalMoves.push_back(m);
         }
-        board.unmakeMove(tmp);
-    });
+        board.unmakeMove(m);
+    }
 
     return legalMoves;
 }
 
 std::vector<Move> get_capture_moves(const Board& board) {
     std::vector<Move> moves;
-    moves.reserve(128);
+    std::vector<Move> pseudoMoves;
+    pseudoMoves.reserve(128);
 
-    generate_moves_bb(board, [&](const Move& m) {
+    generate_moves_bb(board, pseudoMoves);
+
+    for (auto& m : pseudoMoves) {
         if (m.capturedPiece != 0 || m.isEnPassant) {
             moves.push_back(m);
         }
-    });
+    }
 
     return moves;
 }
