@@ -60,8 +60,8 @@ static bool is_square_attacked_otf(const Board& board, int row, int col, bool by
     if (knight_attacks[sq] & knights) return true;
     if (king_attacks[sq] & kings) return true;
 
-    if (bishop_attacks_on_the_fly(sq, occ) & (bishops | queens)) return true;
-    if (rook_attacks_on_the_fly(sq, occ) & (rooks | queens)) return true;
+    if (bishop_attacks_otf(sq, occ) & (bishops | queens)) return true;
+    if (rook_attacks_otf(sq, occ) & (rooks | queens)) return true;
 
     return false;
 }

@@ -92,7 +92,7 @@ void bench() {
 
 int main(int argc, char* argv[]) {
     std::cout.setf(std::ios::unitbuf); // Disable output buffering
-    init_bitboards();
+    init_all();
     if (argc > 1 && std::string(argv[1]) == "bench") {
         bench();
         return 0;
@@ -193,8 +193,14 @@ int main(int argc, char* argv[]) {
             if (depth <= 0) {
                 std::cout << "info string perft depth missing or invalid" << std::endl;
             } else {
+                auto startTime = std::chrono::steady_clock::now();
                 uint64_t nodes = perft(board, depth);
-                std::cout << "perft " << depth << " nodes " << nodes << std::endl;
+                auto endTime = std::chrono::steady_clock::now();
+                long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+                std::cout << "perft " << depth << " nodes " << nodes
+                          << " time " << elapsed << "ms nps "
+                          << (nodes * 1000 / (elapsed + 1))
+                          << std::endl;
             }
         }
 
@@ -300,6 +306,7 @@ int main(int argc, char* argv[]) {
             searchRunning.store(true, std::memory_order_relaxed);
             searchThread = std::thread([&board, &gameHistory, searchDepth, timeToThink, &searchRunning]() {
                 Move best = getBestMove(board, searchDepth, timeToThink, gameHistory);
+                const long long nodes = getNodeCounter();
 
                 // If no legal move was found (mate/stalemate), output UCI null move.
                 if (best.fromRow == 0 && best.fromCol == 0 && best.toRow == 0 && best.toCol == 0 && best.promotion == 0) {
@@ -319,6 +326,7 @@ int main(int argc, char* argv[]) {
                     }
                     std::cout << std::endl;
                 }
+                std::cout << "info string nodes " << nodes << std::endl;
 
                 searchRunning.store(false, std::memory_order_relaxed);
             });
