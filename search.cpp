@@ -12,11 +12,11 @@
 int MATE_SCORE = 100000;
 
 // Global search tuning knobs. Updated via set_search_params for A/B tests.
-// Next test profile: LMR ON (soft), LMP ON, Aspiration OFF, qsearch SEE OFF.
+// Next test profile: LMR ON (soft), LMP ON, Aspiration ON (restored), qsearch SEE OFF.
 static SearchParams gSearchParams{
     /*use_lmr=*/true,
     /*use_lmp=*/true,
-    /*use_aspiration=*/false,
+    /*use_aspiration=*/true,
     /*use_qsearch_see=*/false,
     /*lmr_min_depth=*/3,
     /*lmr_min_moves=*/6,
