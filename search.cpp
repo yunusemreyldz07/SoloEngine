@@ -199,10 +199,7 @@ int quiescence(Board& board, int alpha, int beta, int ply){
     });
 
     for (Move& move : captureMoves) {
-        int seeValue = see_exchange(board, move);
-        if (seeValue < 0) {
-            continue; // Bad capture, skip it
-        }
+        // Keep all captures in quiescence; no SEE-based pruning.
 
         // Delta Pruning
         // If even the most optimistic evaluation (stand_pat + value of captured piece + margin) is worse than alpha, skip 
@@ -241,7 +238,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         return 0; // Search was stopped
     }
 
-    const bool ttEnabled = use_tt.load(std::memory_order_relaxed);
+    const bool ttEnabled = true;
     bool pvNode = (beta - alpha) > 1;
     bool firstMove = true;
     const int alphaOrig = alpha;
@@ -266,9 +263,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     TTFlag ttFlag = TTFlag::EXACT;
     Move ttMove;
     bool ttHit = false;
-    if (ttEnabled) {
-        ttHit = globalTT.probe(currentHash, ttScore, ttDepth, ttFlag, ttMove);
-    }
+    ttHit = globalTT.probe(currentHash, ttScore, ttDepth, ttFlag, ttMove);
 
     int movesSearched = 0;
     int eval = -MATE_VALUE;
@@ -458,9 +453,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     else if (maxEval >= beta) flag = BETA;
     else flag = EXACT;
     
-    if (ttEnabled) {
-        globalTT.store(currentHash, maxEval, depth, flag, bestMove);
-    }
+    globalTT.store(currentHash, maxEval, depth, flag, bestMove);
     return maxEval;
 }
 
