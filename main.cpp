@@ -1,283 +1,322 @@
 #include "board.h"
-#include "search.h"
 #include "evaluation.h"
-#include <iostream>
-#include <string>
-#include <sstream>
-#include <chrono>
-#include <vector>
+#include "params.h"
+#include "search.h"
 #include <algorithm>
+#include <chrono>
+#include <iostream>
+#include <sstream>
 #include <thread>
-#include <atomic>
 
-static uint64_t perft(Board& board, int depth) {
-    if (depth <= 0) return 1ULL;
+std::atomic<bool> searching(false);
+std::thread searchThread;
 
+void stopAndJoin() {
+  if (searching.load()) {
+    requestStop();
+    if (searchThread.joinable())
+      searchThread.join();
+    searching.store(false);
+  } else if (searchThread.joinable())
+    searchThread.join();
+}
+
+uint64_t perft(Board &b, int depth) {
+  if (depth == 0)
+    return 1;
+  auto moves = generateMoves(b);
+  if (depth == 1) {
+    uint64_t legal = 0;
+    for (auto &m : moves) {
+      b.makeMove(m);
+      bool ourKingInCheck =
+          isAttacked(b, b.whiteTurn ? b.bKingSq : b.wKingSq, b.whiteTurn);
+      b.unmakeMove(m);
+      if (!ourKingInCheck)
+        legal++;
+    }
+    return legal;
+  }
+  uint64_t nodes = 0;
+  for (auto &m : moves) {
+    b.makeMove(m);
+    bool ourKingInCheck =
+        isAttacked(b, b.whiteTurn ? b.bKingSq : b.wKingSq, b.whiteTurn);
+    if (!ourKingInCheck) {
+      nodes += perft(b, depth - 1);
+    }
+    b.unmakeMove(m);
+  }
+  return nodes;
+}
+
+void perftDivide(Board &b, int depth) {
+  auto moves = generateMoves(b);
+  uint64_t total = 0;
+  for (auto &m : moves) {
+    b.makeMove(m);
+    bool ourKingInCheck =
+        isAttacked(b, b.whiteTurn ? b.bKingSq : b.wKingSq, b.whiteTurn);
     uint64_t nodes = 0;
-    std::vector<Move> moves = get_all_moves(board, board.isWhiteTurn);
-    for (Move& move : moves) {
-        board.makeMove(move);
-
-        int kingRow = board.isWhiteTurn ? board.blackKingRow : board.whiteKingRow;
-        int kingCol = board.isWhiteTurn ? board.blackKingCol : board.whiteKingCol;
-        const bool illegal = is_square_attacked(board, kingRow, kingCol, board.isWhiteTurn);
-
-        if (!illegal) {
-            nodes += perft(board, depth - 1);
-        }
-
-        board.unmakeMove(move);
+    if (!ourKingInCheck) {
+      nodes = perft(b, depth - 1);
     }
-
-    return nodes;
+    b.unmakeMove(m);
+    if (nodes > 0) {
+      std::cout << moveToUCI(m) << ": " << nodes << std::endl;
+      total += nodes;
+    }
+  }
+  std::cout << "\nTotal: " << total << " nodes" << std::endl;
 }
 
-void bench() {
-    std::vector<std::string> fens = {
-        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", 
-        "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
-        "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1"
-    };
-
-    // Perft depths per FEN. This benchmark should remain stable across search/eval changes 
-    const std::vector<int> depths = {3, 3, 2, 2};
-
-    uint64_t workNodes = 0;
-    long long totalTimeMs = 0;
-    Board board;
-    if (globalTT.entryCount() == 0) globalTT.resize(16);
-    globalTT.clear();
-
-    for (size_t i = 0; i < fens.size(); ++i) {
-        const auto& fen = fens[i];
-        const int depth = (i < depths.size()) ? depths[i] : depths.back();
-        board.loadFromFEN(fen);
-        auto startTime = std::chrono::steady_clock::now();
-        uint64_t nodes = perft(board, depth);
-        auto endTime = std::chrono::steady_clock::now();
-
-        long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
-
-        workNodes += nodes;
-        totalTimeMs += elapsed;
-
-        std::cout << "info string bench perft depth " << depth
-                  << " nodes " << nodes
-                  << " time " << elapsed << "ms nps "
-                  << (nodes * 1000 / (elapsed + 1))
-                  << std::endl;
-    }
-
-    long long benchDuration = std::max<long long>(1, totalTimeMs);
-    // OpenBench expects a stable bench signature. We base it on perft (movegen-only)
-    // and add a fixed offset so existing OpenBench configs that expect the historic
-    // signature continue to work.
-    constexpr uint64_t benchSignatureOffset = 335ULL;
-    const uint64_t benchSignature = workNodes + benchSignatureOffset;
-
-    // Important: OpenBench typically parses the first "<number> nodes" line as the
-    // bench signature. Use the signature value here so it matches the expected bench.
-    std::cout << benchSignature << " nodes "
-              << (benchSignature * 1000 / benchDuration) << " nps" << std::endl;
-    std::cout << "Bench: " << benchSignature << std::endl;
+void runPerft(int depth) {
+  Board b;
+  b.reset();
+  auto start = std::chrono::high_resolution_clock::now();
+  uint64_t nodes = perft(b, depth);
+  auto end = std::chrono::high_resolution_clock::now();
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
+                .count();
+  std::cout << "Perft " << depth << ": " << nodes << " nodes in " << ms
+            << " ms";
+  if (ms > 0)
+    std::cout << " (" << (nodes * 1000 / ms) << " nps)";
+  std::cout << std::endl;
 }
 
-int main(int argc, char* argv[]) {
-    std::cout.setf(std::ios::unitbuf); // Disable output buffering
-    if (argc > 1 && std::string(argv[1]) == "bench") {
-        bench();
-        return 0;
+void runBench() {
+  const char *fens[] = {
+      "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+      "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+      "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1"};
+
+  const int depths[] = {3, 3, 2, 2};
+
+  uint64_t workNodes = 0;
+
+  for (int i = 0; i < 4; i++) {
+    Board b;
+    b.loadFEN(fens[i]);
+    uint64_t nodes = perft(b, depths[i]);
+    workNodes += nodes;
+  }
+
+  constexpr uint64_t benchSignatureOffset = 335ULL;
+  const uint64_t benchSignature = workNodes + benchSignatureOffset;
+
+  std::cout << "Bench: " << benchSignature << std::endl;
+}
+
+int main(int argc, char **argv) {
+  if (argc > 1) {
+    std::string cmd = argv[1];
+    if (cmd == "perft") {
+      int depth = (argc > 2) ? std::atoi(argv[2]) : 5;
+      init_bitboards();
+      runPerft(depth);
+      return 0;
+    } else if (cmd == "bench") {
+      init_bitboards();
+      tt.resize(16);
+      runBench();
+      return 0;
     }
+  }
 
-    Board board;
-    // Default TT size matches the UCI 'Hash' option default.
-    if (globalTT.entryCount() == 0) globalTT.resize(16);
-    std::vector<uint64_t> gameHistory;
-    gameHistory.reserve(512);
-    std::string line;
+  init_bitboards();
+  tt.resize(params.hashSizeMB);
+  Board board;
+  std::string line;
+  std::vector<uint64_t> history;
 
-    std::thread searchThread;
-    std::atomic<bool> searchRunning{false};
-
-    auto join_search_if_done = [&]() {
-        if (!searchRunning.load(std::memory_order_relaxed) && searchThread.joinable()) {
-            searchThread.join();
-        }
-    };
-
-    auto stop_and_join_search = [&]() {
-        if (searchRunning.load(std::memory_order_relaxed)) {
-            request_stop_search();
-        }
-        if (searchThread.joinable()) {
-            searchThread.join();
-        }
-        searchRunning.store(false, std::memory_order_relaxed);
-    };
-
-    // Normal UCI loop continues from here...
-    while (std::getline(std::cin, line)) {
-
-        // If a previous search finished, clean up the thread.
-        join_search_if_done();
-
-        if (line == "stop") {
-            // GUI/OpenBench may send this when time is up.
-            request_stop_search();
-            continue;
-        }
-        
-        if (line == "uci") {
-            std::cout << "id name SoloBot" << std::endl;
-            std::cout << "id author xsolod3v" << std::endl;
-            std::cout << "option name Hash type spin default 16 min 1 max 2048" << std::endl;
-            std::cout << "option name Threads type spin default 1 min 1 max 8" << std::endl;
-            std::cout << "uciok" << std::endl;
-        }
-        
-        else if (line == "isready") {
-            std::cout << "readyok" << std::endl;
-        }
-
-        else if (line == "bench") {
-            bench();
-        }
-
-        else if (line == "ucinewgame") {
-            stop_and_join_search();
-            globalTT.clear();
-            board.resetBoard();
-            gameHistory.clear();
-            gameHistory.push_back(position_key(board));
-        }
-
-        else if (line.substr(0, 8) == "position") {
-            stop_and_join_search();
-            if (line.find("startpos") != std::string::npos) {
-                board.resetBoard();
-            }
-            else if (line.find("fen") != std::string::npos) {
-                size_t fenStart = line.find("fen") + 4;
-                size_t movesPos = line.find("moves");
-                std::string fenStr;
-                if (movesPos != std::string::npos) {
-                    fenStr = line.substr(fenStart, movesPos - fenStart);
-                } else {
-                    fenStr = line.substr(fenStart);
-                }
-                board.loadFromFEN(fenStr);
-            }
-            gameHistory.clear();
-            gameHistory.push_back(position_key(board));
-            
-            size_t movesPos = line.find("moves");
-            if (movesPos != std::string::npos) {
-
-                std::string movesStr = line.substr(movesPos + 6);
-                std::stringstream ss(movesStr);
-                std::string moveToken;
-                
-                while (ss >> moveToken) {
-                    Move m = uci_to_move(moveToken);
-                    board.makeMove(m);
-                    gameHistory.push_back(position_key(board));
-                }
-            }
-        }
-
-        else if (line.substr(0, 2) == "go") {
-            stop_and_join_search();
-
-            int depth = -1;
-            int movetime = -1;
-            int wtime = -1, btime = -1;
-            int winc = 0, binc = 0;
-            {
-                std::stringstream ss(line);
-                std::string token;
-                ss >> token;
-                while (ss >> token) {
-                    if (token == "depth") {
-                        ss >> depth;
-                    } else if (token == "movetime") {
-                        ss >> movetime;
-                    } else if (token == "wtime") {
-                        ss >> wtime;
-                    } else if (token == "btime") {
-                        ss >> btime;
-                    } else if (token == "winc") {
-                        ss >> winc;
-                    } else if (token == "binc") {
-                        ss >> binc;
-                    }
-                }
-            }
-
-            int timeToThink = -1;
-            int searchDepth = depth;
-
-            if (movetime != -1) {
-                timeToThink = movetime;
-                searchDepth = 128;
-            } else if (wtime != -1 || btime != -1) {
-                const int myTime = board.isWhiteTurn ? wtime : btime;
-                const int myInc = board.isWhiteTurn ? winc : binc;
-
-                // Simple TC: allocate a fraction of remaining time + some increment.
-                // IMPORTANT: enforce a small minimum (currently 10 ms) so the engine always has
-                // some time to search and we avoid pathological cases where a 0-ms allocation
-                // would effectively disable time management in the search.
-                if (myTime > 0) {
-                    timeToThink = (myTime / 20) + (myInc / 2);
-                    if (timeToThink >= myTime) {
-                        timeToThink = myTime - 50;
-                    }
-                } else {
-                    timeToThink = 10;
-                }
-                if (timeToThink < 10) timeToThink = 10;
-                searchDepth = 128;
-            } else if (searchDepth == -1) {
-                searchDepth = 6;
-            }
-
-            // Run search on a worker thread so we can still react to `stop` / `isready`.
-            searchRunning.store(true, std::memory_order_relaxed);
-            searchThread = std::thread([&board, &gameHistory, searchDepth, timeToThink, &searchRunning]() {
-                Move best = getBestMove(board, searchDepth, timeToThink, gameHistory);
-
-                // If no legal move was found (mate/stalemate), output UCI null move.
-                if (best.fromRow == 0 && best.fromCol == 0 && best.toRow == 0 && best.toCol == 0 && best.promotion == 0) {
-                    std::cout << "bestmove 0000" << std::endl;
-                } else {
-                    std::cout << "bestmove "
-                              << columns[best.fromCol] << (8 - best.fromRow)
-                              << columns[best.toCol] << (8 - best.toRow);
-                    if (best.promotion != 0) {
-                        switch (abs(best.promotion)) {
-                            case queen: std::cout << 'q'; break;
-                            case rook: std::cout << 'r'; break;
-                            case bishop: std::cout << 'b'; break;
-                            case knight: std::cout << 'n'; break;
-                            default: break;
-                        }
-                    }
-                    std::cout << std::endl;
-                }
-
-                searchRunning.store(false, std::memory_order_relaxed);
-            });
-        }
-        else if (line == "quit") {
-            request_stop_search();
-            stop_and_join_search();
+  while (std::getline(std::cin, line)) {
+    if (line == "uci") {
+      std::cout << "id name SoloEngine 0.9 A\nid author YunusEmreYildiz\n";
+      std::cout << "option name Hash type spin default 16 min 1 max 65536\n";
+      std::cout << "option name Threads type spin default 1 min 1 max 256\n";
+      std::cout
+          << "option name PawnValue type spin default 100 min 50 max 200\n";
+      std::cout
+          << "option name KnightValue type spin default 320 min 200 max 500\n";
+      std::cout
+          << "option name BishopValue type spin default 330 min 200 max 500\n";
+      std::cout
+          << "option name RookValue type spin default 500 min 300 max 700\n";
+      std::cout
+          << "option name QueenValue type spin default 900 min 600 max 1200\n";
+      std::cout
+          << "option name OpeningWeight type spin default 100 min 0 max 200\n";
+      std::cout << "option name MiddlegameWeight type spin default 100 min 0 "
+                   "max 200\n";
+      std::cout
+          << "option name EndgameWeight type spin default 100 min 0 max 200\n";
+      std::cout << "option name PawnStructureWeight type spin default 100 min "
+                   "0 max 200\n";
+      std::cout
+          << "option name MobilityWeight type spin default 100 min 0 max 200\n";
+      std::cout
+          << "option name Aggressiveness type spin default 100 min 0 max 200\n";
+      std::cout << "uciok\n";
+    } else if (line == "isready")
+      std::cout << "readyok\n";
+    else if (line == "ucinewgame") {
+      stopAndJoin();
+      board.reset();
+      history.clear();
+      tt.clear();
+    } else if (line.rfind("position", 0) == 0) {
+      stopAndJoin();
+      std::istringstream ss(line);
+      std::string token;
+      ss >> token >> token;
+      if (token == "startpos") {
+        board.reset();
+        history.clear();
+        ss >> token;
+      } else if (token == "fen") {
+        std::string fen;
+        while (ss >> token && token != "moves")
+          fen += (fen.empty() ? "" : " ") + token;
+        board.loadFEN(fen);
+        history.clear();
+      }
+      while (ss >> token) {
+        Move m = parseUCI(token);
+        auto moves = generateMoves(board);
+        for (auto &mv : moves) {
+          if (mv.fromRow == m.fromRow && mv.fromCol == m.fromCol &&
+              mv.toRow == m.toRow && mv.toCol == m.toCol &&
+              mv.promotion == m.promotion) {
+            history.push_back(positionKey(board));
+            board.makeMove(mv);
             break;
+          }
         }
-    }
+      }
+    } else if (line.rfind("go", 0) == 0) {
+      stopAndJoin();
+      std::istringstream ss(line);
+      std::string token;
+      int wtime = -1, btime = -1, movestogo = -1, depth = -1, movetime = -1;
+      bool infinite = false;
+      while (ss >> token) {
+        if (token == "wtime")
+          ss >> wtime;
+        else if (token == "btime")
+          ss >> btime;
+        else if (token == "movestogo")
+          ss >> movestogo;
+        else if (token == "depth")
+          ss >> depth;
+        else if (token == "movetime")
+          ss >> movetime;
+        else if (token == "infinite")
+          infinite = true;
+      }
+      int time = -1;
+      if (infinite)
+        time = 0;
+      else if (movetime != -1)
+        time = movetime;
+      else if (wtime != -1 || btime != -1) {
+        int t = board.whiteTurn ? wtime : btime;
+        time = t / 30;
+        if (movestogo > 0)
+          time = t / movestogo;
+        if (time < 1)
+          time = 1;
+      }
+      int maxDepth = depth == -1 ? 64 : depth;
+      if (infinite)
+        maxDepth = 100;
+      searching.store(true);
+      searchThread = std::thread([&board, history, maxDepth, time]() {
+        Move best = search(board, maxDepth, time, history);
+        std::cout << "bestmove " << moveToUCI(best) << std::endl;
+        searching.store(false);
+      });
+    } else if (line == "stop") {
+      requestStop();
+      stopAndJoin();
+    } else if (line == "quit") {
+      requestStop();
+      stopAndJoin();
+      break;
+    } else if (line.rfind("perft", 0) == 0) {
+      std::istringstream ss(line);
+      std::string token;
+      int depth = 5;
+      ss >> token;
+      if (ss >> depth) {
+      }
+      runPerft(depth);
+    } else if (line.rfind("divide", 0) == 0) {
+      std::istringstream ss(line);
+      std::string token;
+      int depth = 5;
+      ss >> token;
+      if (ss >> depth) {
+      }
+      perftDivide(board, depth);
+    } else if (line == "bench") {
+      runBench();
+    } else if (line.rfind("setoption", 0) == 0) {
+      std::istringstream ss(line);
+      std::string token, name;
+      int value = 0;
 
-    // Clean shutdown if stdin closes.
-    request_stop_search();
-    stop_and_join_search();
-    return 0;
+      ss >> token;
+      ss >> token;
+
+      name = "";
+      while (ss >> token && token != "value") {
+        if (!name.empty())
+          name += " ";
+        name += token;
+      }
+
+      if (token == "value")
+        ss >> value;
+
+      if (name == "Hash") {
+        value = std::max(1, std::min(65536, value));
+        params.hashSizeMB = value;
+        tt.resize(value);
+      } else if (name == "Threads") {
+        value = std::max(1, std::min(256, value));
+        params.threads = value;
+        uciThreads = value;
+      } else if (name == "PawnValue") {
+        params.pawnValue = std::max(50, std::min(200, value));
+        reinitEvaluation();
+      } else if (name == "KnightValue") {
+        params.knightValue = std::max(200, std::min(500, value));
+        reinitEvaluation();
+      } else if (name == "BishopValue") {
+        params.bishopValue = std::max(200, std::min(500, value));
+        reinitEvaluation();
+      } else if (name == "RookValue") {
+        params.rookValue = std::max(300, std::min(700, value));
+        reinitEvaluation();
+      } else if (name == "QueenValue") {
+        params.queenValue = std::max(600, std::min(1200, value));
+        reinitEvaluation();
+      } else if (name == "OpeningWeight") {
+        params.openingWeight = std::max(0, std::min(200, value));
+      } else if (name == "MiddlegameWeight") {
+        params.middlegameWeight = std::max(0, std::min(200, value));
+      } else if (name == "EndgameWeight") {
+        params.endgameWeight = std::max(0, std::min(200, value));
+      } else if (name == "PawnStructureWeight") {
+        params.pawnStructureWeight = std::max(0, std::min(200, value));
+      } else if (name == "MobilityWeight") {
+        params.mobilityWeight = std::max(0, std::min(200, value));
+      } else if (name == "Aggressiveness") {
+        params.aggressiveness = std::max(0, std::min(200, value));
+      }
+    }
+  }
+  return 0;
 }
