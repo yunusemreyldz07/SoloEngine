@@ -12,7 +12,18 @@
 int MATE_SCORE = 100000;
 
 // Global search tuning knobs. Updated via set_search_params for A/B tests.
-static SearchParams gSearchParams{};
+// Next test profile: LMR off, others on.
+static SearchParams gSearchParams{
+    /*use_lmr=*/false,
+    /*use_lmp=*/true,
+    /*use_aspiration=*/true,
+    /*use_qsearch_see=*/false,
+    /*lmr_min_depth=*/3,
+    /*lmr_min_moves=*/4,
+    /*lmp_min_depth=*/4,
+    /*lmp_max_depth=*/8,
+    /*aspiration_delta=*/50
+};
 
 const SearchParams& get_search_params() {
     return gSearchParams;
