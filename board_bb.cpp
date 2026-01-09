@@ -55,6 +55,28 @@ inline void set_start_position(Board& board) {
 
     board.color[WHITE] = W_PAWNS | W_KNIGHTS | W_BISHOPS | W_ROOKS | W_QUEEN | W_KING;
     board.color[BLACK] = B_PAWNS | B_KNIGHTS | B_BISHOPS | B_ROOKS | B_QUEEN | B_KING;
+
+    for (int i = 0; i < 64; i++) board.mailbox[i] = 0;
+
+    // Populate mailbox from bitboards
+    for (int sq = 0; sq < 64; ++sq) {
+        Bitboard mask = bit_at_sq(sq);
+        if (board.color[WHITE] & mask) {
+            if (board.piece[pawn - 1] & mask) board.mailbox[sq] = pawn;
+            else if (board.piece[knight - 1] & mask) board.mailbox[sq] = knight;
+            else if (board.piece[bishop - 1] & mask) board.mailbox[sq] = bishop;
+            else if (board.piece[rook - 1] & mask) board.mailbox[sq] = rook;
+            else if (board.piece[queen - 1] & mask) board.mailbox[sq] = queen;
+            else if (board.piece[king - 1] & mask) board.mailbox[sq] = king;
+        } else if (board.color[BLACK] & mask) {
+            if (board.piece[pawn - 1] & mask) board.mailbox[sq] = -pawn;
+            else if (board.piece[knight - 1] & mask) board.mailbox[sq] = -knight;
+            else if (board.piece[bishop - 1] & mask) board.mailbox[sq] = -bishop;
+            else if (board.piece[rook - 1] & mask) board.mailbox[sq] = -rook;
+            else if (board.piece[queen - 1] & mask) board.mailbox[sq] = -queen;
+            else if (board.piece[king - 1] & mask) board.mailbox[sq] = -king;
+        }
+    }
 }
 
 inline bool is_pawn_attack_possible(const Board& board, bool attackerIsWhite, int epSq) {
@@ -100,8 +122,8 @@ void Board::makeMove(Move& move) {
 
     const int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
     const int toSq = row_col_to_sq(move.toRow, move.toCol);
-    int piece = piece_at_sq(*this, fromSq);
-    int target_piece = piece_at_sq(*this, toSq);
+    int piece = mailbox[fromSq];
+    int target_piece = mailbox[toSq];
 
     move.capturedPiece = target_piece;
 
@@ -109,12 +131,16 @@ void Board::makeMove(Move& move) {
     if (target_piece != 0) bb_clear(*this, target_piece, toSq);
     bb_set(*this, piece, toSq);
 
+    mailbox[fromSq] = 0;
+    if (target_piece != 0) mailbox[toSq] = 0;
+
     if (std::abs(piece) == pawn && move.fromCol != move.toCol && move.capturedPiece == 0) {
         move.isEnPassant = true;
         int captureRow = move.fromRow;
         int captureSq = row_col_to_sq(captureRow, move.toCol);
         int capturedPawn = (piece > 0) ? -pawn : pawn;
         bb_clear(*this, capturedPawn, captureSq);
+        mailbox[captureSq] = 0;
         move.capturedPiece = capturedPawn;
     }
 
@@ -125,12 +151,16 @@ void Board::makeMove(Move& move) {
             int rookPiece = (piece > 0) ? rook : -rook;
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
+            mailbox[rookToSq] = mailbox[rookFromSq];
+            mailbox[rookFromSq] = 0;
         } else {
             int rookFromSq = row_col_to_sq(move.toRow, move.toCol - 2);
             int rookToSq = row_col_to_sq(move.toRow, move.toCol + 1);
             int rookPiece = (piece > 0) ? rook : -rook;
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
+            mailbox[rookToSq] = mailbox[rookFromSq];
+            mailbox[rookFromSq] = 0;
         }
         move.isCastling = true;
     }
@@ -141,7 +171,12 @@ void Board::makeMove(Move& move) {
             int promoted = (piece > 0) ? move.promotion : -move.promotion;
             bb_clear(*this, piece, toSq);
             bb_set(*this, promoted, toSq);
+            mailbox[toSq] = promoted;
+        } else {
+            mailbox[toSq] = piece;
         }
+    } else {
+        mailbox[toSq] = piece;
     }
 
     if (std::abs(piece) == pawn && std::abs(move.fromRow - move.toRow) == 2) {
@@ -205,7 +240,7 @@ void Board::unmakeMove(Move& move) {
     const int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
     const int toSq = row_col_to_sq(move.toRow, move.toCol);
 
-    int pieceOnTo = piece_at_sq(*this, toSq);
+    int pieceOnTo = mailbox[toSq];
     int piece = pieceOnTo;
 
     if (move.promotion != 0) {
@@ -214,13 +249,17 @@ void Board::unmakeMove(Move& move) {
 
     bb_clear(*this, pieceOnTo, toSq);
     bb_set(*this, piece, fromSq);
+    mailbox[toSq] = 0;
+    mailbox[fromSq] = piece;
 
     if (move.isEnPassant) {
         int capturedPawn = isWhiteTurn ? -pawn : pawn;
         int captureSq = row_col_to_sq(move.fromRow, move.toCol);
         bb_set(*this, capturedPawn, captureSq);
+        mailbox[captureSq] = capturedPawn;
     } else if (move.capturedPiece != 0) {
         bb_set(*this, move.capturedPiece, toSq);
+        mailbox[toSq] = move.capturedPiece;
     }
 
     if (move.isCastling) {
@@ -230,12 +269,16 @@ void Board::unmakeMove(Move& move) {
             int rookPiece = isWhiteTurn ? rook : -rook;
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
+            mailbox[rookFromSq] = 0;
+            mailbox[rookToSq] = rookPiece;
         } else {
             int rookFromSq = row_col_to_sq(move.toRow, move.toCol + 1);
             int rookToSq = row_col_to_sq(move.toRow, move.toCol - 2);
             int rookPiece = isWhiteTurn ? rook : -rook;
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
+            mailbox[rookFromSq] = 0;
+            mailbox[rookToSq] = rookPiece;
         }
     }
 
@@ -259,6 +302,7 @@ void Board::loadFromFEN(const std::string& fen) {
     for (int i = 0; i < 6; i++) piece[i] = 0ULL;
     color[WHITE] = 0ULL;
     color[BLACK] = 0ULL;
+    for (int i = 0; i < 64; i++) mailbox[i] = 0;
 
     std::istringstream ss(fen);
     std::string position, turn, castling, enPassant;
@@ -284,6 +328,7 @@ void Board::loadFromFEN(const std::string& fen) {
             int signedPiece = std::isupper(static_cast<unsigned char>(c)) ? pieceType : -pieceType;
             int sq = row_col_to_sq(row, col);
             bb_set(*this, signedPiece, sq);
+            mailbox[sq] = signedPiece;
 
             if (pieceType == king) {
                 if (std::isupper(static_cast<unsigned char>(c))) {
