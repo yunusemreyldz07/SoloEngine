@@ -237,9 +237,11 @@ int quiescence(Board& board, int alpha, int beta, int ply){
         }
 
         board.makeMove(move);
-        int kingRow = board.isWhiteTurn ? board.blackKingRow : board.whiteKingRow;
-        int kingCol = board.isWhiteTurn ? board.blackKingCol : board.whiteKingCol;
-        
+        // Legality check: after makeMove, side to move flipped. Ensure the side that just moved is not in check.
+        bool sideJustMovedIsWhite = !board.isWhiteTurn;
+        int kingRow = sideJustMovedIsWhite ? board.whiteKingRow : board.blackKingRow;
+        int kingCol = sideJustMovedIsWhite ? board.whiteKingCol : board.blackKingCol;
+
         if (is_square_attacked(board, kingRow, kingCol, board.isWhiteTurn)) {
             board.unmakeMove(move);
             continue; // illegal move
