@@ -1,159 +1,71 @@
 #ifndef BOARD_H
 #define BOARD_H
-
 #include "bitboard.h"
 #include <atomic>
-#include <cstdint>
 #include <string>
 #include <vector>
 
-extern char columns[];
-
-inline constexpr int empty_sqr = 0;
-inline constexpr int pawn = 1;
-inline constexpr int knight = 2;
-inline constexpr int bishop = 3;
-inline constexpr int rook = 4;
-inline constexpr int queen = 5;
-inline constexpr int king = 6;
-
-extern int knight_moves[8][2];
-extern int king_moves[8][2];
-extern int bishop_directions[4][2];
-extern int rook_directions[4][2];
-extern int queen_directions[8][2];
+enum Piece { PAWN = 1, KNIGHT = 2, BISHOP = 3, ROOK = 4, QUEEN = 5, KING = 6 };
 
 struct Move {
-  int fromRow, fromCol;
-  int toRow, toCol;
-  int capturedPiece;
-  int promotion;
-
-  bool prevW_KingSide;
-  bool prevW_QueenSide;
-  bool prevB_KingSide;
-  bool prevB_QueenSide;
-
-  int prevEnPassantCol;
-
-  bool isEnPassant;
-  bool isCastling;
-
-  Move();
+  int8_t fromRow, fromCol, toRow, toCol;
+  int8_t capturedPiece, promotion;
+  bool prevWK, prevWQ, prevBK, prevBQ;
+  int8_t prevEP;
+  bool isEP, isCastle;
+  int score;
+  Move()
+      : fromRow(0), fromCol(0), toRow(0), toCol(0), capturedPiece(0),
+        promotion(0), prevWK(0), prevWQ(0), prevBK(0), prevBQ(0), prevEP(-1),
+        isEP(0), isCastle(0), score(0) {}
 };
 
 class Board {
 public:
-  int pieces_otb[14];
-  int squares[8][8];
-  bool isWhiteTurn;
-
-  bool whiteCanCastleKingSide;
-  bool whiteCanCastleQueenSide;
-  bool blackCanCastleKingSide;
-  bool blackCanCastleQueenSide;
-
-  int whiteKingRow, whiteKingCol;
-  int blackKingRow, blackKingCol;
-  int enPassantCol;
-
-  Bitboard byColor[2];
-  Bitboard byPiece[7];
-
-  Bitboard occupancy() const { return byColor[0] | byColor[1]; }
-  Bitboard pieces(int color) const { return byColor[color]; }
-  Bitboard pieces(int color, int pieceType) const {
-    return byColor[color] & byPiece[pieceType];
-  }
-
+  int8_t squares[64];
+  Bitboard byColor[2], byPiece[7];
+  bool castleWK, castleWQ, castleBK, castleBQ, whiteTurn;
+  int8_t epCol, wKingSq, bKingSq;
   Board();
-  void loadFromFEN(const std::string &fen);
-  void resetBoard();
-  void makeMove(Move &move);
-  void unmakeMove(Move &move);
-
+  void reset();
+  void loadFEN(const std::string &fen);
+  void makeMove(Move &m);
+  void unmakeMove(Move &m);
   void updateBitboards();
-  void setBit(int sq, int piece, int color);
-  void clearBit(int sq, int piece, int color);
+  inline Bitboard occupancy() const { return byColor[0] | byColor[1]; }
+  inline Bitboard pieces(int color, int piece) const {
+    return byColor[color] & byPiece[piece];
+  }
+  inline bool isInsufficientMaterial() const {
+    return !(byPiece[PAWN] | byPiece[ROOK] | byPiece[QUEEN]) &&
+           popcount(occupancy()) <= 3;
+  }
 };
 
-void generate_pawn_moves(const Board &board, int row, int col,
-                         std::vector<Move> &moveList);
-void generate_knight_moves(const Board &board, int row, int col,
-                           std::vector<Move> &moveList);
-void generate_bishop_moves(const Board &board, int row, int col,
-                           std::vector<Move> &moveList);
-void generate_rook_moves(const Board &board, int row, int col,
-                         std::vector<Move> &moveList);
-void generate_queen_moves(const Board &board, int row, int col,
-                          std::vector<Move> &moveList);
-void generate_king_moves(const Board &board, int row, int col,
-                         std::vector<Move> &moveList);
-std::vector<Move> get_all_moves(Board &board, bool isWhiteTurn = true);
-std::vector<Move> get_capture_moves(const Board &board);
-
-bool is_square_attacked(const Board &board, int row, int col,
-                        bool isWhiteAttacker);
-bool is_square_attacked_bb(const Board &board, int sq, bool byWhite);
-int see_exchange(Board &board, Move &move);
-
-void printBoard(const Board &board);
-Move uci_to_move(const std::string &uci);
+std::vector<Move> generateMoves(const Board &b);
+bool isAttacked(const Board &b, int sq, bool byWhite);
+Move parseUCI(const std::string &uci);
+std::string moveToUCI(const Move &m);
 
 struct Zobrist {
-  uint64_t piece[12][64]{};
-  uint64_t castling[16]{};
-  uint64_t epFile[9]{};
-  uint64_t side{};
-
-  static uint64_t splitmix64(uint64_t &x);
+  uint64_t piece[12][64], castling[16], ep[9], side;
   Zobrist();
 };
+uint64_t positionKey(const Board &b);
+bool isRepetition(const std::vector<uint64_t> &hist);
 
-const Zobrist &zobrist();
-int piece_to_zobrist_index(int piece);
-uint64_t position_key(const Board &board);
-bool is_threefold_repetition(const std::vector<uint64_t> &history);
-
-enum TTFlag { EXACT, ALPHA, BETA };
-
-class TranspositionTable {
-public:
-  TranspositionTable() : table(nullptr), size(0) {}
-  ~TranspositionTable() { delete[] table; }
-
-  void resize(int mbSize);
-  void clear();
-
-  void store(uint64_t hash, int score, int depth, TTFlag flag,
-             const Move &bestMove);
-
-  void store(uint64_t hash, int score, int depth, int flag,
-             const Move &bestMove) {
-    store(hash, score, depth, static_cast<TTFlag>(flag), bestMove);
-  }
-
-  bool probe(uint64_t key, int &outScore, int &outDepth, TTFlag &outFlag,
-             Move &outMove) const;
-  size_t entryCount() const { return size; }
-
-private:
-  struct TTAtomicEntry {
-    std::atomic<uint64_t> key{0};
-    std::atomic<uint64_t> data{0};
-  };
-
-  TTAtomicEntry *table;
-  size_t size;
-
-  static uint16_t packMove(const Move &m);
-  static Move unpackMove(uint16_t packed);
-  static uint64_t packData(int score, int depth, TTFlag flag,
-                           uint16_t packedMove);
-  static void unpackData(uint64_t data, int &score, int &depth, TTFlag &flag,
-                         uint16_t &packedMove);
+enum class TTFlag { EXACT, LOWER, UPPER };
+struct TTEntry {
+  std::atomic<uint64_t> key, data;
 };
-
-extern TranspositionTable globalTT;
+struct TT {
+  TTEntry *table = nullptr;
+  size_t size = 0;
+  void resize(int mb);
+  void clear();
+  bool probe(uint64_t k, int &score, int &depth, TTFlag &flag, Move &m);
+  void store(uint64_t k, int score, int depth, TTFlag flag, const Move &m);
+};
+extern TT tt;
 
 #endif
