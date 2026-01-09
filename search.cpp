@@ -287,7 +287,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     int kRow = board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow;
     int kCol = board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol;
     bool inCheck = is_square_attacked(board, kRow, kCol, !board.isWhiteTurn);
-    uint64_t currentHash = position_key(board);
+    uint64_t currentHash = board.currentHash;
     int ttScore = 0;
     int ttDepth = 0;
     TTFlag ttFlag = TTFlag::EXACT;
@@ -352,11 +352,17 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         if (!inCheck && depth >= 3 && (beta - alpha == 1)) {
             // Make a "null move" by flipping side to move
             const int prevEnPassantCol = board.enPassantCol;
+            const uint64_t savedHash = board.currentHash;
+
+            // Hash update for null move: remove old ep, flip side
+            if (prevEnPassantCol != -1) board.currentHash ^= zobrist().epFile[prevEnPassantCol];
+            board.currentHash ^= zobrist().side;
+
             board.enPassantCol = -1; // En passant rights vanish after a null move.
             board.isWhiteTurn = !board.isWhiteTurn;
 
             // Push new position key to history so threefold repetition checks remain correct
-            uint64_t nullHash = position_key(board);
+            uint64_t nullHash = board.currentHash;
             history.push_back(nullHash);
 
             // Reduction factor R (typical values 2..3). Ensure we don't search negative depth
@@ -368,6 +374,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             if (!history.empty()) history.pop_back();
             board.isWhiteTurn = !board.isWhiteTurn;
             board.enPassantCol = prevEnPassantCol;
+            board.currentHash = savedHash;
 
             if (nullScore >= beta) {
                 pvLine.clear();
@@ -414,7 +421,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         board.makeMove(move);
         movesSearched++;
         std::vector<Move> childPv;
-        uint64_t newHash = position_key(board);
+        uint64_t newHash = board.currentHash;
         history.push_back(newHash);
         if (firstMove){
             eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
@@ -586,7 +593,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
                 std::vector<Move> childPv;
 
-                uint64_t newHash = position_key(board);
+                uint64_t newHash = board.currentHash;
                 localHistory.push_back(newHash);
                 int val = -negamax(board, depth - 1, -beta, -alpha, ply + 1, localHistory, childPv);
                 localHistory.pop_back();

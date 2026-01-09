@@ -209,7 +209,7 @@ int main(int argc, char* argv[]) {
             globalTT.clear();
             board.resetBoard();
             gameHistory.clear();
-            gameHistory.push_back(position_key(board));
+            gameHistory.push_back(board.currentHash);
         }
 
         else if (line.substr(0, 8) == "position") {
@@ -229,7 +229,7 @@ int main(int argc, char* argv[]) {
                 board.loadFromFEN(fenStr);
             }
             gameHistory.clear();
-            gameHistory.push_back(position_key(board));
+            gameHistory.push_back(board.currentHash);
             
             size_t movesPos = line.find("moves");
             if (movesPos != std::string::npos) {
@@ -241,7 +241,7 @@ int main(int argc, char* argv[]) {
                 while (ss >> moveToken) {
                     Move m = uci_to_move(moveToken);
                     board.makeMove(m);
-                    gameHistory.push_back(position_key(board));
+                    gameHistory.push_back(board.currentHash);
                 }
             }
         }
