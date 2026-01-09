@@ -12,14 +12,14 @@
 int MATE_SCORE = 100000;
 
 // Global search tuning knobs. Updated via set_search_params for A/B tests.
-// Next test profile: LMR on, qsearch SEE on, LMP+Aspiration on.
+// Next test profile (more conservative): LMR ON but softer reductions, LMP OFF, Aspiration ON, qsearch SEE OFF.
 static SearchParams gSearchParams{
     /*use_lmr=*/true,
-    /*use_lmp=*/true,
+    /*use_lmp=*/false,
     /*use_aspiration=*/true,
-    /*use_qsearch_see=*/true,
+    /*use_qsearch_see=*/false,
     /*lmr_min_depth=*/3,
-    /*lmr_min_moves=*/4,
+    /*lmr_min_moves=*/6,
     /*lmp_min_depth=*/4,
     /*lmp_max_depth=*/8,
     /*aspiration_delta=*/50
@@ -423,7 +423,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             int reduction = 0;
             std::vector<Move> nullWindowPv;
             if (gSearchParams.use_lmr && move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && depth >= gSearchParams.lmr_min_depth && movesSearched > gSearchParams.lmr_min_moves) {
-                reduction = 1 + (depth / 6); // Increase reduction with depth
+                reduction = 1 + (depth / 8); // Slightly softer reduction to avoid over-pruning
 
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we don't search negative depth
             }
