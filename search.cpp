@@ -11,28 +11,6 @@
 
 int MATE_SCORE = 100000;
 
-// Global search tuning knobs. Updated via set_search_params for A/B tests.
-// Next test profile: LMR ON (soft), LMP ON, Aspiration ON (restored), qsearch SEE OFF.
-static SearchParams gSearchParams{
-    /*use_lmr=*/true,
-    /*use_lmp=*/true,
-    /*use_aspiration=*/true,
-    /*use_qsearch_see=*/true,
-    /*lmr_min_depth=*/3,
-    /*lmr_min_moves=*/6,
-    /*lmp_min_depth=*/4,
-    /*lmp_max_depth=*/8,
-    /*aspiration_delta=*/50
-};
-
-const SearchParams& get_search_params() {
-    return gSearchParams;
-}
-
-void set_search_params(const SearchParams& params) {
-    gSearchParams = params;
-}
-
 int historyTable[64][64];
 
 const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
@@ -82,8 +60,8 @@ static bool is_square_attacked_otf(const Board& board, int row, int col, bool by
     if (knight_attacks[sq] & knights) return true;
     if (king_attacks[sq] & kings) return true;
 
-    if (bishop_attacks_otf(sq, occ) & (bishops | queens)) return true;
-    if (rook_attacks_otf(sq, occ) & (rooks | queens)) return true;
+    if (bishop_attacks_on_the_fly(sq, occ) & (bishops | queens)) return true;
+    if (rook_attacks_on_the_fly(sq, occ) & (rooks | queens)) return true;
 
     return false;
 }
@@ -221,12 +199,9 @@ int quiescence(Board& board, int alpha, int beta, int ply){
     });
 
     for (Move& move : captureMoves) {
-        // Optional SEE-based pruning for quiescence (off by default for testing).
-        if (gSearchParams.use_qsearch_see) {
-            Move seeMove = move;
-            if (see_exchange(board, seeMove) < -100) {
-                continue;
-            }
+        int seeValue = see_exchange(board, move);
+        if (seeValue < 0) {
+            continue; // Bad capture, skip it
         }
 
         // Delta Pruning
@@ -237,11 +212,14 @@ int quiescence(Board& board, int alpha, int beta, int ply){
         }
 
         board.makeMove(move);
-        // Legality check: after makeMove, side to move flipped. Ensure the side that just moved is not in check.
-        bool sideJustMovedIsWhite = !board.isWhiteTurn;
-        int kingRow = sideJustMovedIsWhite ? board.whiteKingRow : board.blackKingRow;
-        int kingCol = sideJustMovedIsWhite ? board.whiteKingCol : board.blackKingCol;
-
+        int kingRow = 0;
+        int kingCol = 0;
+        bool checkBlackKing = board.isWhiteTurn;
+        if (!king_square(board, !checkBlackKing, kingRow, kingCol)) {
+            board.unmakeMove(move);
+            continue;
+        }
+        
         if (is_square_attacked(board, kingRow, kingCol, board.isWhiteTurn)) {
             board.unmakeMove(move);
             continue; // illegal move
@@ -268,7 +246,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         return 0; // Search was stopped
     }
 
-    const bool ttEnabled = true;
     bool pvNode = (beta - alpha) > 1;
     bool firstMove = true;
     const int alphaOrig = alpha;
@@ -284,16 +261,22 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         pvLine.clear();
         return 0; // Draw
     }
-    int kRow = board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow;
-    int kCol = board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol;
+    int kRow = 0;
+    int kCol = 0;
+    if (!king_square(board, board.isWhiteTurn, kRow, kCol)) {
+        pvLine.clear();
+        return 0;
+    }
     bool inCheck = is_square_attacked(board, kRow, kCol, !board.isWhiteTurn);
-    uint64_t currentHash = board.currentHash;
+    uint64_t currentHash = position_key(board);
     int ttScore = 0;
     int ttDepth = 0;
     TTFlag ttFlag = TTFlag::EXACT;
     Move ttMove;
     bool ttHit = false;
-    ttHit = globalTT.probe(currentHash, ttScore, ttDepth, ttFlag, ttMove);
+    if (use_tt.load(std::memory_order_relaxed)) {
+        ttHit = globalTT.probe(currentHash, ttScore, ttDepth, ttFlag, ttMove);
+    }
 
     int movesSearched = 0;
     int eval = -MATE_VALUE;
@@ -344,25 +327,24 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     // Null move pruning
     {
-        int kingRow = board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow;
-        int kingCol = board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol;
+        int kingRow = 0;
+        int kingCol = 0;
+        if (!king_square(board, board.isWhiteTurn, kingRow, kingCol)) {
+            pvLine.clear();
+            return 0;
+        }
         // Check if side to move is currently in check
         bool inCheck = is_square_attacked(board, kingRow, kingCol, !board.isWhiteTurn);
 
         if (!inCheck && depth >= 3 && (beta - alpha == 1)) {
             // Make a "null move" by flipping side to move
             const int prevEnPassantCol = board.enPassantCol;
-            const uint64_t savedHash = board.currentHash;
-
-            // Hash update for null move: remove old ep, flip side
-            if (prevEnPassantCol != -1) board.currentHash ^= zobrist().epFile[prevEnPassantCol];
-            board.currentHash ^= zobrist().side;
 
             board.enPassantCol = -1; // En passant rights vanish after a null move.
             board.isWhiteTurn = !board.isWhiteTurn;
 
             // Push new position key to history so threefold repetition checks remain correct
-            uint64_t nullHash = board.currentHash;
+            uint64_t nullHash = position_key(board);
             history.push_back(nullHash);
 
             // Reduction factor R (typical values 2..3). Ensure we don't search negative depth
@@ -374,7 +356,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             if (!history.empty()) history.pop_back();
             board.isWhiteTurn = !board.isWhiteTurn;
             board.enPassantCol = prevEnPassantCol;
-            board.currentHash = savedHash;
 
             if (nullScore >= beta) {
                 pvLine.clear();
@@ -387,8 +368,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     Move bestMove = possibleMoves.empty() ? Move() : possibleMoves[0];
 
     if (possibleMoves.empty()) {
-        int kingRow = board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow;
-        int kingCol = board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol;
+        int kingRow = 0;
+        int kingCol = 0;
+        if (!king_square(board, board.isWhiteTurn, kingRow, kingCol)) {
+            return 0;
+        }
         if (is_square_attacked(board, kingRow, kingCol, !board.isWhiteTurn)) 
             return -MATE_VALUE + ply; // Mate
         return 0; // Stalemate
@@ -402,9 +386,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     
     for (Move& move : possibleMoves) {
         int lmpCount = (3 * depth * depth) + 4;
-        if (gSearchParams.use_lmp && !pvNode && depth >= gSearchParams.lmp_min_depth && depth <= gSearchParams.lmp_max_depth && movesSearched >= lmpCount && !inCheck && move.promotion == 0 && move.capturedPiece == 0) {
+        // Late Move Pruning (LMP) logic
+        if (!pvNode && depth > 3 && depth < 8 && movesSearched >= lmpCount && !inCheck && move.promotion == 0 && move.capturedPiece == 0) {
             if (!move.isEnPassant) {
                 bool isKiller = false;
+                // Checking if the move is a killer move, they are important so we should not prune them
                 if (ply < 100) {
                     if (move.fromCol == killerMove[0][ply].fromCol && move.fromRow == killerMove[0][ply].fromRow &&
                         move.toCol == killerMove[0][ply].toCol && move.toRow == killerMove[0][ply].toRow) isKiller = true;
@@ -413,7 +399,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 }
                 
                 if (!isKiller) {
-                    continue;
+                    continue; // skip this move (late move pruning)
                 }
             }
         }
@@ -421,7 +407,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         board.makeMove(move);
         movesSearched++;
         std::vector<Move> childPv;
-        uint64_t newHash = board.currentHash;
+        uint64_t newHash = position_key(board);
         history.push_back(newHash);
         if (firstMove){
             eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
@@ -431,8 +417,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             // Late Move Reduction (LMR)
             int reduction = 0;
             std::vector<Move> nullWindowPv;
-            if (gSearchParams.use_lmr && move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && depth >= gSearchParams.lmr_min_depth && movesSearched > gSearchParams.lmr_min_moves) {
-                reduction = 1 + (depth / 8); // Slightly softer reduction to avoid over-pruning
+            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && depth >= 3 && movesSearched > 4) {
+                reduction = 1 + (depth / 6); // Increase reduction with depth
 
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we don't search negative depth
             }
@@ -490,7 +476,9 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     else if (maxEval >= beta) flag = BETA;
     else flag = EXACT;
     
-    globalTT.store(currentHash, maxEval, depth, flag, bestMove);
+    if (use_tt.load(std::memory_order_relaxed)) {
+        globalTT.store(currentHash, maxEval, depth, flag, bestMove);
+    }
     return maxEval;
 }
 
@@ -540,15 +528,13 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
         if (stop_search.load(std::memory_order_relaxed)) break;
 
-        const bool useAsp = gSearchParams.use_aspiration;
-        const int INF = 2000000000;
-        int delta = gSearchParams.aspiration_delta; // Aspiration window half-width
-        int alpha = -INF;
-        int beta = INF;
-
-        if (useAsp && depth > 1) {
-            alpha = std::max(-INF, lastScore - delta);
-            beta = std::min(INF, lastScore + delta);
+        int delta = 50; // Aspiration window margin
+        int alpha = -2000000000;
+        int beta = 2000000000;
+        
+        if (depth >= 5){
+            alpha = std::max(-2000000000, lastScore - delta);
+            beta = std::min(2000000000, lastScore + delta);
         }
         while (true) {
             const int alphaStart = alpha;
@@ -582,7 +568,6 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             }
 
             std::vector<Move> bestPvForDepth;
-            bestPvForDepth.reserve(depth + 4);
             for (Move move : possibleMoves) {
                 if (stop_search.load(std::memory_order_relaxed)) {
                     thisDepthCompleted = false;
@@ -593,7 +578,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
                 std::vector<Move> childPv;
 
-                uint64_t newHash = board.currentHash;
+                uint64_t newHash = position_key(board);
                 localHistory.push_back(newHash);
                 int val = -negamax(board, depth - 1, -beta, -alpha, ply + 1, localHistory, childPv);
                 localHistory.pop_back();
@@ -627,10 +612,10 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             }
 
             // Aspiration window re-search logic
-            if (useAsp && depth >= 5 && (bestValue <= alphaStart || bestValue >= betaStart)) {
+            if (depth >= 5 && (bestValue <= alphaStart || bestValue >= betaStart)) {
                 // Fail-low or fail-high: widen the window and re-search this depth.
-                alpha = std::max(-INF, bestValue - delta);
-                beta = std::min(INF, bestValue + delta);
+                alpha = std::max(-2000000000, bestValue - delta);
+                beta = std::min(2000000000, bestValue + delta);
                 delta += delta / 2;
                 continue; // Restart the depth search
             }
@@ -646,7 +631,27 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                 if (duration > 0) {
                     nps = (getNodeCounter() * 1000LL) / duration;
                 }
-                std::cout << "score cp " << bestValue;
+                bool mateConfirmed = false;
+                if (std::abs(bestValue) >= MATE_SCORE - 1000) {
+                    board.makeMove(bestMoveSoFar);
+                    int kRow = 0;
+                    int kCol = 0;
+                    if (!king_square(board, board.isWhiteTurn, kRow, kCol)) {
+                        board.unmakeMove(bestMoveSoFar);
+                    } else {
+                        bool inCheck = is_square_attacked_otf(board, kRow, kCol, !board.isWhiteTurn);
+                        std::vector<Move> replies = get_all_moves(board, board.isWhiteTurn);
+                        mateConfirmed = inCheck && replies.empty();
+                        board.unmakeMove(bestMoveSoFar);
+                    }
+                }
+                if (mateConfirmed) {
+                    int mateIn = (MATE_SCORE - std::abs(bestValue) + 1) / 2;
+                    if (bestValue < 0) mateIn = -mateIn;
+                    std::cout << "score mate " << mateIn;
+                } else {
+                    std::cout << "score cp " << bestValue;
+                }
                 std::cout << " time " << duration
                             << " nps " << nps
                             << " pv ";

@@ -70,211 +70,244 @@ inline bool is_square_attacked_bb(const Board& board, int sq, bool byWhite) {
     return false;
 }
 
-/*
------------------------------------
-|         MOVE GENERATION         |
------------------------------------
-*/
+} // namespace
 
-static inline void generate_moves_bb(const Board& board, std::vector<Move>& moves) {
-    int source_square = 0;
-    int target_square = 0;
-    Bitboard bitboard = 0ULL;
-    Bitboard attacks = 0ULL;
-
+void generate_pawn_moves_bb(const Board& board, std::vector<Move>& moves) {
     const bool whiteToMove = board.isWhiteTurn;
     const int us = whiteToMove ? WHITE : BLACK;
-    const int them = whiteToMove ? BLACK : WHITE;
-    const Bitboard own = board.color[us];
-    const Bitboard opp = board.color[them];
-    const Bitboard occ = board_occupancy(board);
 
-    // pawns
-    bitboard = board.piece[pawn - 1] & own;
-    while (bitboard) {
-        source_square = lsb(bitboard);
-        bitboard &= bitboard - 1;
+    Bitboard own = board.color[us];
+    Bitboard opp = board.color[whiteToMove ? BLACK : WHITE];
+    Bitboard pawns = board.piece[pawn - 1] & own;
+    Bitboard empty = ~(own | opp);
 
-        target_square = whiteToMove ? (source_square + 8) : (source_square - 8);
-        if (target_square >= 0 && target_square < 64) {
-            Bitboard toMask = 1ULL << target_square;
-            if ((occ & toMask) == 0) {
-                bool isPromo = whiteToMove ? (source_square >= 48) : (source_square <= 15);
+    while (pawns) {
+        int from = lsb(pawns);
+        pawns &= pawns - 1;
+
+        int to = whiteToMove ? (from + 8) : (from - 8);
+        if (to >= 0 && to < 64) {
+            Bitboard toMask = 1ULL << to;
+            if (empty & toMask) {
+                bool isPromo = whiteToMove ? (from >= 48) : (from <= 15);
                 if (isPromo) {
                     for (int promo : {queen, rook, bishop, knight}) {
-                        push_move(moves, source_square, target_square, 0, promo, false);
+                        push_move(moves, from, to, 0, promo, false);
                     }
                 } else {
-                    push_move(moves, source_square, target_square);
-                    bool onStartRank = whiteToMove ? (source_square >= 8 && source_square <= 15)
-                                                   : (source_square >= 48 && source_square <= 55);
+                    push_move(moves, from, to);
+                    bool onStartRank = whiteToMove ? (from >= 8 && from <= 15) : (from >= 48 && from <= 55);
                     if (onStartRank) {
-                        int to2 = whiteToMove ? (source_square + 16) : (source_square - 16);
+                        int to2 = whiteToMove ? (from + 16) : (from - 16);
                         Bitboard to2Mask = 1ULL << to2;
-                        if ((occ & to2Mask) == 0) {
-                            push_move(moves, source_square, to2);
+                        if (empty & to2Mask) {
+                            push_move(moves, from, to2);
                         }
                     }
                 }
             }
         }
 
-        attacks = pawn_attacks[us][source_square] & opp;
+        Bitboard attacks = pawn_attacks[us][from] & opp;
         while (attacks) {
-            target_square = lsb(attacks);
+            int capSq = lsb(attacks);
             attacks &= attacks - 1;
-            int captured = piece_on_square_bb(board, target_square);
+            int captured = piece_on_square_bb(board, capSq);
             if (is_king_piece(captured)) continue;
-            bool isPromo = whiteToMove ? (target_square >= 56) : (target_square <= 7);
+            bool isPromo = whiteToMove ? (capSq >= 56) : (capSq <= 7);
             if (isPromo) {
                 for (int promo : {queen, rook, bishop, knight}) {
-                    push_move(moves, source_square, target_square, captured, promo, false);
+                    push_move(moves, from, capSq, captured, promo, false);
                 }
             } else {
-                push_move(moves, source_square, target_square, captured, 0, false);
+                push_move(moves, from, capSq, captured, 0, false);
             }
         }
 
         if (board.enPassantCol != -1) {
             int epRow = whiteToMove ? 2 : 5;
             int epSq = row_col_to_sq(epRow, board.enPassantCol);
-            if (pawn_attacks[us][source_square] & (1ULL << epSq)) {
+            if (pawn_attacks[us][from] & (1ULL << epSq)) {
                 int captured = whiteToMove ? -pawn : pawn;
-                push_move(moves, source_square, epSq, captured, 0, true);
-            }
-        }
-    }
-
-    // knights
-    bitboard = board.piece[knight - 1] & own;
-    while (bitboard) {
-        source_square = lsb(bitboard);
-        bitboard &= bitboard - 1;
-
-        attacks = knight_attacks[source_square] & ~own;
-        while (attacks) {
-            target_square = lsb(attacks);
-            attacks &= attacks - 1;
-            int captured = (opp & (1ULL << target_square)) ? piece_on_square_bb(board, target_square) : 0;
-            if (is_king_piece(captured)) continue;
-            push_move(moves, source_square, target_square, captured, 0, false);
-        }
-    }
-
-    // bishops
-    bitboard = board.piece[bishop - 1] & own;
-    while (bitboard) {
-        source_square = lsb(bitboard);
-        bitboard &= bitboard - 1;
-
-        attacks = get_bishop_attacks(source_square, occ) & ~own;
-        while (attacks) {
-            target_square = lsb(attacks);
-            attacks &= attacks - 1;
-            int captured = (opp & (1ULL << target_square)) ? piece_on_square_bb(board, target_square) : 0;
-            if (is_king_piece(captured)) continue;
-            push_move(moves, source_square, target_square, captured, 0, false);
-        }
-    }
-
-    // rooks
-    bitboard = board.piece[rook - 1] & own;
-    while (bitboard) {
-        source_square = lsb(bitboard);
-        bitboard &= bitboard - 1;
-
-        attacks = get_rook_attacks(source_square, occ) & ~own;
-        while (attacks) {
-            target_square = lsb(attacks);
-            attacks &= attacks - 1;
-            int captured = (opp & (1ULL << target_square)) ? piece_on_square_bb(board, target_square) : 0;
-            if (is_king_piece(captured)) continue;
-            push_move(moves, source_square, target_square, captured, 0, false);
-        }
-    }
-
-    // queens
-    bitboard = board.piece[queen - 1] & own;
-    while (bitboard) {
-        source_square = lsb(bitboard);
-        bitboard &= bitboard - 1;
-
-        attacks = get_queen_attacks(source_square, occ) & ~own;
-        while (attacks) {
-            target_square = lsb(attacks);
-            attacks &= attacks - 1;
-            int captured = (opp & (1ULL << target_square)) ? piece_on_square_bb(board, target_square) : 0;
-            if (is_king_piece(captured)) continue;
-            push_move(moves, source_square, target_square, captured, 0, false);
-        }
-    }
-
-    // kings
-    bitboard = board.piece[king - 1] & own;
-    if (bitboard) {
-        source_square = lsb(bitboard);
-        attacks = king_attacks[source_square] & ~own;
-        while (attacks) {
-            target_square = lsb(attacks);
-            attacks &= attacks - 1;
-            int captured = (opp & (1ULL << target_square)) ? piece_on_square_bb(board, target_square) : 0;
-            if (is_king_piece(captured)) continue;
-            push_move(moves, source_square, target_square, captured, 0, false);
-        }
-
-        const bool opponentIsWhite = !whiteToMove;
-        if (whiteToMove && source_square == 4) {
-            if (board.whiteCanCastleKingSide) {
-                const Bitboard emptyMask = (1ULL << 5) | (1ULL << 6);
-                const bool rookPresent = (board.piece[rook - 1] & board.color[WHITE]) & (1ULL << 7);
-                if ((occ & emptyMask) == 0 &&
-                    !is_square_attacked_bb(board, 4, opponentIsWhite) &&
-                    !is_square_attacked_bb(board, 5, opponentIsWhite) &&
-                    !is_square_attacked_bb(board, 6, opponentIsWhite) &&
-                    rookPresent) {
-                    push_move(moves, 4, 6, 0, 0, false, true);
-                }
-            }
-            if (board.whiteCanCastleQueenSide) {
-                const Bitboard emptyMask = (1ULL << 1) | (1ULL << 2) | (1ULL << 3);
-                const bool rookPresent = (board.piece[rook - 1] & board.color[WHITE]) & (1ULL << 0);
-                if ((occ & emptyMask) == 0 &&
-                    !is_square_attacked_bb(board, 4, opponentIsWhite) &&
-                    !is_square_attacked_bb(board, 3, opponentIsWhite) &&
-                    !is_square_attacked_bb(board, 2, opponentIsWhite) &&
-                    rookPresent) {
-                    push_move(moves, 4, 2, 0, 0, false, true);
-                }
-            }
-        }
-
-        if (!whiteToMove && source_square == 60) {
-            if (board.blackCanCastleKingSide) {
-                const Bitboard emptyMask = (1ULL << 61) | (1ULL << 62);
-                const bool rookPresent = (board.piece[rook - 1] & board.color[BLACK]) & (1ULL << 63);
-                if ((occ & emptyMask) == 0 &&
-                    !is_square_attacked_bb(board, 60, opponentIsWhite) &&
-                    !is_square_attacked_bb(board, 61, opponentIsWhite) &&
-                    !is_square_attacked_bb(board, 62, opponentIsWhite) &&
-                    rookPresent) {
-                    push_move(moves, 60, 62, 0, 0, false, true);
-                }
-            }
-            if (board.blackCanCastleQueenSide) {
-                const Bitboard emptyMask = (1ULL << 57) | (1ULL << 58) | (1ULL << 59);
-                const bool rookPresent = (board.piece[rook - 1] & board.color[BLACK]) & (1ULL << 56);
-                if ((occ & emptyMask) == 0 &&
-                    !is_square_attacked_bb(board, 60, opponentIsWhite) &&
-                    !is_square_attacked_bb(board, 59, opponentIsWhite) &&
-                    !is_square_attacked_bb(board, 58, opponentIsWhite) &&
-                    rookPresent) {
-                    push_move(moves, 60, 58, 0, 0, false, true);
-                }
+                push_move(moves, from, epSq, captured, 0, true);
             }
         }
     }
 }
-} // namespace
+
+void generate_knight_moves_bb(const Board& board, std::vector<Move>& moves) {
+    const bool whiteToMove = board.isWhiteTurn;
+    const int us = whiteToMove ? WHITE : BLACK;
+    const int them = whiteToMove ? BLACK : WHITE;
+
+    Bitboard own = board.color[us];
+    Bitboard opp = board.color[them];
+    Bitboard knights = board.piece[knight - 1] & own;
+
+    while (knights) {
+        int from = lsb(knights);
+        knights &= knights - 1;
+
+        Bitboard targets = knight_attacks[from] & ~own;
+        while (targets) {
+            int to = lsb(targets);
+            targets &= targets - 1;
+            int captured = (opp & (1ULL << to)) ? piece_on_square_bb(board, to) : 0;
+            if (is_king_piece(captured)) continue;
+            push_move(moves, from, to, captured, 0, false);
+        }
+    }
+}
+
+void generate_bishop_moves_bb(const Board& board, std::vector<Move>& moves) {
+    const bool whiteToMove = board.isWhiteTurn;
+    const int us = whiteToMove ? WHITE : BLACK;
+    const int them = whiteToMove ? BLACK : WHITE;
+
+    Bitboard own = board.color[us];
+    Bitboard opp = board.color[them];
+    Bitboard bishops = board.piece[bishop - 1] & own;
+    Bitboard occ = board_occupancy(board);
+
+    while (bishops) {
+        int from = lsb(bishops);
+        bishops &= bishops - 1;
+
+        Bitboard targets = get_bishop_attacks(from, occ) & ~own;
+        while (targets) {
+            int to = lsb(targets);
+            targets &= targets - 1;
+            int captured = (opp & (1ULL << to)) ? piece_on_square_bb(board, to) : 0;
+            if (is_king_piece(captured)) continue;
+            push_move(moves, from, to, captured, 0, false);
+        }
+    }
+}
+
+void generate_rook_moves_bb(const Board& board, std::vector<Move>& moves) {
+    const bool whiteToMove = board.isWhiteTurn;
+    const int us = whiteToMove ? WHITE : BLACK;
+    const int them = whiteToMove ? BLACK : WHITE;
+
+    Bitboard own = board.color[us];
+    Bitboard opp = board.color[them];
+    Bitboard rooks = board.piece[rook - 1] & own;
+    Bitboard occ = board_occupancy(board);
+
+    while (rooks) {
+        int from = lsb(rooks);
+        rooks &= rooks - 1;
+
+        Bitboard targets = get_rook_attacks(from, occ) & ~own;
+        while (targets) {
+            int to = lsb(targets);
+            targets &= targets - 1;
+            int captured = (opp & (1ULL << to)) ? piece_on_square_bb(board, to) : 0;
+            if (is_king_piece(captured)) continue;
+            push_move(moves, from, to, captured, 0, false);
+        }
+    }
+}
+
+void generate_queen_moves_bb(const Board& board, std::vector<Move>& moves) {
+    const bool whiteToMove = board.isWhiteTurn;
+    const int us = whiteToMove ? WHITE : BLACK;
+    const int them = whiteToMove ? BLACK : WHITE;
+
+    Bitboard own = board.color[us];
+    Bitboard opp = board.color[them];
+    Bitboard queens = board.piece[queen - 1] & own;
+    Bitboard occ = board_occupancy(board);
+
+    while (queens) {
+        int from = lsb(queens);
+        queens &= queens - 1;
+
+        Bitboard targets = (get_bishop_attacks(from, occ) | get_rook_attacks(from, occ)) & ~own;
+        while (targets) {
+            int to = lsb(targets);
+            targets &= targets - 1;
+            int captured = (opp & (1ULL << to)) ? piece_on_square_bb(board, to) : 0;
+            if (is_king_piece(captured)) continue;
+            push_move(moves, from, to, captured, 0, false);
+        }
+    }
+}
+
+void generate_king_moves_bb(const Board& board, std::vector<Move>& moves) {
+    const bool whiteToMove = board.isWhiteTurn;
+    const int us = whiteToMove ? WHITE : BLACK;
+    const int them = whiteToMove ? BLACK : WHITE;
+
+    Bitboard own = board.color[us];
+    Bitboard opp = board.color[them];
+    Bitboard kings = board.piece[king - 1] & own;
+    if (!kings) return;
+
+    int from = lsb(kings);
+
+    Bitboard targets = king_attacks[from] & ~own;
+    while (targets) {
+        int to = lsb(targets);
+        targets &= targets - 1;
+        int captured = (opp & (1ULL << to)) ? piece_on_square_bb(board, to) : 0;
+        if (is_king_piece(captured)) continue;
+        push_move(moves, from, to, captured, 0, false);
+    }
+
+    Bitboard occ = board_occupancy(board);
+    const bool opponentIsWhite = !whiteToMove;
+
+    if (whiteToMove && from == 4) {
+        if (board.whiteCanCastleKingSide) {
+            const Bitboard emptyMask = (1ULL << 5) | (1ULL << 6);
+            const bool rookPresent = (board.piece[rook - 1] & board.color[WHITE]) & (1ULL << 7);
+            if ((occ & emptyMask) == 0 &&
+                !is_square_attacked_bb(board, 4, opponentIsWhite) &&
+                !is_square_attacked_bb(board, 5, opponentIsWhite) &&
+                !is_square_attacked_bb(board, 6, opponentIsWhite) &&
+                rookPresent) {
+                push_move(moves, 4, 6, 0, 0, false, true);
+            }
+        }
+        if (board.whiteCanCastleQueenSide) {
+            const Bitboard emptyMask = (1ULL << 1) | (1ULL << 2) | (1ULL << 3);
+            const bool rookPresent = (board.piece[rook - 1] & board.color[WHITE]) & (1ULL << 0);
+            if ((occ & emptyMask) == 0 &&
+                !is_square_attacked_bb(board, 4, opponentIsWhite) &&
+                !is_square_attacked_bb(board, 3, opponentIsWhite) &&
+                !is_square_attacked_bb(board, 2, opponentIsWhite) &&
+                rookPresent) {
+                push_move(moves, 4, 2, 0, 0, false, true);
+            }
+        }
+    }
+
+    if (!whiteToMove && from == 60) {
+        if (board.blackCanCastleKingSide) {
+            const Bitboard emptyMask = (1ULL << 61) | (1ULL << 62);
+            const bool rookPresent = (board.piece[rook - 1] & board.color[BLACK]) & (1ULL << 63);
+            if ((occ & emptyMask) == 0 &&
+                !is_square_attacked_bb(board, 60, opponentIsWhite) &&
+                !is_square_attacked_bb(board, 61, opponentIsWhite) &&
+                !is_square_attacked_bb(board, 62, opponentIsWhite) &&
+                rookPresent) {
+                push_move(moves, 60, 62, 0, 0, false, true);
+            }
+        }
+        if (board.blackCanCastleQueenSide) {
+            const Bitboard emptyMask = (1ULL << 57) | (1ULL << 58) | (1ULL << 59);
+            const bool rookPresent = (board.piece[rook - 1] & board.color[BLACK]) & (1ULL << 56);
+            if ((occ & emptyMask) == 0 &&
+                !is_square_attacked_bb(board, 60, opponentIsWhite) &&
+                !is_square_attacked_bb(board, 59, opponentIsWhite) &&
+                !is_square_attacked_bb(board, 58, opponentIsWhite) &&
+                rookPresent) {
+                push_move(moves, 60, 58, 0, 0, false, true);
+            }
+        }
+    }
+}
 
 bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttacker) {
     int sq = row_col_to_sq(row, col);
@@ -288,7 +321,12 @@ std::vector<Move> get_all_moves(Board& board, bool isWhiteTurn) {
     (void)isWhiteTurn;
     const bool sideToMove = board.isWhiteTurn;
 
-    generate_moves_bb(board, pseudoMoves);
+    generate_pawn_moves_bb(board, pseudoMoves);
+    generate_knight_moves_bb(board, pseudoMoves);
+    generate_bishop_moves_bb(board, pseudoMoves);
+    generate_rook_moves_bb(board, pseudoMoves);
+    generate_queen_moves_bb(board, pseudoMoves);
+    generate_king_moves_bb(board, pseudoMoves);
 
     for (auto& m : pseudoMoves) {
         board.makeMove(m);
@@ -312,7 +350,12 @@ std::vector<Move> get_capture_moves(const Board& board) {
     std::vector<Move> pseudoMoves;
     pseudoMoves.reserve(128);
 
-    generate_moves_bb(board, pseudoMoves);
+    generate_pawn_moves_bb(board, pseudoMoves);
+    generate_knight_moves_bb(board, pseudoMoves);
+    generate_bishop_moves_bb(board, pseudoMoves);
+    generate_rook_moves_bb(board, pseudoMoves);
+    generate_queen_moves_bb(board, pseudoMoves);
+    generate_king_moves_bb(board, pseudoMoves);
 
     for (auto& m : pseudoMoves) {
         if (m.capturedPiece != 0 || m.isEnPassant) {

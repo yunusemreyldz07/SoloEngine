@@ -669,8 +669,8 @@ static Bitboard attackers_to_sq(Bitboard pieces[2][6], int sq, int side, Bitboar
     attackers |= ((side == WHITE) ? pawn_attacks[BLACK][sq] : pawn_attacks[WHITE][sq]) & pieces[side][pawn - 1];
     attackers |= knight_attacks[sq] & pieces[side][knight - 1];
     attackers |= king_attacks[sq] & pieces[side][king - 1];
-    attackers |= bishop_attacks_otf(sq, occ) & (pieces[side][bishop - 1] | pieces[side][queen - 1]);
-    attackers |= rook_attacks_otf(sq, occ) & (pieces[side][rook - 1] | pieces[side][queen - 1]);
+    attackers |= bishop_attacks_on_the_fly(sq, occ) & (pieces[side][bishop - 1] | pieces[side][queen - 1]);
+    attackers |= rook_attacks_on_the_fly(sq, occ) & (pieces[side][rook - 1] | pieces[side][queen - 1]);
     return attackers;
 }
 

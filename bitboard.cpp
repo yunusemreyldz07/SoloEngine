@@ -5,6 +5,9 @@
 #include <fstream>
 #include <string.h>
 
+#define BISHOP 0
+#define ROOK 1
+
 // Constants and enums
 #define no_sq 64
 
@@ -151,8 +154,8 @@ U64 mask_knight_attacks(int square);
 U64 mask_king_attacks(int square);
 U64 mask_bishop_attacks(int square);
 U64 mask_rook_attacks(int square);
-U64 bishop_attacks_otf(int square, U64 block);
-U64 rook_attacks_otf(int square, U64 block);
+U64 bishop_attacks_on_the_fly(int square, U64 block);
+U64 rook_attacks_on_the_fly(int square, U64 block);
 U64 set_occupancy(int index, int bits_in_mask, U64 attack_mask);
 U64 find_magic_number(int square, int relevant_bits, int bishop);
 
@@ -223,10 +226,10 @@ void init_slider_attacks(int bishop) {
             if (bishop) {
                 U64 occupancy = set_occupancy(index, relevant_bits_count, attack_mask);
                 magic_index = (int)((occupancy * bishop_magic_numbers[square]) >> (64 - bishop_relevant_bits[square]));
-                bishop_attacks[square][magic_index] = bishop_attacks_otf(square, occupancy);
+                bishop_attacks[square][magic_index] = bishop_attacks_on_the_fly(square, occupancy);
             } else {
                 magic_index = (int)((occupancy * rook_magic_numbers[square]) >> (64 - rook_relevant_bits[square]));
-                rook_attacks[square][magic_index] = rook_attacks_otf(square, occupancy);
+                rook_attacks[square][magic_index] = rook_attacks_on_the_fly(square, occupancy);
             }
         }
     }
@@ -238,6 +241,11 @@ void init_all() {
     init_slider_attacks(ROOK);
     init_char_pieces();
     // init_magic_numbers();
+}
+
+// Compatibility wrapper matching newer initialization name
+void init_bitboards() {
+    init_all();
 }
 
 // Printing
@@ -534,6 +542,11 @@ U64 bishop_attacks_otf(int square, U64 block) {
     return attacks;
 }
 
+// Wrapper for updated API name
+U64 bishop_attacks_on_the_fly(int square, U64 block) {
+    return bishop_attacks_otf(square, block);
+}
+
 U64 rook_attacks_otf(int square, U64 block) {
     U64 attacks = 0ULL;
     int r, f;
@@ -558,6 +571,11 @@ U64 rook_attacks_otf(int square, U64 block) {
     }
 
     return attacks;
+}
+
+// Wrapper for updated API name
+U64 rook_attacks_on_the_fly(int square, U64 block) {
+    return rook_attacks_otf(square, block);
 }
 
 // Occupancy helpers

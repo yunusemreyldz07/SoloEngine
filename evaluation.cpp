@@ -7,7 +7,7 @@ namespace {
 
 constexpr int OTHER(int side) { return side ^ 1; }
 
-// Vertical flip for A1=0 .. H8=63 indexing.
+// Vertical flip for A8=0 .. H1=63 indexing.
 constexpr int mirror_sq(int sq) { return sq ^ 56; }
 }
 
@@ -171,8 +171,8 @@ void init_tables() {
         const int bIdx = p * 2 + 1;
         for (int sq = 0; sq < 64; ++sq) {
             const int msq = mirror_sq(sq);
-            // PSTs are stored as A8..H1. Board squares are A1..H8.
-            // White pieces need a vertical flip; black pieces are already aligned.
+            // PSTs are A8..H1; board squares are A1..H8.
+            // White uses mirrored squares, black uses raw squares.
             mg_table[wIdx][sq] = mg_value[p] + mg_pesto_tables[p][msq];
             eg_table[wIdx][sq] = eg_value[p] + eg_pesto_tables[p][msq];
             mg_table[bIdx][sq] = mg_value[p] + mg_pesto_tables[p][sq];

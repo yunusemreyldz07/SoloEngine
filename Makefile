@@ -1,8 +1,5 @@
 EXE = SoloEngine
 
-<<<<<<< HEAD
-SOURCES = main.cpp board.cpp search.cpp evaluation.cpp
-=======
 ifeq ($(OS),Windows_NT)
     DETECTED_OS := windows
 else
@@ -28,18 +25,12 @@ ifeq ($(DETECTED_OS),unknown_os)
 else
 	$(MAKE) $(DETECTED_OS)
 endif
->>>>>>> 4eac210 (Makefile update)
 
 CXX = g++
 
 CXXFLAGS = -Ofast -march=native -flto -DNDEBUG -funroll-loops -fno-stack-protector -fomit-frame-pointer -std=c++17 -s
 
 all:
-<<<<<<< HEAD
-	$(CXX) $(CXXFLAGS) $(SOURCES) -o $(EXE)
-clean:
-	rm -f $(EXE)
-=======
 	@echo "Building for all platforms..."
 	$(MAKE) -f Makefile.mac
 	$(MAKE) -f Makefile.windows
@@ -65,4 +56,3 @@ debug-android:
 
 unknown_os:
 	@:
->>>>>>> 4eac210 (Makefile update)
