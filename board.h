@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "types.h"
+
 extern char columns[];
 
 // Piece constants
@@ -17,15 +19,10 @@ inline constexpr int bishop    = 3;
 inline constexpr int rook      = 4;
 inline constexpr int queen     = 5;
 inline constexpr int king      = 6;
+inline constexpr int WHITE     = 0;
+inline constexpr int BLACK     = 1;
 
 extern int pieces_on_board[14]; // Simplified piece count for endgame detection (2 knights, 2 bishops, 2 rooks, 1 queen per side)
-
-// Move directions
-extern int knight_moves[8][2];
-extern int king_moves[8][2];
-extern int bishop_directions[4][2];
-extern int rook_directions[4][2];
-extern int queen_directions[8][2];
 
 struct Move {
     int fromRow, fromCol;
@@ -49,8 +46,13 @@ struct Move {
 class Board {
 public:
     int pieces_otb[14];
-    int squares[8][8];
     bool isWhiteTurn;
+
+    Bitboard piece[6];
+    Bitboard color[2];
+
+    int mailbox[64]; // Redundant mailbox for O(1) piece lookups
+    uint64_t currentHash; // Incremental Zobrist hash of the current position
 
     bool whiteCanCastleKingSide;
     bool whiteCanCastleQueenSide;
@@ -68,20 +70,38 @@ public:
     void unmakeMove(Move& move);
 };
 
+inline int row_col_to_sq(int row, int col) {
+    return (7 - row) * 8 + col;
+}
+
+inline int sq_to_row(int sq) {
+    return 7 - (sq / 8);
+}
+
+inline int sq_to_col(int sq) {
+    return sq % 8;
+}
+
+inline int piece_at_sq(const Board& board, int sq) {
+    return board.mailbox[sq];
+}
+
+inline bool king_square(const Board& board, bool white, int& outRow, int& outCol) {
+    Bitboard k = board.piece[king - 1] & board.color[white ? WHITE : BLACK];
+    if (!k) return false;
+    int sq = lsb(k);
+    outRow = sq_to_row(sq);
+    outCol = sq_to_col(sq);
+    return true;
+}
+
 // Move generation functions
-void generate_pawn_moves(const Board& board, int row, int col, std::vector<Move>& moveList);
-void generate_knight_moves(const Board& board, int row, int col, std::vector<Move>& moveList);
-void generate_bishop_moves(const Board& board, int row, int col, std::vector<Move>& moveList);
-void generate_rook_moves(const Board& board, int row, int col, std::vector<Move>& moveList);
-void generate_queen_moves(const Board& board, int row, int col, std::vector<Move>& moveList);
-void generate_king_moves(const Board& board, int row, int col, std::vector<Move>& moveList);
 std::vector<Move> get_all_moves(Board& board, bool isWhiteTurn = true);
 std::vector<Move> get_capture_moves(const Board& board);
 
 // Attack detection
 bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttacker);
 int see_exchange(Board& board, Move& move);
-
 // Utility functions
 void printBoard(const Board& board);
 Move uci_to_move(const std::string& uci);

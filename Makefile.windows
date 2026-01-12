@@ -1,0 +1,55 @@
+# Summary: Normalized targets and wrapped strip tool invocation for safer execution.
+.PHONY: build default
+
+EXE := SoloEngine
+
+ifeq ($(OS),Windows_NT)
+EXEEXT := .exe
+else
+EXEEXT :=
+endif
+
+SOURCES := main.cpp \
+		   board.cpp \
+           movegen.cpp \
+           search.cpp \
+           evaluation.cpp \
+           bitboard.cpp
+
+# Override at call-site if needed, e.g.:
+#   make -f Makefile.windows CXX=x86_64-w64-mingw32-g++
+CXX ?= g++
+
+CXXFLAGS := -O3 -mavx2 -std=c++23 -ffast-math -pthread
+
+LINKER := -static -static-libgcc -static-libstdc++
+
+OUT := $(EXE)$(EXEEXT)
+
+STRIP ?= strip
+
+build: $(OUT)
+
+default: build
+
+$(OUT): $(SOURCES)
+	$(CXX) $^ $(CXXFLAGS) -o $(OUT) $(LINKER)
+	@if command -v $(STRIP) >/dev/null 2>&1; then \
+	$(STRIP) $(OUT); \
+	else \
+	echo "Strip tool '$(STRIP)' not found; skipping."; \
+	fi
+
+# AddressSanitizer ile debug build
+asan:
+	@asan_lib_a=`$(CXX) -print-file-name=libasan.a`; \
+	asan_lib_dll=`$(CXX) -print-file-name=libasan.dll.a`; \
+	if [ "$$asan_lib_a" = "libasan.a" ] && [ "$$asan_lib_dll" = "libasan.dll.a" ]; then \
+		echo "ASAN runtime not found; building non-ASAN debug binary instead."; \
+		$(CXX) $(SOURCES) -std=c++23 -g -O1 -fno-omit-frame-pointer -pthread -o $(EXE)_asan$(EXEEXT); \
+	else \
+		$(CXX) $(SOURCES) -std=c++23 -g -O1 -fsanitize=address -fno-omit-frame-pointer -pthread -o $(EXE)_asan$(EXEEXT); \
+	fi
+	@echo "ASAN build created as $(EXE)_asan$(EXEEXT) (symbols preserved, no strip)"
+
+debug: asan

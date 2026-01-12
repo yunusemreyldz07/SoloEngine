@@ -1,0 +1,65 @@
+# Unified clean Makefile for removing build artifacts across platforms
+# Usage:
+#   make -f Makefile.clean all     # remove all known artifacts
+#   make -f Makefile.clean mac     # remove only mac binary
+#   make -f Makefile.clean linux   # remove only linux binary
+#   make -f Makefile.clean windows # remove only windows .exe
+#   make -f Makefile.clean android # remove only android binaries
+
+.DEFAULT_GOAL := all
+
+.PHONY: all mac linux windows android debug distclean list objs
+
+ifeq ($(OS),Windows_NT)
+EXEEXT := .exe
+else
+EXEEXT :=
+endif
+
+MAC_BIN := SoloEngine
+LINUX_BIN := SoloEngine$(EXEEXT)
+WIN_BIN := SoloEngine$(EXEEXT)
+ANDROID_BIN := SoloEngine
+ANDROID_DEBUG_BIN := SoloEngine
+
+# Fathom tablebase objects may appear under fathom/src in some builds; add patterns
+EXTRA_OBJS := $(wildcard *.o)
+
+mac:
+	@rm -f $(MAC_BIN)
+	@echo "Removed $(MAC_BIN)"
+
+linux:
+	@rm -f $(LINUX_BIN)
+	@echo "Removed $(LINUX_BIN)"
+
+windows:
+	@rm -f $(WIN_BIN)
+	@echo "Removed $(WIN_BIN)"
+
+android:
+	@rm -f $(ANDROID_BIN) $(ANDROID_DEBUG_BIN)
+	@echo "Removed Android binaries ($(ANDROID_BIN) $(ANDROID_DEBUG_BIN))"
+
+debug:
+	@rm -f $(ANDROID_DEBUG_BIN)
+	@echo "Removed debug binary $(ANDROID_DEBUG_BIN)"
+
+objs:
+	@if [ -n "$(EXTRA_OBJS)" ]; then rm -f $(EXTRA_OBJS); echo "Removed object files"; else echo "No extra object files found"; fi
+
+all: mac linux windows android objs
+	@echo "Clean complete."
+
+distclean: all
+	@rm -f core core.* *.core
+	@echo "Distclean complete (core dumps removed)."
+
+list:
+	@echo "Will remove (if exist):"
+	@echo "  $(MAC_BIN)"
+	@echo "  $(LINUX_BIN)"
+	@echo "  $(WIN_BIN)"
+	@echo "  $(ANDROID_BIN) $(ANDROID_DEBUG_BIN)"
+	@echo "Use: make -f Makefile.clean all"
+

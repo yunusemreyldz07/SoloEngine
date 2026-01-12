@@ -1,0 +1,53 @@
+# Summary: Consolidated build workflow and guarded strip step for Android target.
+.PHONY: build default
+
+EXE := SoloEngine
+
+SOURCES := main.cpp \
+		   board.cpp \
+           movegen.cpp \
+           search.cpp \
+           evaluation.cpp \
+           bitboard.cpp
+
+# Configure via environment or make variables:
+#   ANDROID_NDK_HOME=/path/to/ndk make android
+#   make -f Makefile.android ANDROID_NDK_HOME=... ANDROID_API=35 ANDROID_HOST_TAG=windows-x86_64
+ANDROID_API ?= 35
+ANDROID_HOST_TAG ?=
+ANDROID_NDK_HOME ?=
+
+ifeq ($(strip $(ANDROID_HOST_TAG)),)
+ANDROID_HOST_TAG := $(shell uname -s | tr '[:upper:]' '[:lower:]')-x86_64
+endif
+
+ifeq ($(strip $(ANDROID_NDK_HOME)),)
+$(error ANDROID_NDK_HOME is not set (e.g. export ANDROID_NDK_HOME=/path/to/ndk))
+endif
+
+CXX ?= $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/$(ANDROID_HOST_TAG)/bin/aarch64-linux-android$(ANDROID_API)-clang++
+CXXFLAGS := -O3 -std=c++23 -ffast-math -pthread -march=armv8-a
+
+LINKER := -lm -static-libstdc++
+
+OUT := $(EXE)
+
+STRIP := llvm-strip
+
+build: $(EXE)
+
+default: build
+
+$(EXE): $(SOURCES)
+	$(CXX) $^ $(CXXFLAGS) -o $(OUT) $(LINKER)
+	@if command -v $(STRIP) >/dev/null 2>&1; then \
+	$(STRIP) $(OUT); \
+	else \
+	echo "Strip tool '$(STRIP)' not found; skipping."; \
+	fi
+# AddressSanitizer ile debug build
+asan:
+	$(CXX) $(SOURCES) -std=c++23 -g -O1 -fsanitize=address -fno-omit-frame-pointer -pthread -march=armv8-a -o $(EXE)_asan $(LINKER)
+	@echo "ASAN build created as $(EXE)_asan (symbols preserved, no strip)"
+
+debug: asan

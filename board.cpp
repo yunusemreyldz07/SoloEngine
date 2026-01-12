@@ -1,70 +1,104 @@
 #include "board.h"
-#include <iostream>
+#include "bitboard.h"
 #include <algorithm>
-#include <cmath>
+#include <cctype>
+#include <iostream>
 #include <sstream>
-// Piece encoding (constants declared in board.h)
+
 char columns[] = "abcdefgh";
 
-int chess_board[8][8] = {
-    {-rook, -knight, -bishop, -queen, -king, -bishop, -knight, -rook},
-    {-pawn, -pawn, -pawn, -pawn, -pawn, -pawn, -pawn, -pawn},
-    {empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr},
-    {empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr},
-    {empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr},
-    {empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr, empty_sqr},
-    {pawn, pawn, pawn, pawn, pawn, pawn, pawn, pawn},
-    {rook, knight, bishop, queen, king, bishop, knight, rook}
-};
+namespace {
 
-int knight_moves[8][2] = {
-    {-2, -1}, {-2, 1}, {-1, -2}, {-1, 2},
-    {1, -2}, {1, 2}, {2, -1}, {2, 1}
-};
+constexpr Bitboard W_PAWNS   = 0x000000000000FF00ULL;
+constexpr Bitboard W_KNIGHTS = 0x0000000000000042ULL;
+constexpr Bitboard W_BISHOPS = 0x0000000000000024ULL;
+constexpr Bitboard W_ROOKS   = 0x0000000000000081ULL;
+constexpr Bitboard W_QUEEN   = 0x0000000000000008ULL;
+constexpr Bitboard W_KING    = 0x0000000000000010ULL;
 
-int king_moves[8][2] = {
-    {-1, -1}, {-1, 0}, {-1, 1},
-    {0, -1},          {0, 1},
-    {1, -1},  {1, 0}, {1, 1}
-};
+constexpr Bitboard B_PAWNS   = 0x00FF000000000000ULL;
+constexpr Bitboard B_KNIGHTS = 0x4200000000000000ULL;
+constexpr Bitboard B_BISHOPS = 0x2400000000000000ULL;
+constexpr Bitboard B_ROOKS   = 0x8100000000000000ULL;
+constexpr Bitboard B_QUEEN   = 0x0800000000000000ULL;
+constexpr Bitboard B_KING    = 0x1000000000000000ULL;
 
-int bishop_directions[4][2] = {
-    {-1, -1}, {-1, 1},
-    {1, -1},  {1, 1}
-};
-
-int rook_directions[4][2] = {
-    {-1, 0}, {1, 0},
-    {0, -1}, {0, 1}
-};
-
-int queen_directions[8][2] = {
-    {-1, -1}, {-1, 0}, {-1, 1},
-    {0, -1},          {0, 1},
-    {1, -1},  {1, 0}, {1, 1}
-};
-
-inline char to_upper_ascii(char c) {
-    return (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
+inline Bitboard bit_at_sq(int sq) {
+    return 1ULL << sq;
 }
 
-// Move struct constructor
+inline void bb_clear(Board& board, int piece, int sq) {
+    if (piece == 0) return;
+    int idx = std::abs(piece) - 1;
+    int c = (piece > 0) ? WHITE : BLACK;
+    Bitboard mask = bit_at_sq(sq);
+    board.piece[idx] &= ~mask;
+    board.color[c] &= ~mask;
+}
+
+inline void bb_set(Board& board, int piece, int sq) {
+    if (piece == 0) return;
+    int idx = std::abs(piece) - 1;
+    int c = (piece > 0) ? WHITE : BLACK;
+    Bitboard mask = bit_at_sq(sq);
+    board.piece[idx] |= mask;
+    board.color[c] |= mask;
+}
+
+inline void set_start_position(Board& board) {
+    board.piece[pawn - 1]   = W_PAWNS | B_PAWNS;
+    board.piece[knight - 1] = W_KNIGHTS | B_KNIGHTS;
+    board.piece[bishop - 1] = W_BISHOPS | B_BISHOPS;
+    board.piece[rook - 1]   = W_ROOKS | B_ROOKS;
+    board.piece[queen - 1]  = W_QUEEN | B_QUEEN;
+    board.piece[king - 1]   = W_KING | B_KING;
+
+    board.color[WHITE] = W_PAWNS | W_KNIGHTS | W_BISHOPS | W_ROOKS | W_QUEEN | W_KING;
+    board.color[BLACK] = B_PAWNS | B_KNIGHTS | B_BISHOPS | B_ROOKS | B_QUEEN | B_KING;
+
+    for (int i = 0; i < 64; i++) board.mailbox[i] = 0;
+
+    // Populate mailbox from bitboards
+    for (int sq = 0; sq < 64; ++sq) {
+        Bitboard mask = bit_at_sq(sq);
+        if (board.color[WHITE] & mask) {
+            if (board.piece[pawn - 1] & mask) board.mailbox[sq] = pawn;
+            else if (board.piece[knight - 1] & mask) board.mailbox[sq] = knight;
+            else if (board.piece[bishop - 1] & mask) board.mailbox[sq] = bishop;
+            else if (board.piece[rook - 1] & mask) board.mailbox[sq] = rook;
+            else if (board.piece[queen - 1] & mask) board.mailbox[sq] = queen;
+            else if (board.piece[king - 1] & mask) board.mailbox[sq] = king;
+        } else if (board.color[BLACK] & mask) {
+            if (board.piece[pawn - 1] & mask) board.mailbox[sq] = -pawn;
+            else if (board.piece[knight - 1] & mask) board.mailbox[sq] = -knight;
+            else if (board.piece[bishop - 1] & mask) board.mailbox[sq] = -bishop;
+            else if (board.piece[rook - 1] & mask) board.mailbox[sq] = -rook;
+            else if (board.piece[queen - 1] & mask) board.mailbox[sq] = -queen;
+            else if (board.piece[king - 1] & mask) board.mailbox[sq] = -king;
+        }
+    }
+}
+
+inline bool is_pawn_attack_possible(const Board& board, bool attackerIsWhite, int epSq) {
+    Bitboard pawns = board.piece[pawn - 1] & board.color[attackerIsWhite ? WHITE : BLACK];
+    if (attackerIsWhite) {
+        return (pawn_attacks[BLACK][epSq] & pawns) != 0;
+    }
+    return (pawn_attacks[WHITE][epSq] & pawns) != 0;
+}
+} // namespace
+
 Move::Move()
     : fromRow(0), fromCol(0), toRow(0), toCol(0), capturedPiece(0), promotion(0),
       prevW_KingSide(false), prevW_QueenSide(false), prevB_KingSide(false), prevB_QueenSide(false),
       prevEnPassantCol(-1), isEnPassant(false), isCastling(false) {}
 
-// Board constructor
 Board::Board() {
     resetBoard();
 }
 
 void Board::resetBoard() {
-    for (int i = 0; i < 8; ++i) {
-        for (int j = 0; j < 8; ++j) {
-            squares[i][j] = chess_board[i][j];
-        }
-    }
+    set_start_position(*this);
 
     whiteCanCastleKingSide = true;
     whiteCanCastleQueenSide = true;
@@ -74,9 +108,13 @@ void Board::resetBoard() {
     enPassantCol = -1;
     whiteKingRow = 7; whiteKingCol = 4;
     blackKingRow = 0; blackKingCol = 4;
+
+    currentHash = position_key(*this);
 }
 
 void Board::makeMove(Move& move) {
+    const Zobrist& z = zobrist();
+
     move.prevW_KingSide = whiteCanCastleKingSide;
     move.prevW_QueenSide = whiteCanCastleQueenSide;
     move.prevB_KingSide = blackCanCastleKingSide;
@@ -86,81 +124,124 @@ void Board::makeMove(Move& move) {
     move.isEnPassant = false;
     move.isCastling = false;
 
-    int piece = squares[move.fromRow][move.fromCol];
-    int target_square = squares[move.toRow][move.toCol];
-    move.capturedPiece = target_square;
-    squares[move.fromRow][move.fromCol] = 0;
-    squares[move.toRow][move.toCol] = piece;
+    const int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
+    const int toSq = row_col_to_sq(move.toRow, move.toCol);
+    const int movingPiece = mailbox[fromSq];
+    int target_piece = mailbox[toSq];
 
-    if (abs(piece) == 1 && move.fromCol != move.toCol && move.capturedPiece == 0) {
+    move.capturedPiece = target_piece;
+
+    // Hash: remove side-to-move, old ep and old castling
+    currentHash ^= z.side;
+    if (enPassantCol != -1) currentHash ^= z.epFile[enPassantCol];
+    int oldCastling = 0;
+    if (whiteCanCastleKingSide) oldCastling |= 1;
+    if (whiteCanCastleQueenSide) oldCastling |= 2;
+    if (blackCanCastleKingSide) oldCastling |= 4;
+    if (blackCanCastleQueenSide) oldCastling |= 8;
+    currentHash ^= z.castling[oldCastling];
+
+    // Remove moving piece from origin
+    currentHash ^= z.piece[piece_to_zobrist_index(movingPiece)][fromSq];
+
+    bb_clear(*this, movingPiece, fromSq);
+    if (target_piece != 0) {
+        bb_clear(*this, target_piece, toSq);
+        currentHash ^= z.piece[piece_to_zobrist_index(target_piece)][toSq];
+    }
+    bb_set(*this, movingPiece, toSq);
+
+    mailbox[fromSq] = 0;
+    if (target_piece != 0) mailbox[toSq] = 0;
+
+    if (std::abs(movingPiece) == pawn && move.fromCol != move.toCol && move.capturedPiece == 0) {
         move.isEnPassant = true;
         int captureRow = move.fromRow;
-        squares[captureRow][move.toCol] = 0;
+        int captureSq = row_col_to_sq(captureRow, move.toCol);
+        int capturedPawn = (movingPiece > 0) ? -pawn : pawn;
+        bb_clear(*this, capturedPawn, captureSq);
+        mailbox[captureSq] = 0;
+        currentHash ^= z.piece[piece_to_zobrist_index(capturedPawn)][captureSq];
+        move.capturedPiece = capturedPawn;
     }
-    
-    if (abs(piece) == 6 && abs(move.fromCol - move.toCol) == 2) {
+
+    if (std::abs(movingPiece) == king && std::abs(move.fromCol - move.toCol) == 2) {
         if (move.toCol > move.fromCol) {
-            // king-side
-            squares[move.toRow][move.toCol - 1] = squares[move.toRow][move.toCol + 1];
-            squares[move.toRow][move.toCol + 1] = 0;
+            int rookFromSq = row_col_to_sq(move.toRow, move.toCol + 1);
+            int rookToSq = row_col_to_sq(move.toRow, move.toCol - 1);
+            int rookPiece = (movingPiece > 0) ? rook : -rook;
+            bb_clear(*this, rookPiece, rookFromSq);
+            bb_set(*this, rookPiece, rookToSq);
+            mailbox[rookToSq] = mailbox[rookFromSq];
+            mailbox[rookFromSq] = 0;
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
         } else {
-            // queen-side
-            squares[move.toRow][move.toCol + 1] = squares[move.toRow][move.toCol - 2];
-            squares[move.toRow][move.toCol - 2] = 0;
+            int rookFromSq = row_col_to_sq(move.toRow, move.toCol - 2);
+            int rookToSq = row_col_to_sq(move.toRow, move.toCol + 1);
+            int rookPiece = (movingPiece > 0) ? rook : -rook;
+            bb_clear(*this, rookPiece, rookFromSq);
+            bb_set(*this, rookPiece, rookToSq);
+            mailbox[rookToSq] = mailbox[rookFromSq];
+            mailbox[rookFromSq] = 0;
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
         }
         move.isCastling = true;
     }
 
-    // Promotion
-    if (abs(piece) == 1) {
-        int promotionRank = piece > 0 ? 0 : 7;
+    int placedPiece = movingPiece;
+    if (std::abs(movingPiece) == pawn) {
+        int promotionRank = movingPiece > 0 ? 0 : 7;
         if (move.toRow == promotionRank && move.promotion != 0) {
-            squares[move.toRow][move.toCol] = (piece > 0) ? move.promotion : -move.promotion;
+            placedPiece = (movingPiece > 0) ? move.promotion : -move.promotion;
+            bb_clear(*this, movingPiece, toSq);
+            bb_set(*this, placedPiece, toSq);
         }
     }
 
-    if (abs(piece) == pawn && abs(move.fromRow - move.toRow) == 2) {
-        // En-passant is only relevant if the opponent can actually capture.
-        // This affects repetition detection and hashing.
-        const int enemyPawn = (piece > 0) ? -pawn : pawn;
-        bool canCapture = false;
-        for (int dc : {-1, 1}) {
-            const int c = move.toCol + dc;
-            if (c >= 0 && c < 8) {
-                if (squares[move.toRow][c] == enemyPawn) {
-                    canCapture = true;
-                    break;
-                }
-            }
+    mailbox[toSq] = placedPiece;
+    currentHash ^= z.piece[piece_to_zobrist_index(placedPiece)][toSq];
+
+    if (std::abs(movingPiece) == pawn && std::abs(move.fromRow - move.toRow) == 2) {
+        const bool opponentWhite = !isWhiteTurn;
+        const int epRow = opponentWhite ? 2 : 5;
+        const int epSq = row_col_to_sq(epRow, move.toCol);
+        if (is_pawn_attack_possible(*this, opponentWhite, epSq)) {
+            enPassantCol = move.toCol;
+        } else {
+            enPassantCol = -1;
         }
-        enPassantCol = canCapture ? move.toCol : -1;
     } else {
         enPassantCol = -1;
     }
 
     isWhiteTurn = !isWhiteTurn;
 
-    if (piece == 4 && move.fromRow == 7 && move.fromCol == 7){
+    if (movingPiece == rook && move.fromRow == 7 && move.fromCol == 7){
         whiteCanCastleKingSide = false;
     }
-    
-    else if (piece == 4 && move.fromRow == 7 && move.fromCol == 0){
+    else if (movingPiece == rook && move.fromRow == 7 && move.fromCol == 0){
         whiteCanCastleQueenSide = false;
     }
-    else if (piece == -4 && move.fromRow == 0 && move.fromCol == 7){
+    else if (movingPiece == -rook && move.fromRow == 0 && move.fromCol == 7){
         blackCanCastleKingSide = false;
     }
-    else if (piece == -4 && move.fromRow == 0 && move.fromCol == 0){
+    else if (movingPiece == -rook && move.fromRow == 0 && move.fromCol == 0){
         blackCanCastleQueenSide = false;
     }
 
-    if (piece == 6) {
+    if (movingPiece == king) {
         whiteCanCastleKingSide = false;
         whiteCanCastleQueenSide = false;
+        whiteKingRow = move.toRow;
+        whiteKingCol = move.toCol;
     }
-    if (piece == -6) {
+    if (movingPiece == -king) {
         blackCanCastleKingSide = false;
         blackCanCastleQueenSide = false;
+        blackKingRow = move.toRow;
+        blackKingCol = move.toCol;
     }
 
     if (move.capturedPiece == rook && move.toRow == 7 && move.toCol == 7) {
@@ -175,43 +256,89 @@ void Board::makeMove(Move& move) {
     if (move.capturedPiece == -rook && move.toRow == 0 && move.toCol == 0) {
         blackCanCastleQueenSide = false;
     }
-    if (piece == 6) {
-        whiteKingRow = move.toRow;
-        whiteKingCol = move.toCol;
-    }
-    if (piece == -6) {
-        blackKingRow = move.toRow;
-        blackKingCol = move.toCol;
+
+    int newCastling = 0;
+    if (whiteCanCastleKingSide) newCastling |= 1;
+    if (whiteCanCastleQueenSide) newCastling |= 2;
+    if (blackCanCastleKingSide) newCastling |= 4;
+    if (blackCanCastleQueenSide) newCastling |= 8;
+    currentHash ^= z.castling[newCastling];
+
+    if (enPassantCol != -1) {
+        currentHash ^= z.epFile[enPassantCol];
     }
 }
 
 void Board::unmakeMove(Move& move) {
+    const Zobrist& z = zobrist();
+
     isWhiteTurn = !isWhiteTurn;
-    int piece = squares[move.toRow][move.toCol];
+
+    // Hash out side, current ep, current castling (state after move, before undo)
+    currentHash ^= z.side;
+    if (enPassantCol != -1) currentHash ^= z.epFile[enPassantCol];
+    int currCastling = 0;
+    if (whiteCanCastleKingSide) currCastling |= 1;
+    if (whiteCanCastleQueenSide) currCastling |= 2;
+    if (blackCanCastleKingSide) currCastling |= 4;
+    if (blackCanCastleQueenSide) currCastling |= 8;
+    currentHash ^= z.castling[currCastling];
+
+    const int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
+    const int toSq = row_col_to_sq(move.toRow, move.toCol);
+
+    int pieceOnTo = mailbox[toSq];
+    int pieceBase = pieceOnTo;
     if (move.promotion != 0) {
-        piece = (piece > 0) ? pawn : -pawn;
-    }
-    
-    squares[move.fromRow][move.fromCol] = piece;
-    squares[move.toRow][move.toCol] = 0;
-
-    if (move.isEnPassant) {
-        int capturedPawn = isWhiteTurn ? -1 : 1;
-        squares[move.fromRow][move.toCol] = capturedPawn;
-    } else {
-        squares[move.toRow][move.toCol] = move.capturedPiece;
+        pieceBase = (pieceOnTo > 0) ? pawn : -pawn;
     }
 
+    // Remove moved piece from destination
+    bb_clear(*this, pieceOnTo, toSq);
+    mailbox[toSq] = 0;
+    currentHash ^= z.piece[piece_to_zobrist_index(pieceOnTo)][toSq];
+
+    // Undo castling rook move if needed
     if (move.isCastling) {
         if (move.toCol > move.fromCol) {
-            // king-side
-            squares[move.toRow][move.toCol + 1] = squares[move.toRow][move.toCol - 1];
-            squares[move.toRow][move.toCol - 1] = 0;
+            int rookFromSq = row_col_to_sq(move.toRow, move.toCol - 1);
+            int rookToSq = row_col_to_sq(move.toRow, move.toCol + 1);
+            int rookPiece = isWhiteTurn ? rook : -rook;
+            bb_clear(*this, rookPiece, rookFromSq);
+            bb_set(*this, rookPiece, rookToSq);
+            mailbox[rookFromSq] = 0;
+            mailbox[rookToSq] = rookPiece;
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
         } else {
-            // queen-side
-            squares[move.toRow][move.toCol - 2] = squares[move.toRow][move.toCol + 1];
-            squares[move.toRow][move.toCol + 1] = 0;
+            int rookFromSq = row_col_to_sq(move.toRow, move.toCol + 1);
+            int rookToSq = row_col_to_sq(move.toRow, move.toCol - 2);
+            int rookPiece = isWhiteTurn ? rook : -rook;
+            bb_clear(*this, rookPiece, rookFromSq);
+            bb_set(*this, rookPiece, rookToSq);
+            mailbox[rookFromSq] = 0;
+            mailbox[rookToSq] = rookPiece;
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
+            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
         }
+    }
+
+    // Restore moving piece to origin
+    bb_set(*this, pieceBase, fromSq);
+    mailbox[fromSq] = pieceBase;
+    currentHash ^= z.piece[piece_to_zobrist_index(pieceBase)][fromSq];
+
+    // Restore captured piece
+    if (move.isEnPassant) {
+        int capturedPawn = isWhiteTurn ? -pawn : pawn;
+        int captureSq = row_col_to_sq(move.fromRow, move.toCol);
+        bb_set(*this, capturedPawn, captureSq);
+        mailbox[captureSq] = capturedPawn;
+        currentHash ^= z.piece[piece_to_zobrist_index(capturedPawn)][captureSq];
+    } else if (move.capturedPiece != 0) {
+        bb_set(*this, move.capturedPiece, toSq);
+        mailbox[toSq] = move.capturedPiece;
+        currentHash ^= z.piece[piece_to_zobrist_index(move.capturedPiece)][toSq];
     }
 
     whiteCanCastleKingSide = move.prevW_KingSide;
@@ -219,56 +346,60 @@ void Board::unmakeMove(Move& move) {
     blackCanCastleKingSide = move.prevB_KingSide;
     blackCanCastleQueenSide = move.prevB_QueenSide;
     enPassantCol = move.prevEnPassantCol;
-    if (piece == 6) {
+
+    if (pieceBase == king) {
         whiteKingRow = move.fromRow;
         whiteKingCol = move.fromCol;
     }
-    if (piece == -6) {
+    if (pieceBase == -king) {
         blackKingRow = move.fromRow;
         blackKingCol = move.fromCol;
     }
+
+    int prevCastling = 0;
+    if (whiteCanCastleKingSide) prevCastling |= 1;
+    if (whiteCanCastleQueenSide) prevCastling |= 2;
+    if (blackCanCastleKingSide) prevCastling |= 4;
+    if (blackCanCastleQueenSide) prevCastling |= 8;
+    currentHash ^= z.castling[prevCastling];
+
+    if (enPassantCol != -1) currentHash ^= z.epFile[enPassantCol];
 }
 
 void Board::loadFromFEN(const std::string& fen) {
-    // clear board
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 8; j++) {
-            squares[i][j] = 0;
-        }
-    }
-    
-    // example fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    for (int i = 0; i < 6; i++) piece[i] = 0ULL;
+    color[WHITE] = 0ULL;
+    color[BLACK] = 0ULL;
+    for (int i = 0; i < 64; i++) mailbox[i] = 0;
+
     std::istringstream ss(fen);
     std::string position, turn, castling, enPassant;
     ss >> position >> turn >> castling >> enPassant;
-    
-    // placing pieces
+
     int row = 0, col = 0;
     for (char c : position) {
         if (c == '/') {
             row++;
             col = 0;
         } else if (c >= '1' && c <= '8') {
-            col += (c - '0'); // empty squares
+            col += (c - '0');
         } else {
-            int piece = 0;
-            switch (std::tolower(c)) {
-                case 'p': piece = pawn; break;
-                case 'n': piece = knight; break;
-                case 'b': piece = bishop; break;
-                case 'r': piece = rook; break;
-                case 'q': piece = queen; break;
-                case 'k': piece = king; break;
+            int pieceType = 0;
+            switch (std::tolower(static_cast<unsigned char>(c))) {
+                case 'p': pieceType = pawn; break;
+                case 'n': pieceType = knight; break;
+                case 'b': pieceType = bishop; break;
+                case 'r': pieceType = rook; break;
+                case 'q': pieceType = queen; break;
+                case 'k': pieceType = king; break;
             }
-            if (std::isupper(c)) {
-                squares[row][col] = piece; // white
-            } else {
-                squares[row][col] = -piece; // black
-            }
-            
-            // Find king positions
-            if (piece == king) {
-                if (std::isupper(c)) {
+            int signedPiece = std::isupper(static_cast<unsigned char>(c)) ? pieceType : -pieceType;
+            int sq = row_col_to_sq(row, col);
+            bb_set(*this, signedPiece, sq);
+            mailbox[sq] = signedPiece;
+
+            if (pieceType == king) {
+                if (std::isupper(static_cast<unsigned char>(c))) {
                     whiteKingRow = row;
                     whiteKingCol = col;
                 } else {
@@ -279,368 +410,25 @@ void Board::loadFromFEN(const std::string& fen) {
             col++;
         }
     }
-    
-    // Turn
+
     isWhiteTurn = (turn == "w");
-    
-    // Castling rights
     whiteCanCastleKingSide = (castling.find('K') != std::string::npos);
     whiteCanCastleQueenSide = (castling.find('Q') != std::string::npos);
     blackCanCastleKingSide = (castling.find('k') != std::string::npos);
     blackCanCastleQueenSide = (castling.find('q') != std::string::npos);
-    
-    // En passant
+
     if (enPassant != "-") {
         enPassantCol = enPassant[0] - 'a';
-
-        // Normalize: only keep EP if side-to-move can capture it.
-        const int pawnRow = isWhiteTurn ? 3 : 4; // rank 5 for white, rank 4 for black
-        const int myPawn = isWhiteTurn ? pawn : -pawn;
-        bool canCapture = false;
-        if (enPassantCol - 1 >= 0 && squares[pawnRow][enPassantCol - 1] == myPawn) canCapture = true;
-        if (enPassantCol + 1 < 8 && squares[pawnRow][enPassantCol + 1] == myPawn) canCapture = true;
-        if (!canCapture) enPassantCol = -1;
+        int epRow = isWhiteTurn ? 2 : 5;
+        int epSq = row_col_to_sq(epRow, enPassantCol);
+        if (!is_pawn_attack_possible(*this, isWhiteTurn, epSq)) {
+            enPassantCol = -1;
+        }
     } else {
         enPassantCol = -1;
     }
-}
 
-void generate_pawn_moves(const Board& board, int row, int col, std::vector<Move>& moveList) {
-    int piece = board.squares[row][col];
-    int color = (piece > 0) ? 1 : -1; // 1 for white, -1 for black
-    int direction = (color == 1) ? -1 : 1; // White moves up (-1), Black moves down (+1)
-    int promotionRank = (color == 1) ? 0 : 7;
-
-    // Single move forward
-    int r = row + direction;
-    if (r >= 0 && r < 8 && board.squares[r][col] == 0) {
-        Move move;
-        move.fromRow = row;
-        move.fromCol = col;
-        move.toRow = r;
-        move.toCol = col;
-
-        if (r == promotionRank) {
-            for (int promoType : {queen, rook, bishop, knight}) {
-                Move pm = move;
-                pm.promotion = promoType;
-                moveList.push_back(pm);
-            }
-        } else {
-            moveList.push_back(move);
-
-            // Double move forward from starting position
-            if ((color == 1 && row == 6) || (color == -1 && row == 1)) {
-                int r2 = row + 2 * direction;
-                if (board.squares[r2][col] == 0) {
-                    Move dm = move;
-                    dm.toRow = r2;
-                    moveList.push_back(dm);
-                }
-            }
-        }
-    }
-
-    // Captures
-    r = row + direction;
-    if (r >= 0 && r < 8) {
-        for (int dc = -1; dc <= 1; dc += 2) {
-            int c = col + dc;
-            if (c >= 0 && c < 8) {
-                int target = board.squares[r][c];
-                if (target != 0 && ((target > 0) != (piece > 0))) {
-                    Move m;
-                    m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c;
-                    m.capturedPiece = target;
-                    if (r == promotionRank) {
-                        for (int promoType : {queen, rook, bishop, knight}) {
-                            Move pm = m;
-                            pm.promotion = promoType;
-                            moveList.push_back(pm);
-                        }
-                    } else {
-                        moveList.push_back(m);
-                    }
-                }
-            }
-        }
-    }
-
-    // En passant (independent of forward square being empty)
-    if (board.enPassantCol != -1 && abs(col - board.enPassantCol) == 1) {
-        int epTargetRow = row + direction;
-        if (epTargetRow >= 0 && epTargetRow < 8) {
-            int epPawnRow = row; // captured pawn sits next to us on current row
-            int epPawnCol = board.enPassantCol;
-            int expectedEnemyPawn = (color == 1) ? -pawn : pawn;
-            if (board.squares[epTargetRow][epPawnCol] == 0 && board.squares[epPawnRow][epPawnCol] == expectedEnemyPawn) {
-                Move m;
-                m.fromRow = row; m.fromCol = col; m.toRow = epTargetRow; m.toCol = epPawnCol;
-                m.isEnPassant = true;
-                m.capturedPiece = expectedEnemyPawn;
-                moveList.push_back(m);
-            }
-        }
-    }
-}
-
-void generate_knight_moves(const Board& board, int row, int col, std::vector<Move>& moveList) {
-    int piece = board.squares[row][col];
-    int color = (piece > 0) ? 1 : -1; // 1 for white, -1 for black
-
-    for (int i = 0; i < 8; ++i) {
-        int r = row + knight_moves[i][0];
-        int c = col + knight_moves[i][1];
-        if (r >= 0 && r < 8 && c >= 0 && c < 8) {
-            int target = board.squares[r][c];
-            if (target == 0 || (target > 0 && color == -1) || (target < 0 && color == 1)) {
-                Move m;
-                m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c;
-                m.capturedPiece = target;
-                moveList.push_back(m);
-            }
-        }
-    }
-}
-
-void generate_queen_moves(const Board& board, int row, int col, std::vector<Move>& moveList) {
-    generate_bishop_moves(board, row, col, moveList);
-    generate_rook_moves(board, row, col, moveList);
-}
-
-void generate_king_moves(const Board& board, int row, int col, std::vector<Move>& moveList) {
-    int piece = board.squares[row][col];
-    int color = (piece > 0) ? 1 : -1;
-
-    for (int i = 0; i < 8; ++i) {
-        int r = row + king_moves[i][0];
-        int c = col + king_moves[i][1];
-        if (r >= 0 && r < 8 && c >= 0 && c < 8) {
-            int target = board.squares[r][c];
-            if (target == 0 || (target > 0 && color == -1) || (target < 0 && color == 1)) {
-                Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = target; moveList.push_back(m);
-            }
-        }
-    }
-
-    const bool opponentIsWhite = (color == -1);
-    const bool kingInCheck = is_square_attacked(board, row, col, opponentIsWhite);
-
-    if (!kingInCheck) {
-        // Black castles
-        if (color == -1 && row == 0 && col == 4) {
-            if (board.blackCanCastleKingSide) {
-                if (board.squares[0][5] == 0 && board.squares[0][6] == 0 && board.squares[0][7] == -rook) {
-                    if (!is_square_attacked(board, 0, 5, true) && !is_square_attacked(board, 0, 6, true)) {
-                        Move m; m.fromRow = row; m.fromCol = col; m.toRow = 0; m.toCol = 6; m.isCastling = true; moveList.push_back(m);
-                    }
-                }
-            }
-            if (board.blackCanCastleQueenSide) {
-                if (board.squares[0][1] == 0 && board.squares[0][2] == 0 && board.squares[0][3] == 0 && board.squares[0][0] == -rook) {
-                    if (!is_square_attacked(board, 0, 3, true) && !is_square_attacked(board, 0, 2, true)) {
-                        Move m; m.fromRow = row; m.fromCol = col; m.toRow = 0; m.toCol = 2; m.isCastling = true; moveList.push_back(m);
-                    }
-                }
-            }
-        }
-
-        // White castles
-        if (color == 1 && row == 7 && col == 4) {
-            if (board.whiteCanCastleKingSide) {
-                if (board.squares[7][5] == 0 && board.squares[7][6] == 0 && board.squares[7][7] == rook) {
-                    if (!is_square_attacked(board, 7, 5, false) && !is_square_attacked(board, 7, 6, false)) {
-                        Move m; m.fromRow = row; m.fromCol = col; m.toRow = 7; m.toCol = 6; m.isCastling = true; moveList.push_back(m);
-                    }
-                }
-            }
-            if (board.whiteCanCastleQueenSide) {
-                if (board.squares[7][1] == 0 && board.squares[7][2] == 0 && board.squares[7][3] == 0 && board.squares[7][0] == rook) {
-                    if (!is_square_attacked(board, 7, 3, false) && !is_square_attacked(board, 7, 2, false)) {
-                        Move m; m.fromRow = row; m.fromCol = col; m.toRow = 7; m.toCol = 2; m.isCastling = true; moveList.push_back(m);
-                    }
-                }
-            }
-        }
-    }
-}
-
-void generate_bishop_moves(const Board& board, int row, int col, std::vector<Move>& moveList) {
-    int piece = board.squares[row][col];
-    int color = (piece > 0) ? 1 : -1; // 1 for white, -1 for black
-    for (int d = 0; d < 4; ++d) {
-        int r = row + bishop_directions[d][0];
-        int c = col + bishop_directions[d][1];
-        while (r >= 0 && r < 8 && c >= 0 && c < 8) {
-            int target = board.squares[r][c];
-            if (target == 0) {
-                Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = 0; moveList.push_back(m);
-            } else {
-                if ((target > 0 && color == -1) || (target < 0 && color == 1)) {
-                    Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = target; moveList.push_back(m);
-                }
-                break;
-            }
-            r += bishop_directions[d][0];
-            c += bishop_directions[d][1];
-        }
-    }
-}
-
-void generate_rook_moves(const Board& board, int row, int col, std::vector<Move>& moveList) {
-    int piece = board.squares[row][col];
-    int color = (piece > 0) ? 1 : -1; // 1 for white, -1 for black
-    for (int d = 0; d < 4; ++d) {
-        int r = row + rook_directions[d][0];
-        int c = col + rook_directions[d][1];
-        while (r >= 0 && r < 8 && c >= 0 && c < 8) {
-            int target = board.squares[r][c];
-            if (target == 0) {
-                Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = 0; moveList.push_back(m);
-            } else {
-                if ((target > 0 && color == -1) || (target < 0 && color == 1)) {
-                    Move m; m.fromRow = row; m.fromCol = col; m.toRow = r; m.toCol = c; m.capturedPiece = target; moveList.push_back(m);
-                }
-                break;
-            }
-            r += rook_directions[d][0];
-            c += rook_directions[d][1];
-        }
-    }
-}
-
-std::vector<Move> get_all_moves(Board& board, bool isWhiteTurn) {
-    std::vector<Move> pseudoMoves;
-    std::vector<Move> legalMoves;
-    pseudoMoves.reserve(256);
-    for (int r = 0; r < 8; ++r) {
-        for (int c = 0; c < 8; ++c) {
-            int piece = board.squares[r][c];
-            if (piece == 0) continue;
-            if (isWhiteTurn && piece < 0) continue;
-            if (!isWhiteTurn && piece > 0) continue;
-            switch (abs(piece)) {
-                case pawn:   generate_pawn_moves(board, r, c, pseudoMoves); break;
-                case knight: generate_knight_moves(board, r, c, pseudoMoves); break;
-                case bishop: generate_bishop_moves(board, r, c, pseudoMoves); break;
-                case rook:   generate_rook_moves(board, r, c, pseudoMoves); break;
-                case queen:  generate_queen_moves(board, r, c, pseudoMoves); break;
-                case king:   generate_king_moves(board, r, c, pseudoMoves); break;
-            }
-        }
-    }
-
-    for (auto &m : pseudoMoves) {
-    
-        board.makeMove(m);
-        int kingRow = isWhiteTurn ? board.whiteKingRow : board.blackKingRow;
-        int kingCol = isWhiteTurn ? board.whiteKingCol : board.blackKingCol;
-        if (is_square_attacked(board, kingRow, kingCol, !isWhiteTurn)) {
-            board.unmakeMove(m);
-            continue;
-        }
-        legalMoves.push_back(m);
-        board.unmakeMove(m);
-    }
-
-    return legalMoves;
-}
-
-std::vector<Move> get_capture_moves(const Board& board) {
-    std::vector<Move> moves;
-    bool whiteToMove = board.isWhiteTurn;
-
-    for (int row = 0; row < 8; row++) {
-        for (int col = 0; col < 8; col++) {
-            int piece = board.squares[row][col];
-            if (piece == 0) continue;
-            if (whiteToMove && piece < 0) continue;
-            if (!whiteToMove && piece > 0) continue;
-            int absP = abs(piece);
-            std::vector<Move> gen;
-            switch (absP) {
-                case pawn: generate_pawn_moves(board, row, col, gen); break;
-                case knight: generate_knight_moves(board, row, col, gen); break;
-                case bishop: generate_bishop_moves(board, row, col, gen); break;
-                case rook: generate_rook_moves(board, row, col, gen); break;
-                case queen: generate_queen_moves(board, row, col, gen); break;
-                case king: generate_king_moves(board, row, col, gen); break;
-            }
-            for (auto &m : gen) {
-                if (m.capturedPiece != 0 || m.isEnPassant) moves.push_back(m);
-            }
-        }
-    }
-    return moves;
-}
-
-bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttacker) {
-    // White pawns attack one rank "up" the board (row - 1), black pawns one rank "down" (row + 1).
-    // The old code used the opposite sign, which let the engine think diagonals were safe when they
-    // were in fact covered by pawns. This broke check detection and castling legality.
-    int pawnDir = isWhiteAttacker ? 1 : -1;
-    
-    // Pawn attacks
-    if (row + pawnDir >= 0 && row + pawnDir < 8) {
-        if (col - 1 >= 0) {
-            int p = board.squares[row + pawnDir][col - 1];
-            if (p == (isWhiteAttacker ? 1 : -1)) return true;
-        }
-        if (col + 1 < 8) {
-            int p = board.squares[row + pawnDir][col + 1];
-            if (p == (isWhiteAttacker ? 1 : -1)) return true;
-        }
-    }
-
-    // Knight
-    for (int i = 0; i < 8; i++) {
-        int r = row + knight_moves[i][0];
-        int c = col + knight_moves[i][1];
-        if (r >= 0 && r < 8 && c >= 0 && c < 8) {
-            int p = board.squares[r][c];
-            if (p == (isWhiteAttacker ? 2 : -2)) return true;
-        }
-    }
-
-    // Queen and Rook
-    for (int i = 0; i < 4; i++) {
-        for (int dist = 1; dist < 8; dist++) {
-            int r = row + rook_directions[i][0] * dist;
-            int c = col + rook_directions[i][1] * dist;
-            if (r < 0 || r >= 8 || c < 0 || c >= 8) break;
-            int p = board.squares[r][c];
-            if (p != 0) {
-                if ((p > 0) == isWhiteAttacker && (abs(p) == queen || abs(p) == rook)) return true;
-                break;
-            }
-        }
-    }
-
-    // Queen and Bishop
-    for (int i = 0; i < 4; i++) {
-        for (int dist = 1; dist < 8; dist++) {
-            int r = row + bishop_directions[i][0] * dist;
-            int c = col + bishop_directions[i][1] * dist;
-            if (r < 0 || r >= 8 || c < 0 || c >= 8) break;
-            int p = board.squares[r][c];
-            if (p != 0) {
-                if ((p > 0) == isWhiteAttacker && (abs(p) == queen || abs(p) == bishop)) return true;
-                break;
-            }
-        }
-    }
-
-    // King
-    for (int i = 0; i < 8; i++) {
-        int r = row + king_moves[i][0];
-        int c = col + king_moves[i][1];
-        if (r >= 0 && r < 8 && c >= 0 && c < 8) {
-            int p = board.squares[r][c];
-            if (p == (isWhiteAttacker ? 6 : -6)) return true;
-        }
-    }
-
-    return false;
+    currentHash = position_key(*this);
 }
 
 void printBoard(const Board& board) {
@@ -648,11 +436,12 @@ void printBoard(const Board& board) {
     for (int r = 0; r < 8; r++) {
         std::cout << 8 - r << " | ";
         for (int c = 0; c < 8; c++) {
-            int p = board.squares[r][c];
+            int sq = row_col_to_sq(r, c);
+            int p = piece_at_sq(board, sq);
             char cStr = '.';
             if (p != 0) {
                 char ch = ' ';
-                int ap = abs(p);
+                int ap = std::abs(p);
                 switch (ap) {
                     case pawn: ch = 'p'; break;
                     case knight: ch = 'n'; break;
@@ -661,7 +450,7 @@ void printBoard(const Board& board) {
                     case queen: ch = 'q'; break;
                     case king: ch = 'k'; break;
                 }
-                if (p > 0) ch = to_upper_ascii(ch);
+                if (p > 0) ch = static_cast<char>(ch - 'a' + 'A');
                 cStr = ch;
             }
             std::cout << cStr << " ";
@@ -690,7 +479,6 @@ Move uci_to_move(const std::string& uci) {
     return move;
 }
 
-// Zobrist implementation
 Zobrist::Zobrist() {
     uint64_t seed = 0xC0FFEE1234ABCDEFULL;
     for (int p = 0; p < 12; p++) {
@@ -716,7 +504,7 @@ const Zobrist& zobrist() {
 }
 
 int piece_to_zobrist_index(int piece) {
-    int absP = abs(piece);
+    int absP = std::abs(piece);
     if (absP < 1 || absP > 6) return -1;
     int base = (piece > 0) ? 0 : 6;
     return base + (absP - 1);
@@ -726,14 +514,15 @@ uint64_t position_key(const Board& board) {
     const Zobrist& z = zobrist();
     uint64_t h = 0;
 
-    for (int r = 0; r < 8; r++) {
-        for (int c = 0; c < 8; c++) {
-            int p = board.squares[r][c];
-            if (p == 0) continue;
-            int idx = piece_to_zobrist_index(p);
-            if (idx < 0) continue;
-            int sq = r * 8 + c;
-            h ^= z.piece[idx][sq];
+    for (int c = 0; c < 2; c++) {
+        for (int p = 0; p < 6; p++) {
+            Bitboard bb = board.piece[p] & board.color[c];
+            int base = c * 6 + p;
+            while (bb) {
+                int sq = lsb(bb);
+                bb &= bb - 1;
+                h ^= z.piece[base][sq];
+            }
         }
     }
 
@@ -751,12 +540,24 @@ uint64_t position_key(const Board& board) {
     return h;
 }
 
-// Transposition Table (lockless, thread-safe)
+bool is_threefold_repetition(const std::vector<uint64_t>& history) {
+    if (history.empty()) return false;
+    uint64_t current = history.back();
+    int count = 0;
+    for (int i = static_cast<int>(history.size()) - 1; i >= 0; i--) {
+        if (history[i] == current) {
+            count++;
+            if (count >= 3) return true;
+        }
+    }
+    return false;
+}
+
 TranspositionTable globalTT;
 
 uint16_t TranspositionTable::packMove(const Move& m) {
-    int from = m.fromRow * 8 + m.fromCol;
-    int to = m.toRow * 8 + m.toCol;
+    int from = row_col_to_sq(m.fromRow, m.fromCol);
+    int to = row_col_to_sq(m.toRow, m.toCol);
 
     if (from < 0 || from >= 64) from = 0;
     if (to < 0 || to >= 64) to = 0;
@@ -774,10 +575,10 @@ Move TranspositionTable::unpackMove(uint16_t packed) {
     const int to = (packed >> 6) & 63;
     const int promo = (packed >> 12) & 7;
 
-    m.fromRow = from / 8;
-    m.fromCol = from % 8;
-    m.toRow = to / 8;
-    m.toCol = to % 8;
+    m.fromRow = sq_to_row(from);
+    m.fromCol = sq_to_col(from);
+    m.toRow = sq_to_row(to);
+    m.toCol = sq_to_col(to);
     m.promotion = promo;
     return m;
 }
@@ -834,12 +635,10 @@ void TranspositionTable::store(uint64_t hash, int score, int depth, TTFlag flag,
     uint16_t existingMove = 0;
     unpackData(existingData, existingScore, existingDepth, existingFlag, existingMove);
 
-    // Depth-preferred replacement. If keys differ, we can overwrite.
     if (existingKey == 0 || existingKey != hash || depth >= existingDepth) {
         const uint16_t pm = packMove(bestMove);
         const uint64_t newData = packData(score, depth, flag, pm);
         e.data.store(newData, std::memory_order_relaxed);
-        // Publish after data is written.
         e.key.store(hash, std::memory_order_release);
     }
 }
@@ -860,150 +659,113 @@ bool TranspositionTable::probe(uint64_t key, int& outScore, int& outDepth, TTFla
     return true;
 }
 
-bool is_threefold_repetition(const std::vector<uint64_t>& history) {
-    if (history.empty()) return false;
-    uint64_t current = history.back();
-    int count = 0;
-    for (int i = static_cast<int>(history.size()) - 1; i >= 0; i--) {
-        if (history[i] == current) {
-            count++;
-            if (count >= 3) return true;
-        }
-    }
-    return false;
-}
+// SEE piece values; keep close to MVV/LVA ordering, not evaluation values
+const int see_piece_values[] = {0, 100, 320, 330, 500, 900, 20000};
 
-const int see_piece_values[] = {0, 100, 350, 350, 525, 900, 20000};
+static Bitboard attackers_to_sq(Bitboard pieces[2][6], int sq, int side, Bitboard occ) {
+    Bitboard attackers = 0ULL;
 
-static int get_least_valuable_attacker(Board& board, int square, int bySide) { // bySide: Attacker side
-    int r = square / 8;
-    int c = square % 8;
-
-    // pawn attacks
-    int pawnDir = (bySide == 1) ? 1 : -1; 
-    
-    // check left and right diagonals
-    if (r + pawnDir >= 0 && r + pawnDir < 8) {
-        if (c - 1 >= 0) {
-            int p = board.squares[r + pawnDir][c - 1];
-            if (p == (bySide * pawn)) return p; // Attacker pawn found
-        }
-        if (c + 1 < 8) {
-            int p = board.squares[r + pawnDir][c + 1];
-            if (p == (bySide * pawn)) return p;
-        }
-    }
-
-    // knight attacks
-    for (int i = 0; i < 8; ++i) {
-        int nr = r + knight_moves[i][0];
-        int nc = c + knight_moves[i][1];
-        if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
-            int p = board.squares[nr][nc];
-            if (p == (bySide * knight)) return p;
-        }
-    }
-
-    // Bishop and Queen (Diagonals)
-    for (int i = 0; i < 4; ++i) {
-        int nr = r + bishop_directions[i][0];
-        int nc = c + bishop_directions[i][1];
-        while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
-            int p = board.squares[nr][nc];
-            if (p != 0) {
-                if (p == (bySide * bishop) || p == (bySide * queen)) return p;
-                break; // Blocked by another piece
-            }
-            nr += bishop_directions[i][0];
-            nc += bishop_directions[i][1];
-        }
-    }
-
-    // Rook and Queen (Straight lines)
-    for (int i = 0; i < 4; ++i) {
-        int nr = r + rook_directions[i][0];
-        int nc = c + rook_directions[i][1];
-        while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
-            int p = board.squares[nr][nc];
-            if (p != 0) {
-                if (p == (bySide * rook) || p == (bySide * queen)) return p;
-                break; // Blocked by another piece
-            }
-            nr += rook_directions[i][0];
-            nc += rook_directions[i][1];
-        }
-    }
-
-    // King attacks
-    for (int i = 0; i < 8; ++i) {
-        int nr = r + king_moves[i][0];
-        int nc = c + king_moves[i][1];
-        if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
-            int p = board.squares[nr][nc];
-            if (p == (bySide * king)) return p;
-        }
-    }
-
-    return 0; // no attacker found
+    // Pawns: to find pawns of 'side' that attack 'sq', use pawn_attacks of the opposite side.
+    attackers |= ((side == WHITE) ? pawn_attacks[BLACK][sq] : pawn_attacks[WHITE][sq]) & pieces[side][pawn - 1];
+    attackers |= knight_attacks[sq] & pieces[side][knight - 1];
+    attackers |= king_attacks[sq] & pieces[side][king - 1];
+    attackers |= bishop_attacks_on_the_fly(sq, occ) & (pieces[side][bishop - 1] | pieces[side][queen - 1]);
+    attackers |= rook_attacks_on_the_fly(sq, occ) & (pieces[side][rook - 1] | pieces[side][queen - 1]);
+    return attackers;
 }
 
 int see_exchange(Board& board, Move& move) {
-    // Initial gain: value of the piece on the target square
-    int scores[32];
-    int scoreIndex = 0;
-    
-    // Get the value of the captured piece without simulating the move
-    int capturedVal = see_piece_values[std::abs(move.capturedPiece)];
-    // If en-passant, use pawn value
-    if (move.isEnPassant) capturedVal = see_piece_values[pawn];
+    if (move.capturedPiece == 0 && !move.isEnPassant) return 0;
 
-    scores[scoreIndex++] = capturedVal;
-    
-    int attackerSide = board.isWhiteTurn ? 1 : -1;
-    int currentAttacker = board.squares[move.fromRow][move.fromCol];
-    
-    int toSq = move.toRow * 8 + move.toCol;
-    int fromSq = move.fromRow * 8 + move.fromCol;
-    
-    // To follow temporary changes, store original pieces
-    int originalToPiece = board.squares[move.toRow][move.toCol];
-    int originalFromPiece = board.squares[move.fromRow][move.fromCol];
-    
-    // Make the initial move
-    board.squares[move.toRow][move.toCol] = currentAttacker;
-    board.squares[move.fromRow][move.fromCol] = 0;
-    attackerSide = -attackerSide; // Turn passes to the opponent
+    int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
+    int toSq = row_col_to_sq(move.toRow, move.toCol);
 
-    // Chain Reaction
-    while (true) {
-        int nextAttacker = get_least_valuable_attacker(board, toSq, attackerSide);
-        
-        if (nextAttacker == 0) break; // No more attackers
-        int attackerVal = see_piece_values[std::abs(nextAttacker)];
-        
-        scores[scoreIndex] = attackerVal;
-        scores[scoreIndex] = see_piece_values[std::abs(currentAttacker)];
-        scoreIndex++;
-
-        currentAttacker = nextAttacker;
-        attackerSide = -attackerSide;
-        
-        if (scoreIndex > 30) break;  // to avoid endless loops, js in case
-        break;
-    }
-
-    board.squares[move.toRow][move.toCol] = originalToPiece;
-    board.squares[move.fromRow][move.fromCol] = originalFromPiece;
+    int movingPiece = piece_at_sq(board, fromSq);
+    int captured = move.isEnPassant ? pawn : std::abs(move.capturedPiece);
     
-    int valVictim = see_piece_values[std::abs(move.capturedPiece)];
-    int valAttacker = see_piece_values[std::abs(board.squares[move.fromRow][move.fromCol])];
+    int victimValue = see_piece_values[captured];
 
-    if (valVictim < valAttacker) {
-        if (is_square_attacked(board, move.toRow, move.toCol, !board.isWhiteTurn)) {
-            return valVictim - valAttacker; 
+    int gain[32];
+    int depth = 0;
+
+    gain[depth++] = victimValue;
+
+    int side = board.isWhiteTurn ? WHITE : BLACK;
+    int opp = side ^ 1;
+    Bitboard occ = board.color[WHITE] | board.color[BLACK];
+    Bitboard pieces[2][6];
+    for (int c = 0; c < 2; c++) {
+        for (int p = 0; p < 6; p++) {
+            pieces[c][p] = board.piece[p] & board.color[c];
         }
     }
+
+    if (!move.isEnPassant && move.capturedPiece != 0) {
+        occ &= ~bit_at_sq(toSq);
+        pieces[opp][std::abs(move.capturedPiece) - 1] &= ~bit_at_sq(toSq);
+    }
+    if (move.isEnPassant) {
+        int capRow = move.fromRow;
+        int capSq = row_col_to_sq(capRow, move.toCol);
+        occ &= ~bit_at_sq(capSq);
+        pieces[opp][pawn - 1] &= ~bit_at_sq(capSq);
+    }
+    occ &= ~bit_at_sq(fromSq);
+    pieces[side][std::abs(movingPiece) - 1] &= ~bit_at_sq(fromSq);
+    int promoteType = move.promotion != 0 ? std::abs(move.promotion) : std::abs(movingPiece);
+    pieces[side][promoteType - 1] |= bit_at_sq(toSq);
+    occ |= bit_at_sq(toSq);
+
+    victimValue = see_piece_values[promoteType];
     
-    // In other cases, return a positive value indicating a good capture
-    return 1000; // Positive value = Good capture
+    int attackerSide = opp;
+
+    while (true) {
+        int attackerSq = -1;
+        int nextVictimPiece = 0;
+
+        Bitboard allAttackers = attackers_to_sq(pieces, toSq, attackerSide, occ);
+
+        if ((pieces[attackerSide][pawn - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][pawn - 1] & allAttackers);
+            nextVictimPiece = pawn;
+        } else if ((pieces[attackerSide][knight - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][knight - 1] & allAttackers);
+            nextVictimPiece = knight;
+        } else if ((pieces[attackerSide][bishop - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][bishop - 1] & allAttackers);
+            nextVictimPiece = bishop;
+        } else if ((pieces[attackerSide][rook - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][rook - 1] & allAttackers);
+            nextVictimPiece = rook;
+        } else if ((pieces[attackerSide][queen - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][queen - 1] & allAttackers);
+            nextVictimPiece = queen;
+        } else if ((pieces[attackerSide][king - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][king - 1] & allAttackers);
+            nextVictimPiece = king;
+        } else {
+            break;
+        }
+
+        gain[depth] = victimValue - gain[depth - 1];
+
+        if (std::max(-gain[depth - 1], gain[depth]) < 0) break;
+
+        occ &= ~bit_at_sq(attackerSq);
+        pieces[attackerSide][nextVictimPiece - 1] &= ~bit_at_sq(attackerSq);
+
+        attackerSide ^= 1;
+        depth++;
+
+        victimValue = see_piece_values[nextVictimPiece];
+        
+        if (depth >= 31) break;
+    }
+
+    while (--depth) {
+        gain[depth - 1] = -std::max(-gain[depth - 1], gain[depth]);
+    }
+
+    return gain[0];
 }

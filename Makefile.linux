@@ -1,0 +1,43 @@
+# Summary: Unified build targets and ensured strip command runs safely with newline termination.
+# Linux build
+.PHONY: build default
+
+EXE := SoloEngine
+
+ifeq ($(OS),Windows_NT)
+EXEEXT := .exe
+else
+EXEEXT :=
+endif
+
+SOURCES := main.cpp \
+		   board.cpp \
+           movegen.cpp \
+           search.cpp \
+           evaluation.cpp \
+		   bitboard.cpp
+
+CXX := g++
+CXXFLAGS := -O3 -std=c++23 -ffast-math -pthread
+LINKER := -lm
+OUT := $(EXE)$(EXEEXT)
+STRIP := strip
+
+build: $(OUT)
+
+default: build
+
+$(OUT): $(SOURCES)
+	$(CXX) $^ $(CXXFLAGS) -o $(OUT) $(LINKER)
+	@if command -v $(STRIP) >/dev/null 2>&1; then \
+	$(STRIP) $(OUT); \
+	else \
+	echo "Strip tool '$(STRIP)' not found; skipping."; \
+	fi
+
+# AddressSanitizer ile debug build
+asan:
+	$(CXX) $(SOURCES) -std=c++23 -g -O1 -fsanitize=address -fno-omit-frame-pointer -pthread -o $(EXE)_asan$(EXEEXT) $(LINKER)
+	@echo "ASAN build created as $(EXE)_asan$(EXEEXT) (symbols preserved, no strip)"
+
+debug: asan
