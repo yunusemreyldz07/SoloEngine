@@ -325,6 +325,21 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
     }
 
+    // Futility Pruning
+    // Only makes sense in non-PV nodes (null-window), otherwise it can prune good PV continuations.
+    if ((beta - alpha) == 1 && depth < 6 && !inCheck && beta < MATE_SCORE - 100) {
+        
+        // margin: for every depth, we allow a margin of 100 centipawns
+        // The deeper we go, the larger the margin should be
+        int margin = 100 * depth; // a pawn value * depth
+
+        if (staticEval + margin <= alpha) {
+            // "Even if I gain the margin, I still can't surpass the opponent's threshold, so I don't need to search further and lose time"
+            pvLine.clear();
+            return alpha; // Cutoff
+        }
+    }
+
     // Null move pruning
     {
         int kingRow = 0;
