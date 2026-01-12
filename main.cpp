@@ -40,54 +40,75 @@ static uint64_t perft(Board& board, int depth) {
 }
 
 void bench() {
-    std::vector<std::string> fens = {
+    const int benchDepth = 7;
+    const std::vector<std::string> fens = {
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", 
+        "r1bq1rk1/ppp2ppp/2n1pn2/2b5/4P3/2NP1N2/PPP1BPPP/R1BQ1RK1 w - - 0 1",
+        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R b KQkq - 0 1",
+        "r2q1rk1/1bp1bppp/p1np1n2/1p6/3NP3/1BN1BP2/PPP1B1PP/R2Q1RK1 w - - 0 10",
         "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
-        "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1"
+        "4rrk1/pppb2bp/3p2p1/3Pnp2/2P1q3/2N1P1P1/PP1Q1PBP/R3R1K1 w - - 0 1"
     };
 
-    // Perft depths per FEN. This benchmark should remain stable across search/eval changes 
-    const std::vector<int> depths = {3, 3, 2, 2};
+    auto move_to_uci = [](const Move& m) {
+        if (m.fromRow == 0 && m.fromCol == 0 && m.toRow == 0 && m.toCol == 0 && m.promotion == 0) return std::string("0000");
+        std::string s;
+        s += columns[m.fromCol];
+        s += static_cast<char>('0' + (8 - m.fromRow));
+        s += columns[m.toCol];
+        s += static_cast<char>('0' + (8 - m.toRow));
+        if (m.promotion != 0) {
+            switch (std::abs(m.promotion)) {
+                case queen: s += 'q'; break;
+                case rook: s += 'r'; break;
+                case bishop: s += 'b'; break;
+                case knight: s += 'n'; break;
+                default: break;
+            }
+        }
+        return s;
+    };
 
-    uint64_t workNodes = 0;
+    uint64_t totalNodes = 0;
     long long totalTimeMs = 0;
+
     Board board;
     if (globalTT.entryCount() == 0) globalTT.resize(16);
     globalTT.clear();
 
     for (size_t i = 0; i < fens.size(); ++i) {
-        const auto& fen = fens[i];
-        const int depth = (i < depths.size()) ? depths[i] : depths.back();
-        board.loadFromFEN(fen);
+        board.loadFromFEN(fens[i]);
+        std::vector<uint64_t> history;
+        history.reserve(64);
+        history.push_back(position_key(board));
+
+        resetNodeCounter();
         auto startTime = std::chrono::steady_clock::now();
-        uint64_t nodes = perft(board, depth);
+        Move best = getBestMove(board, benchDepth, -1, history);
         auto endTime = std::chrono::steady_clock::now();
 
         long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+        long long nodes = getNodeCounter();
 
-        workNodes += nodes;
+        totalNodes += static_cast<uint64_t>(nodes);
         totalTimeMs += elapsed;
 
-        std::cout << "info string bench perft depth " << depth
-                  << " nodes " << nodes
-                  << " time " << elapsed << "ms nps "
-                  << (nodes * 1000 / (elapsed + 1))
-                  << std::endl;
+        long long nps = (elapsed > 0) ? (nodes * 1000 / elapsed) : (nodes * 1000);
+        std::cout << "info string bench pos " << (i + 1)
+              << " depth " << benchDepth
+              << " time " << elapsed << "ms"
+              << " nodes " << nodes
+              << " nps " << nps
+              << " best " << move_to_uci(best)
+              << std::endl;
     }
 
-    long long benchDuration = std::max<long long>(1, totalTimeMs);
-    // OpenBench expects a stable bench signature. We base it on perft (movegen-only)
-    // and add a fixed offset so existing OpenBench configs that expect the historic
-    // signature continue to work.
-    constexpr uint64_t benchSignatureOffset = 335ULL;
-    const uint64_t benchSignature = workNodes + benchSignatureOffset;
-
-    // Important: OpenBench typically parses the first "<number> nodes" line as the
-    // bench signature. Use the signature value here so it matches the expected bench.
-    std::cout << benchSignature << " nodes "
-              << (benchSignature * 1000 / benchDuration) << " nps" << std::endl;
-    std::cout << "Bench: " << benchSignature << std::endl;
+    long long safeMs = std::max<long long>(1, totalTimeMs);
+    long long totalNps = (totalNodes * 1000) / safeMs;
+    std::cout << "bench total nodes " << totalNodes
+              << " time " << safeMs << "ms nps " << totalNps
+              << std::endl;
+    std::cout << "Bench: " << totalNodes << std::endl;
 }
 
 int main(int argc, char* argv[]) {
