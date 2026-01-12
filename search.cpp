@@ -327,11 +327,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     // Futility Pruning
     // Only makes sense in non-PV nodes (null-window), otherwise it can prune good PV continuations.
-    if ((beta - alpha) == 1 && depth < 3 && !inCheck && beta < MATE_SCORE - 100) {
+    if ((beta - alpha) == 1 && depth == 1 && !inCheck && beta < MATE_SCORE - 100) {
         
         // margin: for every depth, we allow a margin of 100 centipawns
         // The deeper we go, the larger the margin should be
-        int margin = 75 + 50 * depth; // a pawn value * depth
+        int margin = 150; // a pawn value * depth
 
         if (staticEval + margin <= alpha) {
             int qs = quiescence(board, alpha, alpha+1, ply);
