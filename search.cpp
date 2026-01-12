@@ -325,19 +325,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
     }
 
-    // Futility Pruning
-    // Only makes sense in non-PV nodes (null-window), otherwise it can prune good PV continuations.
-    const int MATE_MARGIN = 2000; // Margin to avoid pruning mate scores
-    bool mateBand = (std::abs(alpha) > MATE_SCORE - MATE_MARGIN) || (std::abs(beta)  > MATE_SCORE - MATE_MARGIN); // Are we in a mate score band?
-
-    if (!mateBand && (beta - alpha) == 1 && depth < 6 && !inCheck) {
-        int margin = 75 + 50 * depth;
-        if (staticEval + margin <= alpha) { // if we are so far behind that even a margin won't help
-            pvLine.clear();
-            return alpha;
-        }
-    }
-
     // Null move pruning
     {
         int kingRow = 0;
@@ -538,7 +525,6 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
     int lastScore = 0; // for aspiration windows
 
     for (int depth = 1; depth <= effectiveMaxDepth; depth++) {
-
         if (stop_search.load(std::memory_order_relaxed)) break;
 
         int delta = 50; // Aspiration window margin
@@ -586,6 +572,18 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                     thisDepthCompleted = false;
                     break; 
                 }
+
+                // Futility Pruning
+                // Only makes sense in non-PV nodes (null-window), otherwise it can prune good PV continuations.
+                const int MATE_MARGIN = 2000; // Margin to avoid pruning mate scores
+                bool mateBand = (std::abs(alpha) > MATE_SCORE - MATE_MARGIN) || (std::abs(beta)  > MATE_SCORE - MATE_MARGIN); // Are we in a mate score band?
+                if (!mateBand && (beta - alpha) == 1 && depth < 6 && !is_square_attacked(board, board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow, board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol, !board.isWhiteTurn)) {
+                    int margin = 75 + 50 * depth;
+                    if (quiescence(board, alpha, beta, 0) + margin <= alpha) { // if we are so far behind that even a margin won't help
+                        continue; // skip this move
+                    }
+                }
+
 
                 board.makeMove(move);
 
