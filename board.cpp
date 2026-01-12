@@ -659,7 +659,7 @@ bool TranspositionTable::probe(uint64_t key, int& outScore, int& outDepth, TTFla
     return true;
 }
 
-// SEE piece values; keep close to MVV/LVA ordering, not evaluation values.
+// SEE piece values; keep close to MVV/LVA ordering, not evaluation values
 const int see_piece_values[] = {0, 100, 320, 330, 500, 900, 20000};
 
 static Bitboard attackers_to_sq(Bitboard pieces[2][6], int sq, int side, Bitboard occ) {
@@ -681,20 +681,15 @@ int see_exchange(Board& board, Move& move) {
     int toSq = row_col_to_sq(move.toRow, move.toCol);
 
     int movingPiece = piece_at_sq(board, fromSq);
-    // capturedPiece her zaman 0 değil, movegen.cpp içinde doğru set edildiğinden emin olmalıyız.
-    // Eğer move listesinden geliyorsa capturedPiece doğrudur.
     int captured = move.isEnPassant ? pawn : std::abs(move.capturedPiece);
     
-    // HATA DÜZELTME 1: Başlangıç kurban değerini al
     int victimValue = see_piece_values[captured];
 
     int gain[32];
     int depth = 0;
-    
-    // İlk kazanç: Hedefteki taşı yedik
+
     gain[depth++] = victimValue;
 
-    // Bitboard kopyaları ve simülasyon...
     int side = board.isWhiteTurn ? WHITE : BLACK;
     int opp = side ^ 1;
     Bitboard occ = board.color[WHITE] | board.color[BLACK];
@@ -721,17 +716,14 @@ int see_exchange(Board& board, Move& move) {
     pieces[side][promoteType - 1] |= bit_at_sq(toSq);
     occ |= bit_at_sq(toSq);
 
-    // İlk hareket eden taş artık yeni "Kurban" oldu.
     victimValue = see_piece_values[promoteType];
     
     int attackerSide = opp;
 
     while (true) {
         int attackerSq = -1;
-        int nextVictimPiece = 0; // Bir sonraki turda kurban olacak taş (şu anki saldıran)
+        int nextVictimPiece = 0;
 
-        // HIZ OPTİMİZASYONU: attackers_to_sq fonksiyonunu her parça için ayrı ayrı çağırma.
-        // Tek seferde tüm saldıranları al.
         Bitboard allAttackers = attackers_to_sq(pieces, toSq, attackerSide, occ);
 
         if ((pieces[attackerSide][pawn - 1] & allAttackers)) {
@@ -753,25 +745,19 @@ int see_exchange(Board& board, Move& move) {
             attackerSq = lsb(pieces[attackerSide][king - 1] & allAttackers);
             nextVictimPiece = king;
         } else {
-            break; // Saldıran kalmadı
+            break;
         }
 
-        // HATA DÜZELTME 2: 
-        // gain[depth] hesaplarken saldıran taşı (nextVictimPiece) DEĞİL, 
-        // şu an karede duran kurbanı (victimValue) kullanmalısın!
         gain[depth] = victimValue - gain[depth - 1];
 
         if (std::max(-gain[depth - 1], gain[depth]) < 0) break;
 
-        // Saldıranı yerinden kaldır
         occ &= ~bit_at_sq(attackerSq);
         pieces[attackerSide][nextVictimPiece - 1] &= ~bit_at_sq(attackerSq);
 
-        // Sıra değişiyor
         attackerSide ^= 1;
         depth++;
-        
-        // Şu an saldıran taş, bir sonraki turun kurbanı olacak
+
         victimValue = see_piece_values[nextVictimPiece];
         
         if (depth >= 31) break;

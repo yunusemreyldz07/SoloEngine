@@ -4,7 +4,7 @@
 EXE := SoloEngine
 
 SOURCES := main.cpp \
-           board_bb.cpp \
+		   board.cpp \
            movegen.cpp \
            search.cpp \
            evaluation.cpp \
