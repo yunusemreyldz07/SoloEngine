@@ -327,16 +327,14 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     // Futility Pruning
     // Only makes sense in non-PV nodes (null-window), otherwise it can prune good PV continuations.
-    if ((beta - alpha) == 1 && depth < 6 && !inCheck && beta > MATE_SCORE - 10000) {
-        
-        // margin: for every depth, we allow a margin of 100 centipawns
-        // The deeper we go, the larger the margin should be
-        int margin = 75 + 50 * depth; // a pawn value * depth
+    const int MATE_MARGIN = 2000; // Margin to avoid pruning mate scores
+    bool mateBand = (std::abs(alpha) > MATE_SCORE - MATE_MARGIN) || (std::abs(beta)  > MATE_SCORE - MATE_MARGIN); // Are we in a mate score band?
 
-        if (staticEval + margin <= alpha) {
-            // "Even if I gain the margin, I still can't surpass the opponent's threshold, so I don't need to search further and lose time"
+    if (!mateBand && (beta - alpha) == 1 && depth < 6 && !inCheck) {
+        int margin = 75 + 50 * depth;
+        if (staticEval + margin <= alpha) { // if we are so far behind that even a margin won't help
             pvLine.clear();
-            return alpha; // Cutoff
+            return alpha;
         }
     }
 
