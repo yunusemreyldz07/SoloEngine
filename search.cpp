@@ -385,6 +385,25 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     });
     
     for (Move& move : possibleMoves) {
+        if (!pvNode && depth < 7 && !inCheck && 
+            move.capturedPiece == 0 && move.promotion == 0 && !move.isCastling &&
+            std::abs(alpha) < 90000 && std::abs(beta) < 90000) {
+            
+            // Futility Pruning
+            // Margin increases with depth
+            int futilityMargin = 110 + (60 * depth);
+            
+            int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
+            int toSq = row_col_to_sq(move.toRow, move.toCol);
+            
+            // To avoid pruning too aggressively, we add a history bonus
+            // int historyBonus = historyTable[fromSq][toSq] / 128; 
+
+            // If the position is so bad that even after adding the margin it doesn't reach alpha, we skip this move
+            if (staticEval + futilityMargin <= alpha ) {//+ historyBonus <= alpha) {
+                continue; // just prune the move
+            }
+        }
         int lmpCount = (3 * depth * depth) + 4;
         // Late Move Pruning (LMP) logic
         if (!pvNode && depth > 3 && depth < 8 && movesSearched >= lmpCount && !inCheck && move.promotion == 0 && move.capturedPiece == 0) {
@@ -572,18 +591,6 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                     thisDepthCompleted = false;
                     break; 
                 }
-
-                // Futility Pruning
-                // Only makes sense in non-PV nodes (null-window), otherwise it can prune good PV continuations.
-                const int MATE_MARGIN = 2000; // Margin to avoid pruning mate scores
-                bool mateBand = (std::abs(alpha) > MATE_SCORE - MATE_MARGIN) || (std::abs(beta)  > MATE_SCORE - MATE_MARGIN); // Are we in a mate score band?
-                if (!mateBand && (beta - alpha) == 1 && depth < 6 && !is_square_attacked(board, board.isWhiteTurn ? board.whiteKingRow : board.blackKingRow, board.isWhiteTurn ? board.whiteKingCol : board.blackKingCol, !board.isWhiteTurn)) {
-                    int margin = 75 + 50 * depth;
-                    if (quiescence(board, alpha, beta, 0) + margin <= alpha) { // if we are so far behind that even a margin won't help
-                        continue; // skip this move
-                    }
-                }
-
 
                 board.makeMove(move);
 
