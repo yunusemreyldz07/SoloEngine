@@ -400,7 +400,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             int historyBonus = historyTable[fromSq][toSq] / 128; 
 
             // If the position is so bad that even after adding the margin it doesn't reach alpha, we skip this move
-            if (staticEval + futilityMargin <= alpha ) {//+ historyBonus <= alpha) {
+            if (staticEval + futilityMargin + historyBonus <= alpha) {
                 continue; // just prune the move
             }
         }
