@@ -130,12 +130,9 @@ int main(int argc, char **argv) {
   init_bitboards();
   tt.resize(params.hashSizeMB);
 
-  // Sacrifice pattern'larını yükle
   if (sacrificeAnalyzer.loadPatterns("sacrifice")) {
     std::cerr << "info string Loaded sacrifice patterns" << std::endl;
   }
-
-  // HCE modu - Brain varsayılan olarak kapalı
   useBrain = false;
   Board board;
   std::string line;

@@ -14,7 +14,7 @@ SacrificeAnalyzer::SacrificeAnalyzer() : loaded(false) {}
 bool SacCondition_matches(const SacCondition &cond, int value) {
   switch (cond.comparison) {
   case '*':
-    return true; // Herhangi bir değer
+    return true;
   case '=':
     return value == cond.value;
   case '>':
@@ -90,7 +90,6 @@ bool SacrificeAnalyzer::parsePatternLine(const std::string &line,
   pattern.ourConditions.clear();
   pattern.theirConditions.clear();
 
-  // Parse our conditions (örnek: q+r*l*p3+)
   size_t i = 0;
   while (i < ourPart.size()) {
     if (ourPart[i] == 'q' || ourPart[i] == 'r' || ourPart[i] == 'l' ||
@@ -103,13 +102,10 @@ bool SacrificeAnalyzer::parsePatternLine(const std::string &line,
       cond.orLess = false;
       i++;
 
-      // Sayı var mı?
       if (i < ourPart.size() && isdigit(ourPart[i])) {
         cond.value = ourPart[i] - '0';
         i++;
       }
-
-      // Operatör var mı?
       if (i < ourPart.size()) {
         if (ourPart[i] == '+') {
           cond.comparison = '>';
@@ -134,7 +130,6 @@ bool SacrificeAnalyzer::parsePatternLine(const std::string &line,
     }
   }
 
-  // Parse their conditions (örnek: q=r=l=p1>=)
   i = 0;
   while (i < theirPart.size()) {
     if (theirPart[i] == 'q' || theirPart[i] == 'r' || theirPart[i] == 'l' ||
@@ -147,13 +142,10 @@ bool SacrificeAnalyzer::parsePatternLine(const std::string &line,
       cond.orLess = false;
       i++;
 
-      // Sayı var mı?
       if (i < theirPart.size() && isdigit(theirPart[i])) {
         cond.value = theirPart[i] - '0';
         i++;
       }
-
-      // Operatörler
       while (i < theirPart.size()) {
         if (theirPart[i] == '>') {
           cond.comparison = '>';
@@ -196,7 +188,6 @@ bool SacrificeAnalyzer::loadPatternFile(const std::string &path, int sacType) {
 
   std::string line;
   while (std::getline(file, line)) {
-    // Remove carriage return if present
     if (!line.empty() && line.back() == '\r')
       line.pop_back();
 
@@ -218,7 +209,6 @@ bool SacrificeAnalyzer::loadPatternFile(const std::string &path, int sacType) {
 }
 
 bool SacrificeAnalyzer::loadPatterns(const std::string &sacrificeDir) {
-  // Pawn sacrifice patterns
   loadPatternFile(sacrificeDir + "/1_pawnsac_white", SAC_PAWN);
   loadPatternFile(sacrificeDir + "/1_pawnsac_black", SAC_PAWN);
   loadPatternFile(sacrificeDir + "/2_pawnsac_white", SAC_PAWN);
@@ -232,7 +222,6 @@ bool SacrificeAnalyzer::loadPatterns(const std::string &sacrificeDir) {
   loadPatternFile(sacrificeDir + "/c5_pawnsac_white", SAC_PAWN);
   loadPatternFile(sacrificeDir + "/c5_pawnsac_black", SAC_PAWN);
 
-  // Queen sacrifice patterns
   loadPatternFile(sacrificeDir + "/queensac_white", SAC_QUEEN);
   loadPatternFile(sacrificeDir + "/queensac_black", SAC_QUEEN);
   loadPatternFile(sacrificeDir + "/cqueensac_white", SAC_QUEEN);
@@ -259,17 +248,17 @@ MaterialCount SacrificeAnalyzer::countMaterial(const Board &b, int side) const {
     switch (pt) {
     case 1:
       mc.pawns++;
-      break; // Pawn
-    case 2:  // Knight
-    case 3:  // Bishop
+      break;
+    case 2:
+    case 3:
       mc.lightPieces++;
       break;
     case 4:
       mc.rooks++;
-      break; // Rook
+      break;
     case 5:
       mc.queens++;
-      break; // Queen
+      break;
     }
   }
 
@@ -285,23 +274,19 @@ int SacrificeAnalyzer::analyzeSacrifice(const Board &b, int side) const {
 
   int materialDiff = us.total() - them.total();
 
-  // Materyal dezavantajındaysak sacrifice araştır
   if (materialDiff >= 0)
     return 0;
 
   int bonus = 0;
-
-  // Queen sacrifice check
   if (us.queens < them.queens) {
     for (const auto &pattern : queenSacPatterns) {
       if (pattern.matches(us, them)) {
-        bonus = std::max(bonus, 300); // Büyük queen sacrifice bonusu
+        bonus = std::max(bonus, 300);
         break;
       }
     }
   }
 
-  // Pawn sacrifice check
   if (us.pawns < them.pawns) {
     for (const auto &pattern : pawnSacPatterns) {
       if (pattern.matches(us, them)) {
@@ -311,7 +296,6 @@ int SacrificeAnalyzer::analyzeSacrifice(const Board &b, int side) const {
     }
   }
 
-  // Piece sacrifice check
   if (us.lightPieces < them.lightPieces || us.rooks < them.rooks) {
     for (const auto &pattern : pieceSacPatterns) {
       if (pattern.matches(us, them)) {
@@ -327,7 +311,6 @@ int SacrificeAnalyzer::analyzeSacrifice(const Board &b, int side) const {
 bool SacrificeAnalyzer::hasAttackPotential(const Board &b, int side) const {
   MaterialCount us = countMaterial(b, side);
 
-  // En az 1 vezir veya 2 kale veya vezir+kale kombinasyonu
   if (us.queens >= 1)
     return true;
   if (us.rooks >= 2)
@@ -341,7 +324,6 @@ bool SacrificeAnalyzer::hasAttackPotential(const Board &b, int side) const {
 int SacrificeAnalyzer::getSacrificeBonus(const Board &b, int side) const {
   int bonus = analyzeSacrifice(b, side);
 
-  // Saldırı potansiyeli varsa bonusu artır
   if (bonus > 0 && hasAttackPotential(b, side)) {
     bonus = bonus * 3 / 2;
   }

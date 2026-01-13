@@ -15,15 +15,13 @@ struct EngineParams {
   int pawnStructureWeight = 100;
   int mobilityWeight = 100;
 
-  // Ana agresiflik parametresi (100=normal, 150=agresif, 200=ultra)
-  int aggressiveness = 150; // AGRESIF varsayılan!
+  int aggressiveness = 150;
 
-  // Ek agresif parametreler
-  int attackWeight = 150;     // Saldırı ağırlığı
-  int sacrificeBonus = 200;   // Sacrifice bonus çarpanı
-  int kingDangerWeight = 120; // Kral tehdit ağırlığı
-  int tempoValue = 20;        // Tempo değeri
-  int hangingPenalty = 50;    // Asılı taş cezası
+  int attackWeight = 150;
+  int sacrificeBonus = 200;
+  int kingDangerWeight = 120;
+  int tempoValue = 20;
+  int hangingPenalty = 50;
 
   int threads = 1;
   int hashSizeMB = 16;

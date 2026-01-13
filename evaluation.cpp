@@ -545,18 +545,13 @@ int evaluatePawnStorm(const Board &b, int side) {
   return score;
 }
 
-// ==================== AGRESIF EVALUATION FONKSIYONLARI ====================
-
-// King Attack Units - Stockfish tarzı saldırı birim hesaplaması
 int evaluateKingAttackUnits(const Board &b, int side) {
   int units = 0;
   int enemyKingSq = (side == 0) ? b.bKingSq : b.wKingSq;
   int kingFile = enemyKingSq % 8;
   int kingRank = enemyKingSq / 8;
 
-  // Kral çevresindeki kareler
   uint64_t kingZone = king_attacks(enemyKingSq);
-  // Genişletilmiş kral bölgesi
   for (int i = 0; i < 64; i++) {
     if (kingZone & (1ULL << i)) {
       kingZone |= king_attacks(i);
@@ -578,54 +573,49 @@ int evaluateKingAttackUnits(const Board &b, int side) {
     uint64_t attacks = 0;
     uint64_t occ = 0;
 
-    // Occupancy hesapla
     for (int i = 0; i < 64; i++) {
       if (b.squares[i])
         occ |= (1ULL << i);
     }
 
     switch (pt) {
-    case 1: // Knight
+    case 1:
       attacks = knight_attacks(sq);
       break;
-    case 2: // Bishop
+    case 2:
       attacks = bishop_attacks(sq, occ);
       break;
-    case 3: // Rook
+    case 3:
       attacks = rook_attacks(sq, occ);
       break;
-    case 4: // Queen
+    case 4:
       attacks = queen_attacks(sq, occ);
       break;
     default:
       continue;
     }
 
-    // Kral bölgesine saldırı var mı?
     uint64_t kingAttacks = attacks & kingZone;
     if (kingAttacks) {
       attackerCount++;
       int popCnt = __builtin_popcountll(kingAttacks);
-
-      // Taş tipine göre ağırlık
       switch (pt) {
       case 1:
         attackWeight += popCnt * 2;
-        break; // Knight
+        break;
       case 2:
         attackWeight += popCnt * 2;
-        break; // Bishop
+        break;
       case 3:
         attackWeight += popCnt * 3;
-        break; // Rook
+        break;
       case 4:
         attackWeight += popCnt * 5;
-        break; // Queen
+        break;
       }
     }
   }
 
-  // Saldırgan sayısına göre çarpan
   static const int attackerMultiplier[] = {0, 0, 50, 75, 88, 94, 97, 99, 100};
   int multiplier = attackerCount < 9 ? attackerMultiplier[attackerCount] : 100;
 
@@ -634,14 +624,12 @@ int evaluateKingAttackUnits(const Board &b, int side) {
   return units;
 }
 
-// Saldırı Potansiyeli - Açık hatlar, fil diyagonalleri
 int evaluateAttackPotential(const Board &b, int side) {
   int potential = 0;
   int enemyKingSq = (side == 0) ? b.bKingSq : b.wKingSq;
   int enemyKingFile = enemyKingSq % 8;
   int enemyKingRank = enemyKingSq / 8;
 
-  // Kral tarafındaki açık hatlar
   int pawnPiece = (side == 0) ? 1 : -1;
   int enemyPawn = -pawnPiece;
 
@@ -659,13 +647,12 @@ int evaluateAttackPotential(const Board &b, int side) {
     }
 
     if (!hasFriendlyPawn && !hasEnemyPawn) {
-      potential += 20; // Açık hat bonusu
+      potential += 20;
     } else if (!hasEnemyPawn) {
-      potential += 12; // Yarı açık hat bonusu
+      potential += 12;
     }
   }
 
-  // Vezir + Kale kombinasyonu
   int queenPiece = (side == 0) ? 5 : -5;
   int rookPiece = (side == 0) ? 4 : -4;
   bool hasQueen = false;
@@ -686,11 +673,9 @@ int evaluateAttackPotential(const Board &b, int side) {
   return potential;
 }
 
-// Materyal Dengesizliği - Eşit olmayan değişimler için bonus
 int evaluateMaterialImbalance(const Board &b, int side) {
   int imbalance = 0;
 
-  // Materyal sayımı
   int wBishops = 0, wKnights = 0, wRooks = 0, wQueens = 0;
   int bBishops = 0, bKnights = 0, bRooks = 0, bQueens = 0;
 
@@ -731,10 +716,8 @@ int evaluateMaterialImbalance(const Board &b, int side) {
   }
 
   if (side == 0) {
-    // Rook vs 2 minor pieces
     if (wRooks > bRooks && (wBishops + wKnights) < (bBishops + bKnights))
       imbalance += 15;
-    // Bishop pair vs knight pair
     if (wBishops >= 2 && bBishops < 2)
       imbalance += 10;
   } else {
@@ -747,12 +730,10 @@ int evaluateMaterialImbalance(const Board &b, int side) {
   return imbalance;
 }
 
-// Tempo Bonusu - İnisiyatif ve gelişim
 int evaluateTempoBonus(const Board &b, int side) {
   int tempo = 0;
 
-  // Merkez kontrolü
-  int centerSquares[] = {27, 28, 35, 36}; // d4, e4, d5, e5
+  int centerSquares[] = {27, 28, 35, 36};
   int pawnPiece = (side == 0) ? 1 : -1;
   int knightPiece = (side == 0) ? 2 : -2;
   int bishopPiece = (side == 0) ? 3 : -3;
@@ -767,7 +748,6 @@ int evaluateTempoBonus(const Board &b, int side) {
       tempo += 8;
   }
 
-  // Genişletilmiş merkez
   int extendedCenter[] = {18, 19, 20, 21, 26, 29, 34, 37, 42, 43, 44, 45};
   for (int i = 0; i < 12; i++) {
     int sq = extendedCenter[i];
@@ -780,7 +760,6 @@ int evaluateTempoBonus(const Board &b, int side) {
   return tempo;
 }
 
-// Hanging Pieces (Asılı Taşlar) - Savunmasız taşları tespit et
 int evaluateHangingPieces(const Board &b, int side) {
   int penalty = 0;
   int enemySide = 1 - side;
@@ -791,7 +770,6 @@ int evaluateHangingPieces(const Board &b, int side) {
       occ |= (1ULL << i);
   }
 
-  // Düşman saldırılarını hesapla
   uint64_t enemyAttacks = 0;
   for (int sq = 0; sq < 64; sq++) {
     int piece = b.squares[sq];
@@ -803,7 +781,7 @@ int evaluateHangingPieces(const Board &b, int side) {
 
     int pt = std::abs(piece) - 1;
     switch (pt) {
-    case 0: { // Pawn
+    case 0: {
       int dir = (enemySide == 0) ? -1 : 1;
       int file = sq % 8;
       if (file > 0)
@@ -830,7 +808,6 @@ int evaluateHangingPieces(const Board &b, int side) {
     }
   }
 
-  // Bizim taşlarımızın savunmasını kontrol et
   uint64_t ourDefense = 0;
   for (int sq = 0; sq < 64; sq++) {
     int piece = b.squares[sq];
@@ -869,7 +846,6 @@ int evaluateHangingPieces(const Board &b, int side) {
     }
   }
 
-  // Savunmasız ve saldırı altındaki taşları bul
   for (int sq = 0; sq < 64; sq++) {
     int piece = b.squares[sq];
     if (!piece)
@@ -880,22 +856,20 @@ int evaluateHangingPieces(const Board &b, int side) {
 
     int pt = std::abs(piece);
     if (pt == 6)
-      continue; // Kral hariç
+      continue;
 
     bool attacked = (enemyAttacks & (1ULL << sq)) != 0;
     bool defended = (ourDefense & (1ULL << sq)) != 0;
 
     if (attacked && !defended) {
-      // Savunmasız taş cezası
       static const int pieceValues[] = {0, 100, 320, 330, 500, 900, 0};
       penalty += pieceValues[pt] / 4;
     }
   }
 
-  return -penalty; // Negatif (ceza)
+  return -penalty;
 }
 
-// Taş Yoğunluğu - Düşman kralına doğru taş konsantrasyonu
 int evaluatePieceConcentration(const Board &b, int side) {
   int concentration = 0;
   int enemyKingSq = (side == 0) ? b.bKingSq : b.wKingSq;
@@ -912,18 +886,16 @@ int evaluatePieceConcentration(const Board &b, int side) {
 
     int pt = std::abs(piece);
     if (pt == 1 || pt == 6)
-      continue; // Piyon ve kral hariç
+      continue;
 
     int file = sq % 8;
     int rank = sq / 8;
     int dist = std::max(std::abs(file - enemyKingFile),
                         std::abs(rank - enemyKingRank));
 
-    // Mesafe ne kadar yakınsa o kadar bonus
     int bonus = (7 - dist) * 2;
 
-    // Taş tipine göre ağırlıklandır
-    if (pt == 4 || pt == 5) // Rook veya Queen
+    if (pt == 4 || pt == 5)
       bonus = bonus * 3 / 2;
 
     concentration += bonus;
@@ -932,7 +904,6 @@ int evaluatePieceConcentration(const Board &b, int side) {
   return concentration;
 }
 
-// Sacrifice Değerlendirmesi - sacrifice.cpp'den
 int evaluateSacrificeBonus(const Board &b, int side) {
   return sacrificeAnalyzer.getSacrificeBonus(b, side);
 }
@@ -1024,49 +995,39 @@ int evaluate(const Board &b) {
     mgScore += pawnStorm;
   }
 
-  // ==================== AGRESIF DEĞERLENDIRME ====================
-  // Agresiflik çarpanı (100 = normal, 150 = agresif, 200 = ultra agresif)
   int aggMult = params.aggressiveness;
 
-  // King Attack Units - Düşman kralına saldırı
   if (phase > 8) {
     int kingAttack =
         evaluateKingAttackUnits(b, 0) - evaluateKingAttackUnits(b, 1);
-    mgScore += kingAttack * aggMult / 50; // Agresiflik ile ölçekle
+    mgScore += kingAttack * aggMult / 50;
   }
 
-  // Attack Potential - Saldırı potansiyeli
   int attackPot = evaluateAttackPotential(b, 0) - evaluateAttackPotential(b, 1);
   mgScore += attackPot * aggMult / 100;
 
-  // Material Imbalance - Materyal dengesizliği
   int imbalance =
       evaluateMaterialImbalance(b, 0) - evaluateMaterialImbalance(b, 1);
   mgScore += imbalance;
   egScore += imbalance;
 
-  // Tempo Bonus - İnisiyatif
   int tempo = evaluateTempoBonus(b, 0) - evaluateTempoBonus(b, 1);
   mgScore += tempo * aggMult / 100;
 
-  // Hanging Pieces - Savunmasız taşlar
   int hanging = evaluateHangingPieces(b, 0) - evaluateHangingPieces(b, 1);
   mgScore += hanging;
   egScore += hanging;
 
-  // Piece Concentration - Taş yoğunluğu düşman kralına
   if (phase > 10) {
     int concentration =
         evaluatePieceConcentration(b, 0) - evaluatePieceConcentration(b, 1);
     mgScore += concentration * aggMult / 80;
   }
 
-  // Sacrifice Bonus - Fedakarlık değerlendirmesi
   int sacBonus = evaluateSacrificeBonus(b, 0) - evaluateSacrificeBonus(b, 1);
   mgScore += sacBonus * aggMult / 100;
   egScore += sacBonus * aggMult / 150;
 
-  // ==================== FİNAL SKOR ====================
   int p = phase * 256 / 24;
   int score = (mgScore * p + egScore * (256 - p)) / 256;
   return b.whiteTurn ? score : -score;
