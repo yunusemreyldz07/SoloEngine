@@ -415,7 +415,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             // Late Move Reduction (LMR)
             int reduction = 0;
             std::vector<Move> nullWindowPv;
-            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
+            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && !inCheck && !pvNode) {
                 reduction = LMR_TABLE[1][depth][movesSearched]; // quiet moves reduction
             }
             else {
