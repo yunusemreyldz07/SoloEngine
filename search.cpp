@@ -8,12 +8,15 @@
 #include <limits>
 #include <iostream>
 #include <atomic>
+#include <cmath>
 
 int MATE_SCORE = 100000;
 
 int historyTable[64][64];
 
 const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
+
+int LMR_TABLE[2][256][256]; // 1 is for quiet moves, 0 for tactical/noisy moves
 
 Move killerMove[2][100];
 std::atomic<long long> nodeCount{0};
@@ -30,6 +33,20 @@ std::atomic<long long> time_limit_ms{0};          // Time limit (atomic for thre
 std::atomic<long long> start_time_ms{0};          // Start time in milliseconds since epoch (atomic for thread-safety)
 std::atomic<bool> is_time_limited{false};         // Do we have time limit? (atomic for thread-safety)
 std::atomic<bool> use_tt(true);
+
+void init_LMR_tables() {
+    for (int depth = 1; depth < 256; depth++) {
+        for (int numMoves = 1; numMoves < 256; numMoves++) {
+            if (numMoves == 0 || depth == 0) {
+                LMR_TABLE[0][depth][numMoves] = 0;
+                LMR_TABLE[1][depth][numMoves] = 0;
+                continue;
+            }
+            LMR_TABLE[0][depth][numMoves] = 0.38 + std::log(depth) * std::log(numMoves) / 3.76; // for tactical/noisy moves
+            LMR_TABLE[1][depth][numMoves] = 1.01 + std::log(depth) * std::log(numMoves) / 2.32; // for quiet moves
+        }
+    }
+}
 
 void request_stop_search() {
     stop_search.store(true, std::memory_order_relaxed);
@@ -137,25 +154,6 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
 
     if (move.promotion != 0) {
         moveScore += 9000;
-    }
-
-    // Root move ordering bias for sensible openings (only ply 0)
-    if (ply == 0) {
-        // Encourage central pawn pushes (d/e pawns two squares)
-        if (move.fromRow == 6 && move.toRow == 4 && (move.fromCol == 3 || move.fromCol == 4)) {
-            moveScore += 500;
-        }
-        // Encourage knights toward center (Nb1-c3, Ng1-f3 and mirrors for black)
-        int piece = piece_at_sq(board, from);
-        if (std::abs(piece) == knight) {
-            // White: b1->c3, g1->f3; Black: b8->c6, g8->f6
-            if ((move.fromRow == 7 && move.fromCol == 1 && move.toRow == 5 && move.toCol == 2) ||
-                (move.fromRow == 7 && move.fromCol == 6 && move.toRow == 5 && move.toCol == 5) ||
-                (move.fromRow == 0 && move.fromCol == 1 && move.toRow == 2 && move.toCol == 2) ||
-                (move.fromRow == 0 && move.fromCol == 6 && move.toRow == 2 && move.toCol == 5)) {
-                moveScore += 400;
-            }
-        }
     }
 
     if (move.isCastling) {
@@ -417,10 +415,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             // Late Move Reduction (LMR)
             int reduction = 0;
             std::vector<Move> nullWindowPv;
-            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && depth >= 3 && movesSearched > 4) {
-                reduction = 1 + (depth / 6); // Increase reduction with depth
-
-                if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we don't search negative depth
+            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
+                reduction = LMR_TABLE[1][depth][movesSearched]; // quiet moves reduction
+            }
+            else {
+                reduction = LMR_TABLE[0][depth][movesSearched]; // tactical/noisy moves reduction
             }
             
             eval = -negamax(board, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);
@@ -433,6 +432,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             if (eval > alpha && eval < beta) {
                 childPv.clear();
                 eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
+                // If the search was stopped during the full-window re-search,
+                // avoid using a potentially unreliable evaluation value.
+                if (should_stop()) {
+                    eval = alpha;
+                }
             } else {
                 childPv.clear();
             }
