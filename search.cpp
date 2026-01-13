@@ -43,7 +43,7 @@ void init_LMR_tables() {
                 continue;
             }
             LMR_TABLE[0][depth][numMoves] = 0.38 + std::log(depth) * std::log(numMoves) / 3.76; // for tactical/noisy moves
-            LMR_TABLE[1][depth][numMoves] = 1.01 + std::log(depth) * std::log(numMoves) / 2.32; // for quiet moves
+            LMR_TABLE[1][depth][numMoves] = 0.61 + std::log(depth) * std::log(numMoves) / 2.32; // for quiet moves
         }
     }
 }
