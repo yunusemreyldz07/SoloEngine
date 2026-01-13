@@ -139,25 +139,6 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
         moveScore += 9000;
     }
 
-    // Root move ordering bias for sensible openings (only ply 0)
-    if (ply == 0) {
-        // Encourage central pawn pushes (d/e pawns two squares)
-        if (move.fromRow == 6 && move.toRow == 4 && (move.fromCol == 3 || move.fromCol == 4)) {
-            moveScore += 500;
-        }
-        // Encourage knights toward center (Nb1-c3, Ng1-f3 and mirrors for black)
-        int piece = piece_at_sq(board, from);
-        if (std::abs(piece) == knight) {
-            // White: b1->c3, g1->f3; Black: b8->c6, g8->f6
-            if ((move.fromRow == 7 && move.fromCol == 1 && move.toRow == 5 && move.toCol == 2) ||
-                (move.fromRow == 7 && move.fromCol == 6 && move.toRow == 5 && move.toCol == 5) ||
-                (move.fromRow == 0 && move.fromCol == 1 && move.toRow == 2 && move.toCol == 2) ||
-                (move.fromRow == 0 && move.fromCol == 6 && move.toRow == 2 && move.toCol == 5)) {
-                moveScore += 400;
-            }
-        }
-    }
-
     if (move.isCastling) {
         // Castling is good for king safety, but keep the bonus modest so we don't prefer it over
         // urgent defensive moves (like saving a hanging piece) at shallow depth
