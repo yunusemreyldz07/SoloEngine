@@ -43,7 +43,7 @@ void init_LMR_tables() {
                 continue;
             }
             LMR_TABLE[0][depth][numMoves] = 0.38 + std::log(depth) * std::log(numMoves) / 3.76; // for tactical/noisy moves
-            LMR_TABLE[1][depth][numMoves] = 0.61 + std::log(depth) * std::log(numMoves) / 2.32; // for quiet moves
+            LMR_TABLE[1][depth][numMoves] = 1.01 + std::log(depth) * std::log(numMoves) / 2.32; // for quiet moves
         }
     }
 }
@@ -415,8 +415,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             // Late Move Reduction (LMR)
             int reduction = 0;
             std::vector<Move> nullWindowPv;
-            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && !inCheck && !pvNode) {
+            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && inCheck && !pvNode) {
                 reduction = LMR_TABLE[1][depth][movesSearched]; // quiet moves reduction
+            }
+            else {
+                reduction = LMR_TABLE[0][depth][movesSearched]; // tactical/noisy moves reduction
             }
             
             eval = -negamax(board, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);
