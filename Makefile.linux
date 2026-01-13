@@ -1,6 +1,6 @@
 CXX = g++
 TARGET = soloengine_linux
-SOURCES = main.cpp board.cpp search.cpp evaluation.cpp bitboard.cpp params.cpp
+SOURCES = main.cpp board.cpp search.cpp evaluation.cpp bitboard.cpp params.cpp brain.cpp sacrifice.cpp
 CXXFLAGS = -O3 -std=c++23 -ffast-math -pthread
 LDFLAGS = -lm
 STRIP = strip

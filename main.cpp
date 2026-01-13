@@ -1,6 +1,8 @@
 #include "board.h"
+#include "brain.h"
 #include "evaluation.h"
 #include "params.h"
+#include "sacrifice.h"
 #include "search.h"
 #include <algorithm>
 #include <chrono>
@@ -127,6 +129,14 @@ int main(int argc, char **argv) {
 
   init_bitboards();
   tt.resize(params.hashSizeMB);
+
+  // Sacrifice pattern'larını yükle
+  if (sacrificeAnalyzer.loadPatterns("sacrifice")) {
+    std::cerr << "info string Loaded sacrifice patterns" << std::endl;
+  }
+
+  // HCE modu - Brain varsayılan olarak kapalı
+  useBrain = false;
   Board board;
   std::string line;
   std::vector<uint64_t> history;
@@ -158,6 +168,11 @@ int main(int argc, char **argv) {
           << "option name MobilityWeight type spin default 100 min 0 max 200\n";
       std::cout
           << "option name Aggressiveness type spin default 100 min 0 max 200\n";
+      std::cout << "option name UseBrain type check default false\n";
+      std::cout << "option name Brain_File type string default brain.solo\n";
+      std::cout
+          << "option name LearningRate type spin default 10 min 1 max 100\n";
+      std::cout << "option name Randomness type spin default 0 min 0 max 10\n";
       std::cout << "uciok\n";
     } else if (line == "isready")
       std::cout << "readyok\n";
@@ -315,6 +330,120 @@ int main(int argc, char **argv) {
         params.mobilityWeight = std::max(0, std::min(200, value));
       } else if (name == "Aggressiveness") {
         params.aggressiveness = std::max(0, std::min(200, value));
+      } else if (name == "UseBrain") {
+        std::string strVal;
+        ss >> strVal;
+        useBrain = (strVal == "true" || strVal == "1");
+        if (useBrain) {
+          std::cout << "info string Brain enabled, games learned: "
+                    << brain.gamesLearned << std::endl;
+        }
+      } else if (name == "Brain_File") {
+        std::string filename;
+        ss >> filename;
+        if (brain.loadWeights(filename)) {
+          std::cout << "info string Loaded " << filename << " ("
+                    << brain.gamesLearned << " games)" << std::endl;
+        }
+      } else if (name == "LearningRate") {
+        brain.learningRate = std::max(1, std::min(100, value)) / 1000.0f;
+      } else if (name == "Randomness") {
+        params.randomness = std::max(0, std::min(10, value));
+      }
+    } else if (line.rfind("train", 0) == 0) {
+      std::istringstream ss(line);
+      std::string cmd, subcmd;
+      ss >> cmd >> subcmd;
+
+      if (subcmd == "save") {
+        std::string filename = "brain.solo";
+        ss >> filename;
+        if (brain.saveWeights(filename)) {
+          std::cout << "info string Saved to " << filename << std::endl;
+        }
+      } else if (subcmd == "load") {
+        std::string filename = "brain.solo";
+        ss >> filename;
+        if (brain.loadWeights(filename)) {
+          std::cout << "info string Loaded " << filename << " ("
+                    << brain.gamesLearned << " games)" << std::endl;
+        }
+      } else if (subcmd == "status") {
+        std::cout << "info string Games learned: " << brain.gamesLearned
+                  << ", LR: " << brain.learningRate
+                  << ", Brain: " << (useBrain ? "on" : "off") << std::endl;
+      } else if (subcmd == "selfplay") {
+        int numGames = 10;
+        ss >> numGames;
+
+        if (brain.loadWeights("brain.solo")) {
+          std::cout << "info string Loaded brain.solo (" << brain.gamesLearned
+                    << " games)" << std::endl;
+        }
+
+        std::cout << "info string Training for " << numGames << " games..."
+                  << std::endl;
+
+        useBrain = true;
+        int oldRandomness = params.randomness;
+        params.randomness = 5;
+
+        for (int g = 0; g < numGames; g++) {
+          Board b;
+          std::vector<TrainingSample> samples;
+          std::vector<int> searchScores;
+          std::vector<uint64_t> hist;
+          int moves = 0;
+
+          while (!b.isInsufficientMaterial() && moves < 200) {
+            auto features = brain.extractFeatures(b);
+
+            Move m = search(b, 6, 0, hist);
+            if (m.fromRow == 0 && m.fromCol == 0 && m.toRow == 0 &&
+                m.toCol == 0)
+              break;
+
+            int score = evaluate(b);
+            searchScores.push_back(b.whiteTurn ? score : -score);
+            samples.push_back({features, 0.0f});
+
+            b.makeMove(m);
+            hist.push_back(positionKey(b));
+            moves++;
+          }
+
+          float result = 0.5f;
+          int kingSq = b.whiteTurn ? b.wKingSq : b.bKingSq;
+          if (isAttacked(b, kingSq, !b.whiteTurn)) {
+            result = b.whiteTurn ? 0.0f : 1.0f;
+          }
+
+          for (size_t i = 0; i < samples.size(); i++) {
+            float scoreTarget =
+                std::tanh(searchScores[i] / 600.0f) * 0.5f + 0.5f;
+            samples[i].target = 0.7f * scoreTarget + 0.3f * result;
+          }
+
+          brain.train(samples);
+          brain.saveWeights("brain.solo");
+
+          if ((g + 1) % 5 == 0) {
+            std::cout << "info string Game " << (g + 1) << "/" << numGames
+                      << " - Total learned: " << brain.gamesLearned
+                      << std::endl;
+          }
+        }
+
+        brain.saveWeights("brain.solo");
+        params.randomness = oldRandomness;
+        std::cout << "info string Training complete! Saved to brain.solo"
+                  << std::endl;
+      } else if (subcmd == "enable") {
+        useBrain = true;
+        std::cout << "info string Brain enabled" << std::endl;
+      } else if (subcmd == "disable") {
+        useBrain = false;
+        std::cout << "info string Brain disabled (using HCE)" << std::endl;
       }
     }
   }

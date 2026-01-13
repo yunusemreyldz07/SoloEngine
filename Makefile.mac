@@ -1,6 +1,6 @@
 CXX = clang++
 TARGET = soloengine_mac
-SOURCES = main.cpp board.cpp search.cpp evaluation.cpp bitboard.cpp params.cpp
+SOURCES = main.cpp board.cpp search.cpp evaluation.cpp bitboard.cpp params.cpp brain.cpp sacrifice.cpp
 CXXFLAGS = -O3 -std=c++23 -ffast-math -march=armv8-a -pthread
 LDFLAGS = -lm
 STRIP = llvm-strip

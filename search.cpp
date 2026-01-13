@@ -1,11 +1,14 @@
 #include "search.h"
 #include "evaluation.h"
+#include "params.h"
+#include "sacrifice.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstring>
 #include <iostream>
 #include <mutex>
+#include <random>
 #include <thread>
 
 std::atomic<bool> stopSearch(false);
@@ -50,6 +53,61 @@ static int see(Board &b, Move &m) {
     return 0;
   return vals[std::abs(m.capturedPiece)] -
          vals[std::abs(b.squares[m.fromRow * 8 + m.fromCol])] / 10;
+}
+
+// Agresif hamle mi? (Düşman kralına yakın hamle veya saldırı)
+static bool isAggressiveMove(const Board &b, const Move &m) {
+  int enemyKingSq = b.whiteTurn ? b.bKingSq : b.wKingSq;
+  int enemyKingFile = enemyKingSq % 8;
+  int enemyKingRank = enemyKingSq / 8;
+
+  int toFile = m.toCol;
+  int toRank = m.toRow;
+
+  // Hedef kare düşman kralına ne kadar yakın?
+  int dist = std::max(std::abs(toFile - enemyKingFile),
+                      std::abs(toRank - enemyKingRank));
+
+  // 3 kare içindeyse agresif
+  if (dist <= 3)
+    return true;
+
+  // Yakalama hamlesi
+  if (m.capturedPiece)
+    return true;
+
+  // Piyon ilerlemesi (5. sıradan sonra)
+  int piece = std::abs(b.squares[m.fromRow * 8 + m.fromCol]);
+  if (piece == 1) {
+    int relRank = b.whiteTurn ? (7 - m.toRow) : m.toRow;
+    if (relRank >= 4)
+      return true;
+  }
+
+  return false;
+}
+
+// Sacrifice hamlesi mi?
+static bool isSacrificeMove(Board &b, const Move &m) {
+  if (!m.capturedPiece)
+    return false;
+
+  int ourPiece = std::abs(b.squares[m.fromRow * 8 + m.fromCol]);
+  int theirPiece = std::abs(m.capturedPiece);
+
+  static const int vals[] = {0, 100, 320, 330, 500, 900, 20000};
+
+  // Düşük değerli taşla yüksek değerli taşı almak sacrifice değil
+  // Yüksek değerli taşla düşük almak sacrifice olabilir
+  if (vals[ourPiece] > vals[theirPiece] + 100) {
+    // Bu bir sacrifice - eğer saldırı pozisyonundaysak bonus ver
+    int enemyKingSq = b.whiteTurn ? b.bKingSq : b.wKingSq;
+    int dist = std::max(std::abs(m.toCol - (enemyKingSq % 8)),
+                        std::abs(m.toRow - (enemyKingSq / 8)));
+    return dist <= 3;
+  }
+
+  return false;
 }
 
 static int quiesce(Board &b, int alpha, int beta) {
@@ -99,7 +157,7 @@ static int negamax(Board &b, int depth, int alpha, int beta, int ply,
     checkTime();
   if (stopSearch.load())
     return 0;
-  if (isRepetition(hist) || b.isInsufficientMaterial())
+  if (!root && (isRepetition(hist) || b.isInsufficientMaterial()))
     return 0;
   if (depth <= 0)
     return quiesce(b, alpha, beta);
@@ -154,8 +212,14 @@ static int negamax(Board &b, int depth, int alpha, int beta, int ply,
       int seeScore = see(b, m);
       if (seeScore >= 0)
         m.score = 9000000 + seeScore;
-      else
-        m.score = -1000000 + seeScore;
+      else {
+        // Sacrifice hamleleri için özel değerlendirme
+        if (isSacrificeMove(b, m)) {
+          m.score = 8500000 + seeScore; // Sacrifice bonusu
+        } else {
+          m.score = -1000000 + seeScore;
+        }
+      }
     } else {
       bool isKiller1 =
           (ply < MAX_PLY && m.fromRow == killerMoves[ply][0].fromRow &&
@@ -182,8 +246,13 @@ static int negamax(Board &b, int depth, int alpha, int beta, int ply,
         m.score = 7900000;
       else if (isCounter)
         m.score = 7000000;
-      else
+      else {
         m.score = historyTable[from][to];
+        // Agresif hamlelere bonus
+        if (isAggressiveMove(b, m)) {
+          m.score += 500000; // Agresif bonus
+        }
+      }
     }
   }
   std::sort(moves.begin(), moves.end(),
@@ -228,6 +297,12 @@ static int negamax(Board &b, int depth, int alpha, int beta, int ply,
                                         std::log((double)legal) / 2.0);
         reduction = std::min(depth - 1, reduction);
       }
+
+      // Agresif hamleler için azaltılmış LMR
+      if (isAggressiveMove(b, m)) {
+        reduction = std::max(0, reduction - 1);
+      }
+
       score = -negamax(b, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1,
                        hist, childPV, false);
       if (score > alpha && reduction > 0) {
@@ -328,10 +403,22 @@ static void searchThread(Board b, int maxDepth, std::vector<uint64_t> hist,
       currentBest = pv[0];
     if (main) {
       std::lock_guard<std::mutex> lock(bestMutex);
-      if (d > bestDepthGlobal && !pv.empty()) {
+      if (!pv.empty() && d > bestDepthGlobal) {
         bestMoveGlobal = pv[0];
         bestDepthGlobal = d;
+      } else if (d == 1 && bestDepthGlobal == 0 && currentBest.fromRow != 0) {
+        bestMoveGlobal = currentBest;
+        bestDepthGlobal = 1;
       }
+
+      if (params.randomness > 0 && d <= 3) {
+        static std::mt19937 rng(
+            std::chrono::steady_clock::now().time_since_epoch().count());
+        std::uniform_int_distribution<int> dist(-params.randomness * 10,
+                                                params.randomness * 10);
+        score += dist(rng);
+      }
+
       long long nodes = nodeCount.load();
       long long elapsed =
           std::chrono::duration_cast<std::chrono::milliseconds>(
