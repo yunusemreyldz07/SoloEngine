@@ -388,15 +388,17 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     });
     
     for (Move& move : possibleMoves) {
+        
+        int lmrReduction = 0;
+        lmrReduction = 1 + (depth / 6);
+
         if (!pvNode && depth < 6 && !inCheck && 
             move.capturedPiece == 0 && move.promotion == 0 && !move.isCastling &&
             std::abs(alpha) < 90000 && std::abs(beta) < 90000 && (beta-alpha) == 1) {
-            
             // Futility Pruning
             // Use estimated LMR depth to avoid over-pruning in deeper searches.
-            int lmrReduction = 0;
-            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && depth >= 3 && movesSearched > 4) {
-                lmrReduction = 1 + (depth / 6);
+            
+            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && depth >= 3 && movesSearched > 4) {    
                 if (depth - 1 - lmrReduction < 1) lmrReduction = depth - 2;
             }
             const int lmrDepth = depth - 1 - lmrReduction;
@@ -445,17 +447,14 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
         else {
             // Late Move Reduction (LMR)
-            int reduction = 0;
             std::vector<Move> nullWindowPv;
             if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && depth >= 3 && movesSearched > 4) {
-                reduction = 1 + (depth / 6); // Increase reduction with depth
-
-                if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we don't search negative depth
+                if (depth - 1 - lmrReduction < 1) lmrReduction = depth - 2; // Ensure we don't search negative depth
             }
             
-            eval = -negamax(board, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);
+            eval = -negamax(board, depth - 1 - lmrReduction, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);
 
-            if (reduction > 0 && eval > alpha) {
+            if (lmrReduction > 0 && eval > alpha) {
                 // Re-search at full depth if reduced search suggests a better move
                 eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, history, childPv);
             }
