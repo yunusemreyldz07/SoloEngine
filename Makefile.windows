@@ -1,5 +1,5 @@
 CXX = x86_64-w64-mingw32-g++
-TARGET = soloengine_windows.exe
+TARGET = SoloEngine
 SOURCES = main.cpp board.cpp search.cpp evaluation.cpp bitboard.cpp params.cpp brain.cpp sacrifice.cpp
 CXXFLAGS = -O3 -std=c++23 -ffast-math -pthread
 LDFLAGS = -lm -static -static-libgcc -static-libstdc++
