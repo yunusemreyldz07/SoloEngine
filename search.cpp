@@ -418,9 +418,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && !inCheck && !pvNode) {
                 reduction = LMR_TABLE[1][depth][movesSearched]; // quiet moves reduction
             }
-            else {
-                reduction = LMR_TABLE[0][depth][movesSearched]; // tactical/noisy moves reduction
-            }
             
             eval = -negamax(board, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);
 
