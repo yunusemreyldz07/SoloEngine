@@ -163,6 +163,13 @@ int main(int argc, char* argv[]) {
             std::cout << "option name Hash type spin default 16 min 1 max 2048" << std::endl;
             std::cout << "option name Threads type spin default 1 min 1 max 8" << std::endl;
             std::cout << "option name UseTT type check default true" << std::endl;
+            std::cout << "option name FPDepth type spin default 5 min 1 max 8" << std::endl;
+            std::cout << "option name FPMargin type spin default 82 min 0 max 300" << std::endl;
+            std::cout << "option name FPOffset1 type spin default 82 min 0 max 200" << std::endl;
+            std::cout << "option name FPOffset2 type spin default 41 min 0 max 200" << std::endl;
+            std::cout << "option name FPOffset3 type spin default 20 min 0 max 200" << std::endl;
+            std::cout << "option name FPOffset4 type spin default 10 min 0 max 200" << std::endl;
+            std::cout << "option name FPOffset5 type spin default 5 min 0 max 200" << std::endl;
             std::cout << "uciok" << std::endl;
         }
         
@@ -202,6 +209,27 @@ int main(int argc, char* argv[]) {
                 std::string v = value;
                 std::transform(v.begin(), v.end(), v.begin(), ::tolower);
                 set_use_tt(v == "true" || v == "1" || v == "on");
+            } else if (name == "FPDepth") {
+                int v = std::stoi(value);
+                futility_pruning_max_depth = std::max(1, std::min(8, v));
+            } else if (name == "FPMargin") {
+                int v = std::stoi(value);
+                futility_pruning_margin = std::max(0, std::min(300, v));
+            } else if (name == "FPOffset1") {
+                int v = std::stoi(value);
+                futility_pruning_offset[1] = std::max(0, std::min(200, v));
+            } else if (name == "FPOffset2") {
+                int v = std::stoi(value);
+                futility_pruning_offset[2] = std::max(0, std::min(200, v));
+            } else if (name == "FPOffset3") {
+                int v = std::stoi(value);
+                futility_pruning_offset[3] = std::max(0, std::min(200, v));
+            } else if (name == "FPOffset4") {
+                int v = std::stoi(value);
+                futility_pruning_offset[4] = std::max(0, std::min(200, v));
+            } else if (name == "FPOffset5") {
+                int v = std::stoi(value);
+                futility_pruning_offset[5] = std::max(0, std::min(200, v));
             }
         }
         

@@ -14,9 +14,9 @@ int MATE_SCORE = 100000;
 int historyTable[64][64];
 
 const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
-const int FUTILITY_PRUNING_OFFSET[6] = {0, 82, 41, 20, 10, 5};
-const int FUTILITY_PRUNING_MAX_DEPTH = 5;
-const int FUTILITY_PRUNING_MARGIN = 82;
+int futility_pruning_offset[6] = {0, 82, 41, 20, 10, 5};
+int futility_pruning_max_depth = 5;
+int futility_pruning_margin = 82;
 
 Move killerMove[2][100];
 std::atomic<long long> nodeCount{0};
@@ -402,9 +402,9 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 if (depth - 1 - lmrReduction < 1) lmrReduction = depth - 2;
             }
             const int lmrDepth = depth - 1 - lmrReduction;
-            if (lmrDepth >= 1 && lmrDepth <= FUTILITY_PRUNING_MAX_DEPTH) {
-                int futilityOffset = FUTILITY_PRUNING_OFFSET[lmrDepth];
-                int futilityMargin = FUTILITY_PRUNING_MARGIN * lmrDepth;
+            if (lmrDepth >= 1 && lmrDepth <= futility_pruning_max_depth) {
+                int futilityOffset = futility_pruning_offset[lmrDepth];
+                int futilityMargin = futility_pruning_margin * lmrDepth;
             
                 int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
                 int toSq = row_col_to_sq(move.toRow, move.toCol);

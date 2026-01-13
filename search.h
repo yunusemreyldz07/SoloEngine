@@ -9,6 +9,9 @@ extern char columns[];
 extern Move killerMove[2][100]; // 2 slots, max 100 ply
 extern int historyTable[64][64]; // fromSquare x toSquare
 extern std::atomic<long long> nodeCount; // visited node counter
+extern int futility_pruning_offset[6];
+extern int futility_pruning_max_depth;
+extern int futility_pruning_margin;
 
 // Tunable search knobs for quick A/B testing.
 struct SearchParams {
