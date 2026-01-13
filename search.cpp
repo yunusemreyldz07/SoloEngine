@@ -385,7 +385,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     });
     
     for (Move& move : possibleMoves) {
-        if (!pvNode && depth < 7 && !inCheck && 
+        if (!pvNode && depth < 6 && !inCheck && 
             move.capturedPiece == 0 && move.promotion == 0 && !move.isCastling &&
             std::abs(alpha) < 90000 && std::abs(beta) < 90000) {
             
@@ -397,7 +397,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             int toSq = row_col_to_sq(move.toRow, move.toCol);
             
             // To avoid pruning too aggressively, we add a history bonus
-            // int historyBonus = historyTable[fromSq][toSq] / 128; 
+            int historyBonus = historyTable[fromSq][toSq] / 128; 
 
             // If the position is so bad that even after adding the margin it doesn't reach alpha, we skip this move
             if (staticEval + futilityMargin <= alpha ) {//+ historyBonus <= alpha) {
