@@ -14,6 +14,9 @@ int MATE_SCORE = 100000;
 int historyTable[64][64];
 
 const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
+const int FUTILITY_PRUNING_OFFSET[6] = {0, 82, 41, 20, 10, 5};
+const int FUTILITY_PRUNING_MAX_DEPTH = 5;
+const int FUTILITY_PRUNING_MARGIN = 82;
 
 Move killerMove[2][100];
 std::atomic<long long> nodeCount{0};
@@ -387,20 +390,29 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     for (Move& move : possibleMoves) {
         if (!pvNode && depth < 6 && !inCheck && 
             move.capturedPiece == 0 && move.promotion == 0 && !move.isCastling &&
-            std::abs(alpha) < 90000 && std::abs(beta) < 90000) {
+            std::abs(alpha) < 90000 && std::abs(beta) < 90000 && (beta-alpha) == 1) {
             
             // Futility Pruning
-            // Margin increases with depth
-            int futilityMargin = 88 + (60 * depth);
+            // Use estimated LMR depth to avoid over-pruning in deeper searches.
+            int lmrReduction = 0;
+            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && depth >= 3 && movesSearched > 4) {
+                lmrReduction = 1 + (depth / 6);
+                if (depth - 1 - lmrReduction < 1) lmrReduction = depth - 2;
+            }
+            const int lmrDepth = depth - 1 - lmrReduction;
+            if (lmrDepth >= 1 && lmrDepth <= FUTILITY_PRUNING_MAX_DEPTH) {
+                int futilityOffset = FUTILITY_PRUNING_OFFSET[lmrDepth];
+                int futilityMargin = FUTILITY_PRUNING_MARGIN * lmrDepth;
             
-            int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
-            int toSq = row_col_to_sq(move.toRow, move.toCol);
+                int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
+                int toSq = row_col_to_sq(move.toRow, move.toCol);
             
-            // To avoid pruning too aggressively, we add a history bonus
-            int historyBonus = historyTable[fromSq][toSq] / 64; 
-            // If the position is so bad that even after adding the margin it doesn't reach alpha, we skip this move
-            if (staticEval + futilityMargin + historyBonus <= alpha) {
-                continue; // just prune the move
+                // To avoid pruning too aggressively, we add a history bonus
+                int historyBonus = historyTable[fromSq][toSq] / 32;
+                // If the position is so bad that even after adding the margin it doesn't reach alpha, we skip this move
+                if (staticEval + futilityOffset + futilityMargin + historyBonus <= alpha) {
+                    continue; // just prune the move
+                }
             }
         }
         int lmpCount = (3 * depth * depth) + 4;
