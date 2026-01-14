@@ -114,13 +114,26 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
 
         int attackerPiece = piece_at_sq(board, from);
         int attackerValue = PIECE_VALUES[std::abs(attackerPiece)];
+        int mvvScore = victimValue * 10 - attackerValue;
+
+        int see_value = see_exchange(board, move); // For MVV-LVA ordering
+
+        if (see_value >= 0) {
+            // Good trades. they must be on the top of the list.
+            moveScore += 1000000 + see_value + mvvScore;
+        }
+        else {
+            // Bad trades. apply penalty to push them down the list.
+            moveScore += -100000 + see_value + mvvScore;
+        }
+
         moveScore += 10000 + (victimValue * 10) - attackerValue;
     }
 
     if (ttMove != nullptr && 
         move.fromRow == ttMove->fromRow && move.fromCol == ttMove->fromCol &&
         move.toRow == ttMove->toRow && move.toCol == ttMove->toCol) {
-        return 1000000; // TT move always has the highest priority
+        moveScore += 1000000; // TT move always has the highest priority
     }
 
     if (ply >= 0 && ply < 100) { 
@@ -136,7 +149,13 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
     }
 
     if (move.promotion != 0) {
-        moveScore += 9000;
+        switch (std::abs(move.promotion)){
+            case queen: moveScore += 90000; break;
+            case rook: moveScore += 80000; break;
+            case bishop: moveScore -= 70000; break;
+            case knight: moveScore -= 60000; break;
+            default: break;
+        }
     }
 
     if (move.isCastling) {
