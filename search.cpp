@@ -442,10 +442,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             // Late Move Reduction (LMR)
             int reduction = 0;
             std::vector<Move> nullWindowPv;
-            if (depth >= 3 && movesSearched >= 4 && !inCheck) {
+            if (depth >= 3 && movesSearched >= 4) {
                 
                 // quiet moves only
-                if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
+                if (move.capturedPiece == 0) {
                     
                     // avoid array out of bounds
                     int safeMoveIndex = (movesSearched > 255) ? 255 : movesSearched;
