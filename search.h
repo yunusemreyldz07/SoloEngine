@@ -29,6 +29,7 @@ struct SearchParams {
 const SearchParams& get_search_params();
 void set_search_params(const SearchParams& params);
 
+void init_LMR_tables();
 void resetNodeCounter();
 long long getNodeCounter();
 
