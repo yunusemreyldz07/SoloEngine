@@ -8,6 +8,7 @@
 #include <limits>
 #include <iostream>
 #include <atomic>
+#include <cmath>
 
 int MATE_SCORE = 100000;
 
@@ -15,8 +16,32 @@ int historyTable[64][64];
 
 const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
 
+int LMR_TABLE[2][256][256]; // [quiet/noisy][depth][moveIndex]
+
 Move killerMove[2][100];
 std::atomic<long long> nodeCount{0};
+
+
+void initLMRTables() {
+    for (int quiet = 0; quiet <= 1; quiet++) {
+        for (int depth = 0; depth < 256; depth++) {
+            for (int moveIndex = 0; moveIndex < 256; moveIndex++) {
+                if (depth == 0 || moveIndex == 0) {
+                    LMR_TABLE[quiet][depth][moveIndex] = 0;
+                    continue;
+                }
+
+                if (quiet == 0) {
+                    LMR_TABLE[quiet][depth][moveIndex] = 1.01 + std::log(depth) * std::log(moveIndex) / 2.32; // quiet is 0 noisy is 1
+                } else {
+                    LMR_TABLE[quiet][depth][moveIndex] = 0.38 + std::log(depth) * std::log(moveIndex) / 3.76;
+                }
+            }
+        }
+    }
+}
+
+
 void resetNodeCounter() {
     nodeCount.store(0, std::memory_order_relaxed);
 }
@@ -417,10 +442,21 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             // Late Move Reduction (LMR)
             int reduction = 0;
             std::vector<Move> nullWindowPv;
-            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && depth >= 3 && movesSearched > 4) {
-                reduction = 1 + (depth / 6); // Increase reduction with depth
+            if (depth >= 3 && movesSearched >= 4 && !inCheck) {
+                
+                // quiet moves only
+                if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
+                    
+                    // avoid array out of bounds
+                    int safeMoveIndex = (movesSearched > 255) ? 255 : movesSearched;
+                    
+                    reduction = LMR_TABLE[0][depth][safeMoveIndex]; 
 
-                if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we don't search negative depth
+                    // no negative depth
+                    if (reduction > depth - 2) {
+                        reduction = depth - 2; 
+                    }
+                }
             }
             
             eval = -negamax(board, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);

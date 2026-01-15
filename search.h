@@ -42,7 +42,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 // movetimeMs > 0: time-limited, effectively unlimited depth (search until time runs out).
 // movetimeMs <= 0: depth-limited, no time limit.
 Move getBestMove(Board& board, int maxDepth, int movetimeMs = -1, const std::vector<uint64_t>& history = {}, int ply = 0);
-
+void initLMRTables();
 // Request the current search to stop as soon as possible.
 // Safe to call even if no search is running.
 void request_stop_search();
