@@ -8,15 +8,12 @@
 #include <limits>
 #include <iostream>
 #include <atomic>
-#include <cmath>
 
 int MATE_SCORE = 100000;
 
 int historyTable[64][64];
 
 const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
-
-int LMR_TABLE[2][256][256]; // 1 is for quiet moves, 0 for tactical/noisy moves
 
 Move killerMove[2][100];
 std::atomic<long long> nodeCount{0};
@@ -33,20 +30,6 @@ std::atomic<long long> time_limit_ms{0};          // Time limit (atomic for thre
 std::atomic<long long> start_time_ms{0};          // Start time in milliseconds since epoch (atomic for thread-safety)
 std::atomic<bool> is_time_limited{false};         // Do we have time limit? (atomic for thread-safety)
 std::atomic<bool> use_tt(true);
-
-void init_LMR_tables() {
-    for (int depth = 1; depth < 256; depth++) {
-        for (int numMoves = 1; numMoves < 256; numMoves++) {
-            if (numMoves == 0 || depth == 0) {
-                LMR_TABLE[0][depth][numMoves] = 0;
-                LMR_TABLE[1][depth][numMoves] = 0;
-                continue;
-            }
-            LMR_TABLE[0][depth][numMoves] = 0.38 + std::log(depth) * std::log(numMoves) / 3.76; // for tactical/noisy moves
-            LMR_TABLE[1][depth][numMoves] = 1.01 + std::log(depth) * std::log(numMoves) / 2.32; // for quiet moves
-        }
-    }
-}
 
 void request_stop_search() {
     stop_search.store(true, std::memory_order_relaxed);
@@ -131,26 +114,13 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
 
         int attackerPiece = piece_at_sq(board, from);
         int attackerValue = PIECE_VALUES[std::abs(attackerPiece)];
-        int mvvScore = victimValue * 10 - attackerValue;
-
-        int see_value = see_exchange(board, move); // For MVV-LVA ordering
-
-        if (see_value >= 0) {
-            // Good trades. they must be on the top of the list.
-            moveScore += 1000000 + see_value + mvvScore;
-        }
-        else {
-            // Bad trades. apply penalty to push them down the list.
-            moveScore += -100000 + see_value + mvvScore;
-        }
-
         moveScore += 10000 + (victimValue * 10) - attackerValue;
     }
 
     if (ttMove != nullptr && 
         move.fromRow == ttMove->fromRow && move.fromCol == ttMove->fromCol &&
         move.toRow == ttMove->toRow && move.toCol == ttMove->toCol) {
-        moveScore += 1000000; // TT move always has the highest priority
+        return 1000000; // TT move always has the highest priority
     }
 
     if (ply >= 0 && ply < 100) { 
@@ -166,13 +136,7 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
     }
 
     if (move.promotion != 0) {
-        switch (std::abs(move.promotion)){
-            case queen: moveScore += 90000; break;
-            case rook: moveScore += 80000; break;
-            case bishop: moveScore -= 70000; break;
-            case knight: moveScore -= 60000; break;
-            default: break;
-        }
+        moveScore += 9000;
     }
 
     if (move.isCastling) {
@@ -434,11 +398,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             // Late Move Reduction (LMR)
             int reduction = 0;
             std::vector<Move> nullWindowPv;
-            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && inCheck && !pvNode) {
-                reduction = LMR_TABLE[1][depth][movesSearched]; // quiet moves reduction
-            }
-            else {
-                reduction = LMR_TABLE[0][depth][movesSearched]; // tactical/noisy moves reduction
+            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && depth >= 3 && movesSearched > 4) {
+                reduction = 1 + (depth / 6); // Increase reduction with depth
+
+                if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we don't search negative depth
             }
             
             eval = -negamax(board, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);
@@ -451,11 +414,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             if (eval > alpha && eval < beta) {
                 childPv.clear();
                 eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
-                // If the search was stopped during the full-window re-search,
-                // avoid using a potentially unreliable evaluation value.
-                if (should_stop()) {
-                    eval = alpha;
-                }
             } else {
                 childPv.clear();
             }
