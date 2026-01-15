@@ -674,7 +674,7 @@ static Bitboard attackers_to_sq(Bitboard pieces[2][6], int sq, int side, Bitboar
     return attackers;
 }
 
-int see_exchange(Board& board, Move& move) {
+int see_exchange(const Board& board, const Move& move) {
     if (move.capturedPiece == 0 && !move.isEnPassant) return 0;
 
     int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
