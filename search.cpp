@@ -291,6 +291,16 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
     }
 
+    // Internal Iterative Deepening (IID)
+    if (pvNode && depth >= 6 && (!ttHit || ttDepth < depth - 4)) {
+        int iidDepth = depth - 2; 
+        
+        negamax(board, iidDepth, alpha, beta, ply, history, pvLine);
+        if (use_tt.load(std::memory_order_relaxed)) {
+            ttHit = globalTT.probe(currentHash, ttScore, ttDepth, ttFlag, ttMove);
+        }
+    }
+    
     // Static evaluation (from side-to-move perspective). Used by forward/reverse pruning.
     const int staticEval = evaluate_board(board);
     if (!is_repetition_candidate && ttHit && ttDepth >= depth) {
