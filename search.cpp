@@ -17,6 +17,10 @@ const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
 
 Move killerMove[2][100];
 std::atomic<long long> nodeCount{0};
+
+int IIR_depth = 8;
+int IIR_depth_subtract = 3;
+
 void resetNodeCounter() {
     nodeCount.store(0, std::memory_order_relaxed);
 }
@@ -289,6 +293,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 break;
             }
         }
+    }
+
+    // IIR implementation
+    if (pvNode && (!ttHit || ttDepth < depth - IIR_depth_subtract) && depth >= IIR_depth ){ // if 
+        depth--;
     }
 
     // Static evaluation (from side-to-move perspective). Used by forward/reverse pruning.
