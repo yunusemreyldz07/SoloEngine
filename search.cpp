@@ -291,6 +291,18 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
     }
 
+    if (!ttHit && depth >= 4){ // if we don't have a TT hit, do IID
+        // IID implementation
+        int iid = depth / 2;
+
+        negamax(board, iid, alpha, beta, ply + 1, history, pvLine); // searching the board with reduced depth
+        // our TT must be updated now.
+        if (use_tt.load(std::memory_order_relaxed)) {
+            ttHit = globalTT.probe(currentHash, ttScore, ttDepth, ttFlag, ttMove); // get TT
+        }
+
+    }
+
     // Static evaluation (from side-to-move perspective). Used by forward/reverse pruning.
     const int staticEval = evaluate_board(board);
     if (!is_repetition_candidate && ttHit && ttDepth >= depth) {
