@@ -228,12 +228,5 @@ int evaluate_board_pesto(const Board& board) {
 }
 
 int repetition_draw_score(const Board& board) {
-    int currentScore = evaluate_board(board);
-    if (!board.isWhiteTurn) currentScore = -currentScore;
-    
-    // if my position is clearly better, then a draw is bad
-    if (currentScore > 100) return -50; 
-    
-    // if my position is clearly worse, then a draw is good
     return 0;
 }
