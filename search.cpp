@@ -302,6 +302,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
     }
 
+    // IIR implementation
+    if ((!ttHit || ttDepth < depth - 3) && depth >= 8 && pvNode){
+        depth -= 1;
+    }
+
     // Static evaluation (from side-to-move perspective). Used by forward/reverse pruning.
     const int staticEval = evaluate_board(board);
     if (!is_repetition_candidate && ttHit && ttDepth >= depth) {
