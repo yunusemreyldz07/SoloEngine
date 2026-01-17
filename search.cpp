@@ -8,6 +8,7 @@
 #include <limits>
 #include <iostream>
 #include <atomic>
+#include <cstring>
 
 int MATE_SCORE = 100000;
 
@@ -37,6 +38,16 @@ void request_stop_search() {
 
 void set_use_tt(bool enabled) {
     use_tt.store(enabled, std::memory_order_relaxed);
+}
+
+void clear_search_heuristics() {
+    std::memset(historyTable, 0, sizeof(historyTable));
+
+    for (int i = 0; i < 2; ++i) {
+        for (int j = 0; j < 100; ++j) {
+            killerMove[i][j] = Move(); // Empty move
+        }
+    }
 }
 
 static bool is_square_attacked_otf(const Board& board, int row, int col, bool byWhite) {
