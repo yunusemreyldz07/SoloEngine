@@ -225,6 +225,7 @@ int main(int argc, char* argv[]) {
             board.resetBoard();
             gameHistory.clear();
             gameHistory.push_back(position_key(board));
+            clear_search_heuristics();
         }
 
         else if (line.substr(0, 8) == "position") {

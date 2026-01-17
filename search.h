@@ -5,6 +5,8 @@
 #include <vector>
 #include <cstdint>
 #include <atomic>
+#include <cstring>
+
 extern char columns[];
 extern Move killerMove[2][100]; // 2 slots, max 100 ply
 extern int historyTable[64][64]; // fromSquare x toSquare
@@ -47,5 +49,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs = -1, const std::vec
 // Safe to call even if no search is running.
 void request_stop_search();
 void set_use_tt(bool enabled);
+void clear_search_heuristics();
+
 
 #endif
