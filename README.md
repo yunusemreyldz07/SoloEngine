@@ -34,33 +34,6 @@ A bitboard-based chess engine with advanced search techniques and evaluation.
   - Incremental Zobrist hashing
   - Threefold repetition detection
 
-## Technical Details
-
-### Search Techniques
-- ✅ Alpha-Beta Pruning
-- ✅ Transposition Table (lockless, thread-safe)
-- ✅ Null Move Pruning
-- ✅ Late Move Reductions (LMR)
-- ✅ Late Move Pruning (LMP)
-- ✅ Quiescence Search with delta pruning
-- ✅ Static Exchange Evaluation (SEE)
-- ✅ Reverse Futility Pruning (RFP)
-- ✅ Aspiration Windows
-- ✅ Principal Variation Search (PVS)
-
-### Move Ordering
-- ✅ TT Move (highest priority)
-- ✅ MVV-LVA with SEE for captures
-- ✅ Killer Moves (2 per ply)
-- ✅ History Heuristic (depth² bonus)
-- ✅ PV move ordering in iterative deepening
-
-### Evaluation
-- ✅ Material counting
-- ✅ Piece-Square Tables (PeSTO)
-- ✅ Tapered Evaluation (midgame → endgame)
-- ✅ Incremental Zobrist hashing
-
 ## Building
 
 The Makefile automatically detects your operating system.
