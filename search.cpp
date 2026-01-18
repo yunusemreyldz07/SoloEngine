@@ -2,6 +2,7 @@
 #include "board.h"
 #include "search.h"
 #include "bitboard.h"
+#include "history.h"
 #include <vector>
 #include <algorithm>
 #include <chrono>
@@ -12,11 +13,8 @@
 
 int MATE_SCORE = 100000;
 
-int historyTable[64][64];
-
 const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
 
-Move killerMove[2][100];
 std::atomic<long long> nodeCount{0};
 void resetNodeCounter() {
     nodeCount.store(0, std::memory_order_relaxed);
@@ -41,13 +39,9 @@ void set_use_tt(bool enabled) {
 }
 
 void clear_search_heuristics() {
-    std::memset(historyTable, 0, sizeof(historyTable));
+    clear_history();
 
-    for (int i = 0; i < 2; ++i) {
-        for (int j = 0; j < 100; ++j) {
-            killerMove[i][j] = Move(); // Empty move
-        }
-    }
+    clear_killer_moves();
 }
 
 static bool is_square_attacked_otf(const Board& board, int row, int col, bool byWhite) {
@@ -148,13 +142,13 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
     }
 
     if (ply >= 0 && ply < 100) { 
-        if (move.fromCol == killerMove[0][ply].fromCol && move.fromRow == killerMove[0][ply].fromRow &&
-            move.toCol == killerMove[0][ply].toCol && move.toRow == killerMove[0][ply].toRow) {
+        if (move.fromCol == get_killer_move(0, ply).fromCol && move.fromRow == get_killer_move(0, ply).fromRow &&
+            move.toCol == get_killer_move(0, ply).toCol && move.toRow == get_killer_move(0, ply).toRow) {
             moveScore += 8000;
         }
 
-        if (move.fromCol == killerMove[1][ply].fromCol && move.fromRow == killerMove[1][ply].fromRow &&
-            move.toCol == killerMove[1][ply].toCol && move.toRow == killerMove[1][ply].toRow) {
+        if (move.fromCol == get_killer_move(1, ply).fromCol && move.fromRow == get_killer_move(1, ply).fromRow &&
+            move.toCol == get_killer_move(1, ply).toCol && move.toRow == get_killer_move(1, ply).toRow) {
             moveScore += 7000;
         }
     }
@@ -175,8 +169,8 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
         moveScore += 500;
     }
 
-    if (historyTable[from][to] != 0) {
-        moveScore += historyTable[from][to];
+    if (get_history_score(from, to) != 0) {
+        moveScore += get_history_score(from, to);
     }
 
     return moveScore;
@@ -403,10 +397,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 bool isKiller = false;
                 // Checking if the move is a killer move, they are important so we should not prune them
                 if (ply < 100) {
-                    if (move.fromCol == killerMove[0][ply].fromCol && move.fromRow == killerMove[0][ply].fromRow &&
-                        move.toCol == killerMove[0][ply].toCol && move.toRow == killerMove[0][ply].toRow) isKiller = true;
-                    else if (move.fromCol == killerMove[1][ply].fromCol && move.fromRow == killerMove[1][ply].fromRow &&
-                        move.toCol == killerMove[1][ply].toCol && move.toRow == killerMove[1][ply].toRow) isKiller = true;
+                    if (move.fromCol == get_killer_move(0, ply).fromCol && move.fromRow == get_killer_move(0, ply).fromRow &&
+                        move.toCol == get_killer_move(0, ply).toCol && move.toRow == get_killer_move(0, ply).toRow) isKiller = true;
+                    else if (move.fromCol == get_killer_move(1, ply).fromCol && move.fromRow == get_killer_move(1, ply).fromRow &&
+                        move.toCol == get_killer_move(1, ply).toCol && move.toRow == get_killer_move(1, ply).toRow) isKiller = true;
                 }
                 
                 if (!isKiller) {
@@ -465,17 +459,15 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
         if (beta <= alpha) {
             if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
-                 if (ply < 100 && !(move.fromCol == killerMove[0][ply].fromCol && move.fromRow == killerMove[0][ply].fromRow &&
-                      move.toCol == killerMove[0][ply].toCol && move.toRow == killerMove[0][ply].toRow)){
-                    killerMove[1][ply] = killerMove[0][ply];
-                    killerMove[0][ply] = move;
+                if (ply < 100 && !(move.fromCol == get_killer_move(0, ply).fromCol && move.fromRow == get_killer_move(0, ply).fromRow && move.toCol == get_killer_move(0, ply).toCol && move.toRow == get_killer_move(0, ply).toRow)){
+                    add_killer_move(move, ply);
                 }
             }
             int from = row_col_to_sq(move.fromRow, move.fromCol);
             int to = row_col_to_sq(move.toRow, move.toCol);
             
             if (from >= 0 && from < 64 && to >= 0 && to < 64) {
-                 historyTable[from][to] += depth * depth;
+                update_history(from, to, depth);
             }
             
             break; // beta cutoff
