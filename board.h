@@ -29,6 +29,7 @@ struct Move {
     int toRow, toCol;
     int capturedPiece;
     int promotion;
+    int piece;
 
     bool prevW_KingSide;
     bool prevW_QueenSide;

@@ -40,7 +40,7 @@ void set_use_tt(bool enabled) {
 
 void clear_search_heuristics() {
     clear_history();
-
+    clear_countination_history();
     clear_killer_moves();
 }
 
@@ -109,7 +109,7 @@ static std::string move_to_uci(const Move& m) {
     return s;
 }
 
-int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove) {
+int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove, const Move* prevMove) {
     int moveScore = 0;
     int from = row_col_to_sq(move.fromRow, move.fromCol);
     int to = row_col_to_sq(move.toRow, move.toCol);
@@ -173,6 +173,15 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
         moveScore += get_history_score(from, to);
     }
 
+    if (prevMove != nullptr && prevMove->capturedPiece == 0) {
+        int prevMoveTo = row_col_to_sq(prevMove->toRow, prevMove->toCol);
+        int prevPieceIdx = piece_to_index(prevMove->piece);
+        
+        int currTo = row_col_to_sq(move.toRow, move.toCol);
+        int currPieceIdx = piece_to_index(move.piece);
+        moveScore += calculate_countination_score(ply, 0, move, prevMove);
+    }
+
     return moveScore;
 }
 
@@ -200,7 +209,7 @@ int quiescence(Board& board, int alpha, int beta, int ply){
     std::vector<Move> captureMoves = get_capture_moves(board);
 
     std::sort(captureMoves.begin(), captureMoves.end(), [&](const Move& a, const Move& b) {
-        return scoreMove(board, a, ply, nullptr) > scoreMove(board, b, ply, nullptr);
+        return scoreMove(board, a, ply, nullptr, nullptr) > scoreMove(board, b, ply, nullptr, nullptr);
     });
 
     for (Move& move : captureMoves) {
@@ -244,7 +253,7 @@ int quiescence(Board& board, int alpha, int beta, int ply){
 }
 
 // Negamax
-int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine) {
+int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine, Move prevMove = Move()) {
     nodeCount.fetch_add(1, std::memory_order_relaxed);
 
     if (should_stop()) {
@@ -355,8 +364,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             // Reduction factor R (typical values 2..3). Ensure we don't search negative depth
             int R = std::min(3, std::max(1, depth - 2));
             std::vector<Move> nullPv;
-            int nullScore = -negamax(board, depth - 1 - R, -beta, -beta + 1, ply + 1, history, nullPv);
-
+            int nullScore = -negamax(board, depth - 1 - R, -beta, -beta + 1, ply + 1, history, nullPv, Move());
             // Undo history change and null move
             if (!history.empty()) history.pop_back();
             board.isWhiteTurn = !board.isWhiteTurn;
@@ -384,9 +392,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     }
 
     // Move Ordering
+    const Move* prevMovePtr = (prevMove.piece != 0) ? &prevMove : nullptr;
     std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
         const Move* ttMovePtr = ttHit ? &ttMove : nullptr;
-        return scoreMove(board, a, ply, ttMovePtr) > scoreMove(board, b, ply, ttMovePtr);
+        return scoreMove(board, a, ply, ttMovePtr, prevMovePtr) > scoreMove(board, b, ply, ttMovePtr, prevMovePtr);
     });
     
     for (Move& move : possibleMoves) {
@@ -415,7 +424,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         uint64_t newHash = position_key(board);
         history.push_back(newHash);
         if (firstMove){
-            eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
+            eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv, move);
             firstMove = false;
         }
         else {
@@ -428,16 +437,16 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we don't search negative depth
             }
             
-            eval = -negamax(board, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);
+            eval = -negamax(board, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, history, nullWindowPv, move);
 
             if (reduction > 0 && eval > alpha) {
                 // Re-search at full depth if reduced search suggests a better move
-                eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, history, childPv);
+                eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, history, childPv, move);
             }
 
             if (eval > alpha && eval < beta) {
                 childPv.clear();
-                eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
+                eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv, move);
             } else {
                 childPv.clear();
             }
@@ -468,7 +477,13 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             
             if (from >= 0 && from < 64 && to >= 0 && to < 64) {
                 update_history(from, to, depth);
+                if (prevMove.piece != 0) {
+                    update_countination_history(prevMove.piece, row_col_to_sq(prevMove.toRow, prevMove.toCol),
+                                                move.piece, row_col_to_sq(move.toRow, move.toCol), depth);
+                }
             }
+            
+
             
             break; // beta cutoff
         }
@@ -507,7 +522,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
     bool isWhite = board.isWhiteTurn;
     std::vector<Move> possibleMoves = get_all_moves(board, isWhite);
     std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
-        return scoreMove(board, a, 0, nullptr) > scoreMove(board, b, 0, nullptr);
+        return scoreMove(board, a, 0, nullptr, nullptr) > scoreMove(board, b, 0, nullptr, nullptr);
     });
     if (possibleMoves.empty()) return {};
     if (possibleMoves.size() == 1) return possibleMoves[0];
@@ -557,8 +572,8 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                     // Strict-weak-ordering: comparator must be irreflexive (never a < a).
                     if (aIsPV != bIsPV) return aIsPV;
 
-                    const int sa = scoreMove(board, a, 0, nullptr);
-                    const int sb = scoreMove(board, b, 0, nullptr);
+                    const int sa = scoreMove(board, a, 0, nullptr, nullptr);
+                    const int sb = scoreMove(board, b, 0, nullptr, nullptr);
                     if (sa != sb) return sa > sb;
 
                     // Deterministic tie-breaker.
@@ -583,7 +598,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
                 uint64_t newHash = position_key(board);
                 localHistory.push_back(newHash);
-                int val = -negamax(board, depth - 1, -beta, -alpha, ply + 1, localHistory, childPv);
+                int val = -negamax(board, depth - 1, -beta, -alpha, ply + 1, localHistory, childPv, move);
                 localHistory.pop_back();
                 
                 board.unmakeMove(move);

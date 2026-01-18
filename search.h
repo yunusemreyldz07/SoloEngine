@@ -35,7 +35,7 @@ void resetNodeCounter();
 long long getNodeCounter();
 
 // Move ordering
-int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove);
+int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove, const Move* prevMove);
 
 // Search functions (PV enabled)
 int quiescence(Board& board, int alpha, int beta, int ply);

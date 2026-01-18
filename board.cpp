@@ -89,7 +89,7 @@ inline bool is_pawn_attack_possible(const Board& board, bool attackerIsWhite, in
 } // namespace
 
 Move::Move()
-    : fromRow(0), fromCol(0), toRow(0), toCol(0), capturedPiece(0), promotion(0),
+    : fromRow(0), fromCol(0), toRow(0), toCol(0), capturedPiece(0), promotion(0), piece(0),
       prevW_KingSide(false), prevW_QueenSide(false), prevB_KingSide(false), prevB_QueenSide(false),
       prevEnPassantCol(-1), isEnPassant(false), isCastling(false) {}
 
@@ -120,6 +120,7 @@ void Board::makeMove(Move& move) {
     move.prevB_KingSide = blackCanCastleKingSide;
     move.prevB_QueenSide = blackCanCastleQueenSide;
     move.prevEnPassantCol = enPassantCol;
+    move.piece = mailbox[row_col_to_sq(move.fromRow, move.fromCol)];
 
     move.isEnPassant = false;
     move.isCastling = false;
@@ -273,7 +274,7 @@ void Board::unmakeMove(Move& move) {
     const Zobrist& z = zobrist();
 
     isWhiteTurn = !isWhiteTurn;
-
+    
     // Hash out side, current ep, current castling (state after move, before undo)
     currentHash ^= z.side;
     if (enPassantCol != -1) currentHash ^= z.epFile[enPassantCol];
