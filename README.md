@@ -152,7 +152,7 @@ Runs a built-in benchmark on 6 different positions at depth 7.
 - **Author**: xsolod3v
 - **Inspired by**: Potential Engine by ProgramciDusunur
 - **Evaluation**: PeSTO piece-square tables by Ronald Friederich
-- **Resources**: Chess Programming Wiki, Stockfish source code
+- **Resources**: Chess Programming Wiki, Potential source code
 
 ## License
 
