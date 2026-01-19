@@ -14,21 +14,24 @@ extern std::atomic<long long> nodeCount; // visited node counter
 extern int LMR_TABLE[256][256]; // Late Move Reduction table
 
 extern void initLMRtables();
+float get_lmr_base();
+float get_lmr_division();
+void set_lmr_base(float base);
+void set_lmr_division(float division);
 
 // Tunable search knobs for quick A/B testing.
 struct SearchParams {
 	bool use_lmr = true;          // Late Move Reductions
 	bool use_lmp = true;          // Late Move Pruning
 	bool use_aspiration = true;   // Aspiration windows in iterative deepening
-	bool use_qsearch_see = false; // SEE-based pruning inside quiescence
-
-	int lmr_min_depth = 3;        // Minimum depth to start LMR
-	int lmr_min_moves = 4;        // Start reducing after this many moves
+	bool use_qsearch_see = true; // SEE-based pruning inside quiescence
 
 	int lmp_min_depth = 4;        // Minimum depth to consider LMP
 	int lmp_max_depth = 8;        // Maximum depth to consider LMP
 
 	int aspiration_delta = 50;    // Initial aspiration half-window in centipawns
+
+	int mate_score = 100000;        // Score assigned to a checkmate position
 };
 
 const SearchParams& get_search_params();

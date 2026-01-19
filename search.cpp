@@ -34,6 +34,24 @@ void initLMRtables(){
     }
 }
 
+float get_lmr_base() {
+    return LMR_BASE;
+}
+
+float get_lmr_division() {
+    return LMR_DIVISION;
+}
+
+void set_lmr_base(float base) {
+    LMR_BASE = std::max(0.0f, base);
+    initLMRtables();
+}
+
+void set_lmr_division(float division) {
+    LMR_DIVISION = std::max(0.1f, division);
+    initLMRtables();
+}
+
 void resetNodeCounter() {
     nodeCount.store(0, std::memory_order_relaxed);
 }
@@ -47,6 +65,18 @@ std::atomic<long long> time_limit_ms{0};          // Time limit (atomic for thre
 std::atomic<long long> start_time_ms{0};          // Start time in milliseconds since epoch (atomic for thread-safety)
 std::atomic<bool> is_time_limited{false};         // Do we have time limit? (atomic for thread-safety)
 std::atomic<bool> use_tt(true);
+
+namespace {
+SearchParams g_search_params{};
+}
+
+const SearchParams& get_search_params() {
+    return g_search_params;
+}
+
+void set_search_params(const SearchParams& params) {
+    g_search_params = params;
+}
 
 void request_stop_search() {
     stop_search.store(true, std::memory_order_relaxed);
@@ -221,10 +251,13 @@ int quiescence(Board& board, int alpha, int beta, int ply){
         return scoreMove(board, a, ply, nullptr) > scoreMove(board, b, ply, nullptr);
     });
 
+    const SearchParams& params = get_search_params();
     for (Move& move : captureMoves) {
-        int seeValue = see_exchange(board, move);
-        if (seeValue < 0) {
-            continue; // Bad capture, skip it
+        if (params.use_qsearch_see) {
+            int seeValue = see_exchange(board, move);
+            if (seeValue < 0) {
+                continue; // Bad capture, skip it
+            }
         }
 
         // Delta Pruning
@@ -269,6 +302,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         return 0; // Search was stopped
     }
 
+    const SearchParams& params = get_search_params();
     bool pvNode = (beta - alpha) > 1;
     bool firstMove = true;
     const int alphaOrig = alpha;
@@ -410,7 +444,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     for (Move& move : possibleMoves) {
         int lmpCount = (3 * depth * depth) + 4;
         // Late Move Pruning (LMP) logic
-        if (!pvNode && depth > 3 && depth < 8 && movesSearched >= lmpCount && !inCheck && move.promotion == 0 && move.capturedPiece == 0) {
+        if (params.use_lmp && !pvNode &&
+            depth >= params.lmp_min_depth &&
+            depth <= params.lmp_max_depth &&
+            movesSearched >= lmpCount &&
+            !inCheck && move.promotion == 0 && move.capturedPiece == 0) {
             if (!move.isEnPassant) {
                 bool isKiller = false;
                 // Checking if the move is a killer move, they are important so we should not prune them
@@ -440,7 +478,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             // Late Move Reduction (LMR)
             int reduction = 0;
             std::vector<Move> nullWindowPv;
-            if (depth > 1 && move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
+            if (params.use_lmr &&
+                depth > 1 && move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
                 int lmrTableDepth = std::min(depth, 255);
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
@@ -512,6 +551,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
     // Reset variables
     resetNodeCounter();
     stop_search.store(false, std::memory_order_relaxed);
+    const SearchParams& params = get_search_params();
     
     // Time settings
     auto now = std::chrono::steady_clock::now();
@@ -553,11 +593,11 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
         if (stop_search.load(std::memory_order_relaxed)) break;
 
-        int delta = 50; // Aspiration window margin
+        int delta = params.aspiration_delta; // Aspiration window margin
         int alpha = -2000000000;
         int beta = 2000000000;
         
-        if (depth >= 5){
+        if (params.use_aspiration && depth >= 5){
             alpha = std::max(-2000000000, lastScore - delta);
             beta = std::min(2000000000, lastScore + delta);
         }
@@ -637,7 +677,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             }
 
             // Aspiration window re-search logic
-            if (depth >= 5 && (bestValue <= alphaStart || bestValue >= betaStart)) {
+            if (params.use_aspiration && depth >= 5 && (bestValue <= alphaStart || bestValue >= betaStart)) {
                 // Fail-low or fail-high: widen the window and re-search this depth.
                 alpha = std::max(-2000000000, bestValue - delta);
                 beta = std::min(2000000000, bestValue + delta);
