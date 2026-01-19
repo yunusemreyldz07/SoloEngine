@@ -10,12 +10,30 @@
 #include <iostream>
 #include <atomic>
 #include <cstring>
+#include <cmath>
 
 int MATE_SCORE = 100000;
 
 const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
 
 std::atomic<long long> nodeCount{0};
+
+int LMR_TABLE[256][256];
+float LMR_BASE = 0.75f;
+float LMR_DIVISION = 2.0f;
+
+void initLMRtables(){
+    for(int depth = 0; depth < 256; depth++){
+        for(int moveNum = 0; moveNum < 256; moveNum++){
+            if(depth < 2 || moveNum < 4 || depth == 0 || moveNum == 0){
+                LMR_TABLE[depth][moveNum] = 0;
+            } else {
+                LMR_TABLE[depth][moveNum] = (int)(LMR_BASE + std::log(depth) * std::log(moveNum) / LMR_DIVISION);
+            }
+        }
+    }
+}
+
 void resetNodeCounter() {
     nodeCount.store(0, std::memory_order_relaxed);
 }
@@ -422,13 +440,17 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             // Late Move Reduction (LMR)
             int reduction = 0;
             std::vector<Move> nullWindowPv;
-            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && depth >= 3 && movesSearched > 4) {
-                reduction = 1 + (depth / 6); // Increase reduction with depth
-
+            if (depth > 1 && move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
+                int lmrTableDepth = std::min(depth, 255);
+                int lmrTableMovesSearched = std::min(movesSearched, 255);
+                reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
+                if (reduction < 0) reduction = 0;
+                if (reduction > depth - 1) reduction = depth - 1;
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we don't search negative depth
             }
-            
-            eval = -negamax(board, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);
+            int lmrDepth = std::max(0, depth - 1 - reduction);
+
+            eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);
 
             if (reduction > 0 && eval > alpha) {
                 // Re-search at full depth if reduced search suggests a better move
