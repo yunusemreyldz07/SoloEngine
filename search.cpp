@@ -34,6 +34,24 @@ void initLMRtables(){
     }
 }
 
+void set_lmr_base(float base) {
+    LMR_BASE = base;
+    initLMRtables();
+}
+
+void set_lmr_division(float division) {
+    LMR_DIVISION = division;
+    initLMRtables();
+}
+
+float get_lmr_base() {
+    return LMR_BASE;
+}
+
+float get_lmr_division() {
+    return LMR_DIVISION;
+}
+
 void resetNodeCounter() {
     nodeCount.store(0, std::memory_order_relaxed);
 }
