@@ -164,8 +164,6 @@ int main(int argc, char* argv[]) {
             std::cout << "option name Hash type spin default 16 min 1 max 2048" << std::endl;
             std::cout << "option name Threads type spin default 1 min 1 max 8" << std::endl;
             std::cout << "option name UseTT type check default true" << std::endl;
-            std::cout << "option name LMRBase type spin default 75 min 0 max 200" << std::endl;
-            std::cout << "option name LMRDivision type spin default 200 min 50 max 400" << std::endl;
             std::cout << "uciok" << std::endl;
         }
         
@@ -205,12 +203,6 @@ int main(int argc, char* argv[]) {
                 std::string v = value;
                 std::transform(v.begin(), v.end(), v.begin(), ::tolower);
                 set_use_tt(v == "true" || v == "1" || v == "on");
-            } else if (name == "LMRBase") {
-                int scaled = std::stoi(value);
-                set_lmr_base(scaled / 100.0f);
-            } else if (name == "LMRDivision") {
-                int scaled = std::stoi(value);
-                set_lmr_division(scaled / 100.0f);
             }
         }
         

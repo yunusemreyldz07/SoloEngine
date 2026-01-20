@@ -14,10 +14,6 @@ extern std::atomic<long long> nodeCount; // visited node counter
 extern int LMR_TABLE[256][256]; // Late Move Reduction table
 
 extern void initLMRtables();
-float get_lmr_base();
-float get_lmr_division();
-void set_lmr_base(float base);
-void set_lmr_division(float division);
 
 // Tunable search knobs for quick A/B testing.
 struct SearchParams {
