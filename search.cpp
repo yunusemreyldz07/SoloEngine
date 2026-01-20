@@ -19,8 +19,8 @@ const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
 std::atomic<long long> nodeCount{0};
 
 int LMR_TABLE[256][256];
-float LMR_BASE = 0.75f;
-float LMR_DIVISION = 2.0f;
+float LMR_BASE = 0.77f;
+float LMR_DIVISION = 2.32f;
 
 void initLMRtables(){
     for(int depth = 0; depth < 256; depth++){
@@ -32,24 +32,6 @@ void initLMRtables(){
             }
         }
     }
-}
-
-void set_lmr_base(float base) {
-    LMR_BASE = base;
-    initLMRtables();
-}
-
-void set_lmr_division(float division) {
-    LMR_DIVISION = division;
-    initLMRtables();
-}
-
-float get_lmr_base() {
-    return LMR_BASE;
-}
-
-float get_lmr_division() {
-    return LMR_DIVISION;
 }
 
 void resetNodeCounter() {
