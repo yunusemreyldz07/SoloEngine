@@ -119,10 +119,15 @@ int main(int argc, char* argv[]) {
         bench();
         return 0;
     }
+    else if (argc > 1 && (std::string(argv[1]) == "version" || std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
+        std::cout << "SoloEngine version " << VERSION << std::endl;
+        return 0;
+    }
+
 
     Board board;
     // Default TT size matches the UCI 'Hash' option default.
-    if (globalTT.entryCount() == 0) globalTT.resize(16);
+    if (globalTT.entryCount() == 0) globalTT.resize(128);
     std::vector<uint64_t> gameHistory;
     gameHistory.reserve(512);
     std::string line;
@@ -159,9 +164,9 @@ int main(int argc, char* argv[]) {
         }
         
         if (line == "uci") {
-            std::cout << "id name SoloBot" << std::endl;
+            std::cout << "id name SoloEngine" << std::endl;
             std::cout << "id author xsolod3v" << std::endl;
-            std::cout << "option name Hash type spin default 16 min 1 max 2048" << std::endl;
+            std::cout << "option name Hash type spin default 128 min 1 max 2048" << std::endl;
             std::cout << "option name Threads type spin default 1 min 1 max 8" << std::endl;
             std::cout << "option name UseTT type check default true" << std::endl;
             std::cout << "uciok" << std::endl;
