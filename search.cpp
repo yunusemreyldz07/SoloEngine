@@ -447,6 +447,14 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             }
         }
 
+        // Futility Pruning in non-PV nodes
+        if (!pvNode && depth <= 5 && !inCheck && move.capturedPiece == 0 && move.promotion == 0) {
+        int futilityMargin = 120 + 70 * depth;     
+            if (staticEval + futilityMargin <= alpha) {
+                continue; 
+            }
+        }
+
         board.makeMove(move);
         movesSearched++;
         std::vector<Move> childPv;
