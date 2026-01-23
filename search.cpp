@@ -678,21 +678,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                 if (duration > 0) {
                     nps = (getNodeCounter() * 1000LL) / duration;
                 }
-                bool mateConfirmed = false;
                 if (std::abs(bestValue) >= MATE_SCORE - 1000) {
-                    board.makeMove(bestMoveSoFar);
-                    int kRow = 0;
-                    int kCol = 0;
-                    if (!king_square(board, board.isWhiteTurn, kRow, kCol)) {
-                        board.unmakeMove(bestMoveSoFar);
-                    } else {
-                        bool inCheck = is_square_attacked_otf(board, kRow, kCol, !board.isWhiteTurn);
-                        std::vector<Move> replies = get_all_moves(board, board.isWhiteTurn);
-                        mateConfirmed = inCheck && replies.empty();
-                        board.unmakeMove(bestMoveSoFar);
-                    }
-                }
-                if (mateConfirmed) {
                     int mateIn = (MATE_SCORE - std::abs(bestValue) + 1) / 2;
                     if (bestValue < 0) mateIn = -mateIn;
                     std::cout << "score mate " << mateIn;
