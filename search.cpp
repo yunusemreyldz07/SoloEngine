@@ -364,18 +364,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
     }
 
-    if (!pvNode && depth >= 4 && !inCheck) {
-        // Futility Pruning
-        // Only makes sense in non-PV nodes (null-window), otherwise it can prune good PV continuations.
-        int margin = 80 + 40 * depth; // margin increases with depth
-
-        if (staticEval + margin <= alpha) {
-            // "I'm so far behind that even if I gain the margin, I still don't reach the opponent's threshold, so I don't need to search further and lose time"
-            pvLine.clear();
-            return alpha; // Cutoff
-        }
-    }
-
     // Null move pruning
     {
         int kingRow = 0;
@@ -436,6 +424,15 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     });
     
     for (Move& move : possibleMoves) {
+        // Futility Pruning
+        if (!pvNode && depth <= 4 && !inCheck && move.capturedPiece == 0 && move.promotion == 0 && !move.isEnPassant) {
+            
+            int futilityMargin = 120 + 70 * depth;
+            if (staticEval + futilityMargin <= alpha) {
+                continue; // Prune
+            }
+        }
+
         int lmpCount = (3 * depth * depth) + 4;
         // Late Move Pruning (LMP) logic
         if (params.use_lmp && !pvNode &&
