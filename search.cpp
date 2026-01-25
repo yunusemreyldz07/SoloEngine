@@ -245,7 +245,12 @@ int quiescence(Board& board, int alpha, int beta, int ply){
         // Delta Pruning
         // If even the most optimistic evaluation (stand_pat + value of captured piece + margin) is worse than alpha, skip 
         int capturedValue = PIECE_VALUES[std::abs(move.capturedPiece)];
-        if (stand_pat + capturedValue + 200 < alpha) {
+        int promotionValue = 0;
+        if (move.promotion != 0) {
+            promotionValue = PIECE_VALUES[std::abs(move.promotion)] - PIECE_VALUES[pawn];
+        }
+
+        if (stand_pat + capturedValue + promotionValue + 200 < alpha) {
             continue; 
         }
 
