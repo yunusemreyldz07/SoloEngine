@@ -426,10 +426,14 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     for (Move& move : possibleMoves) {
         // Futility Pruning
         if (!pvNode && depth <= 4 && !inCheck && move.capturedPiece == 0 && move.promotion == 0 && !move.isEnPassant) {
-            
-            int futilityMargin = 120 + 70 * depth;
-            if (staticEval + futilityMargin <= alpha) {
-                continue; // Prune
+            // not a killer move control
+            if ((move.fromCol != get_killer_move(0, ply).fromCol || move.fromRow == get_killer_move(0, ply).fromRow ||
+                move.toCol != get_killer_move(0, ply).toCol || move.toRow != get_killer_move(0, ply).toRow) && (move.fromCol != get_killer_move(1, ply).fromCol || move.fromRow == get_killer_move(1, ply).fromRow || move.toCol != get_killer_move(1, ply).toCol || move.toRow != get_killer_move(1, ply).toRow)) {
+
+                int futilityMargin = 120 + 70 * depth;
+                if (staticEval + futilityMargin <= alpha) {
+                    continue; // Prune
+                }
             }
         }
 
