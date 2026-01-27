@@ -7,6 +7,7 @@
 // Each square is from 0-63, total 64x64 = 4096 entries
 extern int historyTable[64][64];
 extern Move killerMove[2][100]; // 2 slots, max 100 ply
+extern int continuationHistory[13][64][13][64]; // [prevPiece][toSquare][currPiece][toSquare], piece index 1..12
 
 // History functions
 void clear_history();                          // Reset history table
@@ -15,5 +16,7 @@ int get_history_score(int fromSq, int toSq);  // Get score for move ordering
 void add_killer_move(const Move& move, int ply); // Update killer moves
 Move get_killer_move(int index, int ply); // Get killer moves
 void clear_killer_moves(); // Clear killer moves
+void update_continuation_history(const Move& prevMove, const Move& currMove, int depth);
+int get_continuation_history_score(const Move& prevMove, const Move& currMove);
 
 #endif

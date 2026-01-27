@@ -37,11 +37,11 @@ void resetNodeCounter();
 long long getNodeCounter();
 
 // Move ordering
-int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove);
+int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove, const Move& prevMove);
 
 // Search functions (PV enabled)
-int quiescence(Board& board, int alpha, int beta, int ply);
-int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine);
+int quiescence(Board& board, int alpha, int beta, int ply, const Move& prevMove);
+int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine, const Move& prevMove);
 
 // movetimeMs > 0: time-limited, effectively unlimited depth (search until time runs out).
 // movetimeMs <= 0: depth-limited, no time limit.

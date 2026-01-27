@@ -27,6 +27,7 @@ extern int pieces_on_board[14]; // Simplified piece count for endgame detection 
 struct Move {
     int fromRow, fromCol;
     int toRow, toCol;
+    int piece;
     int capturedPiece;
     int promotion;
 

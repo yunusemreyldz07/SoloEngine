@@ -4,10 +4,33 @@
 
 int historyTable[64][64];
 Move killerMove[2][100];
+int continuationHistory[13][64][13][64];
 
+static inline int piece_index(int piece) {
+    return (piece > 0) ? piece : (6 + (-piece));
+}
+
+void update_continuation_history(const Move& prevMove, const Move& currMove, int depth) {
+    if (prevMove.piece == 0) return;
+    int prevPiece = piece_index(prevMove.piece);
+    int prevToSq = row_col_to_sq(prevMove.toRow, prevMove.toCol);
+    int currPiece = piece_index(currMove.piece);
+    int toSq = row_col_to_sq(currMove.toRow, currMove.toCol);
+    continuationHistory[prevPiece][prevToSq][currPiece][toSq] += std::min(depth * depth, 400);
+}
+
+int get_continuation_history_score(const Move& prevMove, const Move& currMove) {
+    if (prevMove.piece == 0) return 0;
+    int prevPiece = piece_index(prevMove.piece);
+    int prevToSq = row_col_to_sq(prevMove.toRow, prevMove.toCol);
+    int currPiece = piece_index(currMove.piece);
+    int toSq = row_col_to_sq(currMove.toRow, currMove.toCol);
+    return continuationHistory[prevPiece][prevToSq][currPiece][toSq];
+}
 
 void clear_history() {
     std::memset(historyTable, 0, sizeof(historyTable));
+    std::memset(continuationHistory, 0, sizeof(continuationHistory));
 }
 
 void update_history(int fromSq, int toSq, int depth) {

@@ -91,7 +91,7 @@ inline bool is_pawn_attack_possible(const Board& board, bool attackerIsWhite, in
 Move::Move()
     : fromRow(0), fromCol(0), toRow(0), toCol(0), capturedPiece(0), promotion(0),
       prevW_KingSide(false), prevW_QueenSide(false), prevB_KingSide(false), prevB_QueenSide(false),
-      prevEnPassantCol(-1), isEnPassant(false), isCastling(false) {}
+      prevEnPassantCol(-1), isEnPassant(false), isCastling(false), piece(0) {}
 
 Board::Board() {
     resetBoard();
@@ -267,6 +267,7 @@ void Board::makeMove(Move& move) {
     if (enPassantCol != -1) {
         currentHash ^= z.epFile[enPassantCol];
     }
+    move.piece = movingPiece;
 }
 
 void Board::unmakeMove(Move& move) {
@@ -364,6 +365,8 @@ void Board::unmakeMove(Move& move) {
     currentHash ^= z.castling[prevCastling];
 
     if (enPassantCol != -1) currentHash ^= z.epFile[enPassantCol];
+
+    move.piece = pieceBase;
 }
 
 void Board::loadFromFEN(const std::string& fen) {
