@@ -278,6 +278,10 @@ int quiescence(Board& board, int alpha, int beta, int ply){
 
 // Negamax
 int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine) {
+
+    Move badQuiets[100]; // Store bad quiet moves for move ordering
+    int badQuietCount = 0;
+
     nodeCount.fetch_add(1, std::memory_order_relaxed);
 
     if (should_stop()) {
@@ -510,10 +514,15 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             int to = row_col_to_sq(move.toRow, move.toCol);
             
             if (from >= 0 && from < 64 && to >= 0 && to < 64) {
-                update_history(from, to, depth);
+                update_history(from, to, depth, badQuiets, badQuietCount);
             }
             
             break; // beta cutoff
+        } else {
+            if (move.capturedPiece == 0 && badQuietCount < 64 && bestMove.fromCol != move.fromCol && bestMove.fromRow != move.fromRow &&
+                bestMove.toCol != move.toCol && bestMove.toRow != move.toRow) {
+                badQuiets[badQuietCount++] = move;
+            }
         }
     }
 
