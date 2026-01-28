@@ -4,15 +4,17 @@
 
 int historyTable[64][64];
 Move killerMove[2][100];
-
+int HISTORY_MAX = 16384;
 
 void clear_history() {
     std::memset(historyTable, 0, sizeof(historyTable));
 }
 
 void update_history(int fromSq, int toSq, int depth) {
-    // depth*depth because deeper cutoffs are more important
-    historyTable[fromSq][toSq] += depth * depth;
+    int score = historyTable[fromSq][toSq];
+    int bonus = std::min(depth * depth, 400);
+
+    historyTable[fromSq][toSq] += bonus - (score * std::abs(bonus)) / HISTORY_MAX;;
 }
 
 int get_history_score(int fromSq, int toSq) {
