@@ -519,9 +519,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             
             break; // beta cutoff
         } else {
-            if (move.capturedPiece == 0 && badQuietCount < 64 && bestMove.fromCol != move.fromCol && bestMove.fromRow != move.fromRow &&
-                bestMove.toCol != move.toCol && bestMove.toRow != move.toRow) {
-                badQuiets[badQuietCount++] = move;
+            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
+            badQuiets[badQuietCount++] = move;
             }
         }
     }
