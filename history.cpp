@@ -16,7 +16,7 @@ void update_continuation_history(const Move& prevMove, const Move& currMove, int
     int prevToSq = row_col_to_sq(prevMove.toRow, prevMove.toCol);
     int currPiece = piece_index(currMove.piece);
     int toSq = row_col_to_sq(currMove.toRow, currMove.toCol);
-    continuationHistory[prevPiece][prevToSq][currPiece][toSq] += 4 * depth * depth < 10000 ? std::min(4 * depth * depth, 400): 10000;
+    continuationHistory[prevPiece][prevToSq][currPiece][toSq] += (4 * depth * depth < 10000 && 4 * depth * depth + continuationHistory[prevPiece][prevToSq][currPiece][toSq] < 10000) ? 4 * depth * depth : 10000;
 }
 
 int get_continuation_history_score(const Move& prevMove, const Move& currMove) {

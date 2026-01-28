@@ -509,15 +509,16 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 if (ply < 100 && !(move.fromCol == get_killer_move(0, ply).fromCol && move.fromRow == get_killer_move(0, ply).fromRow && move.toCol == get_killer_move(0, ply).toCol && move.toRow == get_killer_move(0, ply).toRow)){
                     add_killer_move(move, ply);
                 }
-                int from = row_col_to_sq(move.fromRow, move.fromCol);
-                int to = row_col_to_sq(move.toRow, move.toCol);
-                
-                if (from >= 0 && from < 64 && to >= 0 && to < 64) {
-                    update_history(from, to, depth);
-                }
+            }
+            int from = row_col_to_sq(move.fromRow, move.fromCol);
+            int to = row_col_to_sq(move.toRow, move.toCol);
+            
+            if (from >= 0 && from < 64 && to >= 0 && to < 64) {
+                update_history(from, to, depth);
             }
 
             update_continuation_history(prevMove, move, depth);
+            
             break; // beta cutoff
         }
     }
