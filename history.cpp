@@ -12,7 +12,7 @@ void clear_history() {
 
 void update_history(int fromSq, int toSq, int depth) {
     int score = historyTable[fromSq][toSq];
-    int bonus = std::min(depth * depth, 400);
+    int bonus = std::min(10 + 200 * depth, 4096);
 
     historyTable[fromSq][toSq] += bonus - (score * std::abs(bonus)) / HISTORY_MAX;;
 }
