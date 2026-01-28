@@ -515,11 +515,9 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 if (from >= 0 && from < 64 && to >= 0 && to < 64) {
                     update_history(from, to, depth);
                 }
-
-                update_continuation_history(prevMove, move, depth);
             }
 
-            
+            update_continuation_history(prevMove, move, depth);
             break; // beta cutoff
         }
     }
