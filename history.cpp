@@ -79,6 +79,9 @@ void update_continuation_history(const Board& board, const Move& move, int depth
     if (!is_quiet_move(prevMove) || !is_quiet_move(move)) {
         return;
     }
+    if (depth < 2) {
+        return;
+    }
 
     // Latest move info
     int prevToSq = row_col_to_sq(prevMove.toRow, prevMove.toCol);
@@ -88,14 +91,14 @@ void update_continuation_history(const Board& board, const Move& move, int depth
     int prevIdx = get_piece_index(prevPieceType, prevColor);
 
     // Current best move (to be rewarded)
-    int moveFromSq = row_col_to_sq(move.fromRow, move.fromCol);
     int moveToSq = row_col_to_sq(move.toRow, move.toCol);
-    int movePieceType = move.pieceType;
+    int moveFromSq = row_col_to_sq(move.fromRow, move.fromCol);
+    int movePieceType = board.mailbox[moveFromSq];
     if (movePieceType == 0) return;
     int moveColor = (movePieceType > 0) ? WHITE : BLACK;
     int moveIdx = get_piece_index(movePieceType, moveColor);
     // Bonus calculation
-    int bonus = 16 * depth * depth + 32 * depth + 16;
+    int bonus = 8 * depth * depth + 16 * depth + 8;
 
     // Reward the best move
     update_single_ch(prevIdx, prevToSq, moveIdx, moveToSq, bonus);
@@ -109,13 +112,13 @@ void update_continuation_history(const Board& board, const Move& move, int depth
 
         int badFromSq = row_col_to_sq(badMove.fromRow, badMove.fromCol);
         int badToSq = row_col_to_sq(badMove.toRow, badMove.toCol);
-        int badPieceType = badMove.pieceType;
+        int badPieceType = board.mailbox[badFromSq];
         if (badPieceType == 0) continue;
         int badColor = (badPieceType > 0) ? WHITE : BLACK;
         int badIdx = get_piece_index(badPieceType, badColor); // the one who made the bad move is also us
 
         // And... Thy punishment is DEATH (Ultrakill reference)
-        update_single_ch(prevIdx, prevToSq, badIdx, badToSq, -bonus);
+        update_single_ch(prevIdx, prevToSq, badIdx, badToSq, -(bonus / 2));
     }
 }
 
