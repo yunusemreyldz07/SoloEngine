@@ -27,6 +27,7 @@ extern int pieces_on_board[14]; // Simplified piece count for endgame detection 
 struct Move {
     int fromRow, fromCol;
     int toRow, toCol;
+    int pieceType;
     int capturedPiece;
     int promotion;
 
@@ -53,7 +54,8 @@ public:
 
     int mailbox[64]; // Redundant mailbox for O(1) piece lookups
     uint64_t currentHash; // Incremental Zobrist hash of the current position
-
+    std::vector<Move> moveHistory;
+    
     bool whiteCanCastleKingSide;
     bool whiteCanCastleQueenSide;
     bool blackCanCastleKingSide;

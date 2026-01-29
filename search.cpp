@@ -70,7 +70,6 @@ void set_use_tt(bool enabled) {
 
 void clear_search_heuristics() {
     clear_history();
-
     clear_killer_moves();
 }
 
@@ -199,10 +198,9 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
         moveScore += 500;
     }
 
-    if (get_history_score(from, to) != 0) {
-        moveScore += get_history_score(from, to);
-    }
+    moveScore += get_history_score(from, to);
 
+    moveScore += get_continuation_history_score(board, move);
     return moveScore;
 }
 
@@ -279,7 +277,7 @@ int quiescence(Board& board, int alpha, int beta, int ply){
 // Negamax
 int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine) {
 
-    Move badQuiets[100]; // Store bad quiet moves for move ordering
+    Move badQuiets[256]; // Store bad quiet moves for move ordering
     int badQuietCount = 0;
 
     nodeCount.fetch_add(1, std::memory_order_relaxed);
@@ -516,10 +514,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             if (from >= 0 && from < 64 && to >= 0 && to < 64) {
                 update_history(from, to, depth, badQuiets, badQuietCount);
             }
-            
+            update_continuation_history(board, move, depth, badQuiets, badQuietCount);
             break; // beta cutoff
+
         } else {
-            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
+            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0 && badQuietCount < 255) {
             badQuiets[badQuietCount++] = move;
             }
         }

@@ -5,9 +5,107 @@
 int historyTable[64][64];
 Move killerMove[2][100];
 int HISTORY_MAX = 16384;
+// continuationHistory[previousPiece][previousTargetSq][currentPiece][currentTargetSq]
+int continuationHistory[12][64][12][64];
+
+inline int get_piece_index(int piece, int color) {
+    const int p = std::abs(piece);
+    if (p < 1 || p > 6) return 0; // guard invalid piece ids
+    return (p - 1) + (color * 6);
+}
+
+inline bool is_same_move(const Move& a, const Move& b) {
+    return a.fromRow == b.fromRow && a.fromCol == b.fromCol &&
+           a.toRow == b.toRow && a.toCol == b.toCol;
+}
 
 void clear_history() {
     std::memset(historyTable, 0, sizeof(historyTable));
+    std::memset(continuationHistory, 0, sizeof(continuationHistory));
+}
+
+Move get_prev_move(const Board& board) {
+    if (board.moveHistory.empty()) {
+        return Move(); // Return empty move
+    }
+    return board.moveHistory.back();
+}
+
+void update_single_ch(int prevPieceIdx, int prevToSq, int currPieceIdx, int currToSq, int bonus) {
+    int& entry = continuationHistory[prevPieceIdx][prevToSq][currPieceIdx][currToSq];
+    entry += bonus - (entry * std::abs(bonus)) / HISTORY_MAX;
+}
+
+int get_continuation_history_score(const Board& board, const Move& currentMove) {
+    Move prevMove = get_prev_move(board);
+
+    // if no prev move then return 0
+    if (prevMove.fromRow == 0 && prevMove.fromCol == 0 && prevMove.toRow == 0 && prevMove.toCol == 0) {
+        return 0;
+    }
+    int prevToSq = row_col_to_sq(prevMove.toRow, prevMove.toCol);
+    int prevPieceType = prevMove.pieceType;
+    if (prevPieceType == 0) return 0;
+
+    // derive color from signed piece for safety
+    int prevColor = (prevPieceType > 0) ? WHITE : BLACK;
+    
+    // find current move details
+    int currFromSq = row_col_to_sq(currentMove.fromRow, currentMove.fromCol);
+    int currToSq = row_col_to_sq(currentMove.toRow, currentMove.toCol);
+    int currPieceType = board.mailbox[currFromSq];
+    if (currPieceType == 0) return 0;
+    int currColor = (currPieceType > 0) ? WHITE : BLACK;
+
+    // calc indexes
+    int prevIdx = get_piece_index(prevPieceType, prevColor);
+    int currIdx = get_piece_index(currPieceType, currColor);
+
+    return continuationHistory[prevIdx][prevToSq][currIdx][currToSq];
+}
+
+void update_continuation_history(const Board& board, const Move& move, int depth, const Move badQuiets[], int badQuietCount) {
+    Move prevMove = get_prev_move(board);
+    if (prevMove.fromRow == 0 && prevMove.fromCol == 0 && prevMove.toRow == 0 && prevMove.toCol == 0) {
+        return;
+    }
+
+    // Latest move info
+    int prevToSq = row_col_to_sq(prevMove.toRow, prevMove.toCol);
+    int prevPieceType = prevMove.pieceType;
+    if (prevPieceType == 0) return;
+    int prevColor = (prevPieceType > 0) ? WHITE : BLACK;
+    int prevIdx = get_piece_index(prevPieceType, prevColor);
+
+    // Current best move (to be rewarded)
+    int moveFromSq = row_col_to_sq(move.fromRow, move.fromCol);
+    int moveToSq = row_col_to_sq(move.toRow, move.toCol);
+    int movePieceType = move.pieceType;
+    if (movePieceType == 0) return;
+    int moveColor = (movePieceType > 0) ? WHITE : BLACK;
+    int moveIdx = get_piece_index(movePieceType, moveColor);
+    // Bonus calculation
+    int bonus = 16 * depth * depth + 32 * depth + 16;
+
+    // Reward the best move
+    update_single_ch(prevIdx, prevToSq, moveIdx, moveToSq, bonus);
+
+    // Punish bad quiet moves
+    for (int i = 0; i < badQuietCount; ++i) {
+        const Move& badMove = badQuiets[i];
+        
+        if (is_same_move(badMove, move)) continue;
+
+        int badFromSq = row_col_to_sq(badMove.fromRow, badMove.fromCol);
+        int badToSq = row_col_to_sq(badMove.toRow, badMove.toCol);
+        int badPieceType = badMove.pieceType;
+        if (badPieceType == 0) continue;
+        int badColor = (badPieceType > 0) ? WHITE : BLACK;
+        int badIdx = get_piece_index(badPieceType, badColor); // the one who made the bad move is also us
+
+        // And... Thy punishment is DEATH (Ultrakill reference)
+        update_single_ch(prevIdx, prevToSq, badIdx, badToSq, -bonus);
+    }
 }
 
 void update_history(int fromSq, int toSq, int depth, const Move badQuiets[64], const int& badQuietCount) {

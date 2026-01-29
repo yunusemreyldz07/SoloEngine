@@ -89,7 +89,7 @@ inline bool is_pawn_attack_possible(const Board& board, bool attackerIsWhite, in
 } // namespace
 
 Move::Move()
-    : fromRow(0), fromCol(0), toRow(0), toCol(0), capturedPiece(0), promotion(0),
+    : fromRow(0), fromCol(0), toRow(0), toCol(0), pieceType(0), capturedPiece(0), promotion(0),
       prevW_KingSide(false), prevW_QueenSide(false), prevB_KingSide(false), prevB_QueenSide(false),
       prevEnPassantCol(-1), isEnPassant(false), isCastling(false) {}
 
@@ -129,6 +129,7 @@ void Board::makeMove(Move& move) {
     const int movingPiece = mailbox[fromSq];
     int target_piece = mailbox[toSq];
 
+    move.pieceType = movingPiece;
     move.capturedPiece = target_piece;
 
     // Hash: remove side-to-move, old ep and old castling
@@ -267,9 +268,22 @@ void Board::makeMove(Move& move) {
     if (enPassantCol != -1) {
         currentHash ^= z.epFile[enPassantCol];
     }
+
+    // Reserve history capacity once to reduce reallocations during deep searches.
+    // The chosen value should cover typical maximum search depth / move history length.
+    static bool historyReserved = false;
+    if (!historyReserved) {
+        moveHistory.reserve(1024);
+        historyReserved = true;
+    }
+    moveHistory.push_back(move);
 }
 
 void Board::unmakeMove(Move& move) {
+    if (!moveHistory.empty()) {
+        moveHistory.pop_back();
+    }
+
     const Zobrist& z = zobrist();
 
     isWhiteTurn = !isWhiteTurn;

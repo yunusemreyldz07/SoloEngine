@@ -11,7 +11,7 @@
 #include <thread>
 #include <atomic>
 
-#define VERSION "1.2.2"
+#define VERSION "1.2.3"
 
 static uint64_t perft(Board& board, int depth) {
     if (depth <= 0) return 1ULL;
@@ -128,8 +128,8 @@ int main(int argc, char* argv[]) {
     Board board;
     // Default TT size matches the UCI 'Hash' option default.
     if (globalTT.entryCount() == 0) globalTT.resize(128);
-    std::vector<uint64_t> gameHistory;
-    gameHistory.reserve(512);
+    std::vector<uint64_t> posHistory;
+    posHistory.reserve(512);
     std::string line;
 
     std::thread searchThread;
@@ -229,8 +229,8 @@ int main(int argc, char* argv[]) {
             stop_and_join_search();
             globalTT.clear();
             board.resetBoard();
-            gameHistory.clear();
-            gameHistory.push_back(position_key(board));
+            posHistory.clear();
+            posHistory.push_back(position_key(board));
             clear_search_heuristics();
         }
 
@@ -250,8 +250,8 @@ int main(int argc, char* argv[]) {
                 }
                 board.loadFromFEN(fenStr);
             }
-            gameHistory.clear();
-            gameHistory.push_back(position_key(board));
+            posHistory.clear();
+            posHistory.push_back(position_key(board));
             
             size_t movesPos = line.find("moves");
             if (movesPos != std::string::npos) {
@@ -263,7 +263,7 @@ int main(int argc, char* argv[]) {
                 while (ss >> moveToken) {
                     Move m = uci_to_move(moveToken);
                     board.makeMove(m);
-                    gameHistory.push_back(position_key(board));
+                    posHistory.push_back(position_key(board));
                 }
             }
         }
@@ -326,8 +326,8 @@ int main(int argc, char* argv[]) {
 
             // Run search on a worker thread so we can still react to `stop` / `isready`.
             searchRunning.store(true, std::memory_order_relaxed);
-            searchThread = std::thread([&board, &gameHistory, searchDepth, timeToThink, &searchRunning]() {
-                Move best = getBestMove(board, searchDepth, timeToThink, gameHistory);
+            searchThread = std::thread([&board, &posHistory, searchDepth, timeToThink, &searchRunning]() {
+                Move best = getBestMove(board, searchDepth, timeToThink, posHistory);
 
                 // If no legal move was found (mate/stalemate), output UCI null move.
                 if (best.fromRow == 0 && best.fromCol == 0 && best.toRow == 0 && best.toCol == 0 && best.promotion == 0) {
