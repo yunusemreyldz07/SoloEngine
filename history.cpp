@@ -19,6 +19,10 @@ inline bool is_same_move(const Move& a, const Move& b) {
            a.toRow == b.toRow && a.toCol == b.toCol;
 }
 
+inline bool is_quiet_move(const Move& m) {
+    return m.capturedPiece == 0 && !m.isEnPassant && m.promotion == 0;
+}
+
 void clear_history() {
     std::memset(historyTable, 0, sizeof(historyTable));
     std::memset(continuationHistory, 0, sizeof(continuationHistory));
@@ -41,6 +45,9 @@ int get_continuation_history_score(const Board& board, const Move& currentMove) 
 
     // if no prev move then return 0
     if (prevMove.fromRow == 0 && prevMove.fromCol == 0 && prevMove.toRow == 0 && prevMove.toCol == 0) {
+        return 0;
+    }
+    if (!is_quiet_move(prevMove) || !is_quiet_move(currentMove)) {
         return 0;
     }
     int prevToSq = row_col_to_sq(prevMove.toRow, prevMove.toCol);
@@ -69,6 +76,9 @@ void update_continuation_history(const Board& board, const Move& move, int depth
     if (prevMove.fromRow == 0 && prevMove.fromCol == 0 && prevMove.toRow == 0 && prevMove.toCol == 0) {
         return;
     }
+    if (!is_quiet_move(prevMove) || !is_quiet_move(move)) {
+        return;
+    }
 
     // Latest move info
     int prevToSq = row_col_to_sq(prevMove.toRow, prevMove.toCol);
@@ -95,6 +105,7 @@ void update_continuation_history(const Board& board, const Move& move, int depth
         const Move& badMove = badQuiets[i];
         
         if (is_same_move(badMove, move)) continue;
+        if (!is_quiet_move(badMove)) continue;
 
         int badFromSq = row_col_to_sq(badMove.fromRow, badMove.fromCol);
         int badToSq = row_col_to_sq(badMove.toRow, badMove.toCol);
