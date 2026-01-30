@@ -172,13 +172,13 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
     }
 
     if (ply >= 0 && ply < 100) { 
-        if (move.fromCol == get_killer_move(0, ply).fromCol && move.fromRow == get_killer_move(0, ply).fromRow &&
-            move.toCol == get_killer_move(0, ply).toCol && move.toRow == get_killer_move(0, ply).toRow) {
+        if (move.fromCol == get_killer_move(board.isWhiteTurn ? 0 : 1, 0, ply).fromCol && move.fromRow == get_killer_move(board.isWhiteTurn ? 0 : 1, 0, ply).fromRow &&
+            move.toCol == get_killer_move(board.isWhiteTurn ? 0 : 1, 0, ply).toCol && move.toRow == get_killer_move(board.isWhiteTurn ? 0 : 1, 0, ply).toRow) {
             moveScore += 8000;
         }
 
-        if (move.fromCol == get_killer_move(1, ply).fromCol && move.fromRow == get_killer_move(1, ply).fromRow &&
-            move.toCol == get_killer_move(1, ply).toCol && move.toRow == get_killer_move(1, ply).toRow) {
+        if (move.fromCol == get_killer_move(board.isWhiteTurn ? 0 : 1, 1, ply).fromCol && move.fromRow == get_killer_move(board.isWhiteTurn ? 0 : 1, 1, ply).fromRow &&
+            move.toCol == get_killer_move(board.isWhiteTurn ? 0 : 1, 1, ply).toCol && move.toRow == get_killer_move(board.isWhiteTurn ? 0 : 1, 1, ply).toRow) {
             moveScore += 7000;
         }
     }
@@ -199,8 +199,8 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
         moveScore += 500;
     }
 
-    if (get_history_score(from, to) != 0) {
-        moveScore += get_history_score(from, to);
+    if (get_history_score(board.isWhiteTurn ? 0 : 1, from, to) != 0) {
+        moveScore += get_history_score(board.isWhiteTurn ? 0 : 1, from, to);
     }
 
     return moveScore;
@@ -439,10 +439,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 bool isKiller = false;
                 // Checking if the move is a killer move, they are important so we should not prune them
                 if (ply < 100) {
-                    if (move.fromCol == get_killer_move(0, ply).fromCol && move.fromRow == get_killer_move(0, ply).fromRow &&
-                        move.toCol == get_killer_move(0, ply).toCol && move.toRow == get_killer_move(0, ply).toRow) isKiller = true;
-                    else if (move.fromCol == get_killer_move(1, ply).fromCol && move.fromRow == get_killer_move(1, ply).fromRow &&
-                        move.toCol == get_killer_move(1, ply).toCol && move.toRow == get_killer_move(1, ply).toRow) isKiller = true;
+                    if (move.fromCol == get_killer_move(board.isWhiteTurn ? 0 : 1, 0, ply).fromCol && move.fromRow == get_killer_move(board.isWhiteTurn ? 0 : 1, 0, ply).fromRow &&
+                        move.toCol == get_killer_move(board.isWhiteTurn ? 0 : 1, 0, ply).toCol && move.toRow == get_killer_move(board.isWhiteTurn ? 0 : 1, 0, ply).toRow) isKiller = true;
+                    else if (move.fromCol == get_killer_move(board.isWhiteTurn ? 0 : 1, 1, ply).fromCol && move.fromRow == get_killer_move(board.isWhiteTurn ? 0 : 1, 1, ply).fromRow &&
+                        move.toCol == get_killer_move(board.isWhiteTurn ? 0 : 1, 1, ply).toCol && move.toRow == get_killer_move(board.isWhiteTurn ? 0 : 1, 1, ply).toRow) isKiller = true;
                 }
                 
                 if (!isKiller) {
@@ -506,15 +506,15 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
         if (beta <= alpha) {
             if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
-                if (ply < 100 && !(move.fromCol == get_killer_move(0, ply).fromCol && move.fromRow == get_killer_move(0, ply).fromRow && move.toCol == get_killer_move(0, ply).toCol && move.toRow == get_killer_move(0, ply).toRow)){
-                    add_killer_move(move, ply);
+                if (ply < 100 && !(move.fromCol == get_killer_move(board.isWhiteTurn ? 0 : 1, 0, ply).fromCol && move.fromRow == get_killer_move(board.isWhiteTurn ? 0 : 1, 0, ply).fromRow && move.toCol == get_killer_move(board.isWhiteTurn ? 0 : 1, 0, ply).toCol && move.toRow == get_killer_move(board.isWhiteTurn ? 0 : 1, 0, ply).toRow)){
+                    add_killer_move(board.isWhiteTurn ? 0 : 1, move, ply);
                 }
             }
             int from = row_col_to_sq(move.fromRow, move.fromCol);
             int to = row_col_to_sq(move.toRow, move.toCol);
             
             if (from >= 0 && from < 64 && to >= 0 && to < 64) {
-                update_history(from, to, depth, badQuiets, badQuietCount);
+                update_history(board.isWhiteTurn ? 0 : 1, from, to, depth, badQuiets, badQuietCount);
             }
             
             break; // beta cutoff
