@@ -268,7 +268,7 @@ void generate_king_moves_bb(const Board& board, std::vector<Move>& moves) {
                 !is_square_attacked_bb(board, 5, opponentIsWhite) &&
                 !is_square_attacked_bb(board, 6, opponentIsWhite) &&
                 rookPresent) {
-                push_move(moves, 4, 6, 0, 0, false, true);
+                push_move(moves, 4, 6, 0, 0, false, true, king);
             }
         }
         if (board.whiteCanCastleQueenSide) {

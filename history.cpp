@@ -48,6 +48,7 @@ int get_continuation_history_score(const Board& board, const Move& currentMove) 
     int currFromSq = row_col_to_sq(currentMove.fromRow, currentMove.fromCol);
     int currToSq = row_col_to_sq(currentMove.toRow, currentMove.toCol);
     int currPieceType = currentMove.pieceType;
+    if (currPieceType == 0) return 0;
     int currColor = board.isWhiteTurn ? WHITE : BLACK;
     int currIdx = get_piece_index(currPieceType, currColor);
 
@@ -68,6 +69,7 @@ void update_continuation_history(const Board& board, const Move& move, int depth
     int moveFromSq = row_col_to_sq(move.fromRow, move.fromCol);
     int moveToSq = row_col_to_sq(move.toRow, move.toCol);
     int movePieceType = move.pieceType;
+    if (movePieceType == 0) return;
     int moveColor = board.isWhiteTurn ? WHITE : BLACK;
     int moveIdx = get_piece_index(movePieceType, moveColor);
     int bonus = std::min(16 * depth * depth + 32 * depth + 16, 2000); 
