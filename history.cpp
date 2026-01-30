@@ -55,7 +55,7 @@ int get_continuation_history_score(const Board& board, const Move& currentMove) 
     return continuationHistory[prevIdx][prevToSq][currIdx][currToSq];
 }
 
-void update_continuation_history(const Board& board, const Move& move, int depth, const Move badQuiets[64], const int& badQuietCount) {
+void update_continuation_history(const Board& board, const Move& move, int depth, const Move badQuiets[256], const int& badQuietCount) {
     if (board.moveHistory.empty()) return;
 
     const Move& prevMove = board.moveHistory.back();
@@ -78,8 +78,6 @@ void update_continuation_history(const Board& board, const Move& move, int depth
     
     // Penalize bad quiet moves in continuation history
     for (int i = 0; i < badQuietCount; ++i) {
-        if (i >= 64) break;
-
         int badFromSq = row_col_to_sq(badQuiets[i].fromRow, badQuiets[i].fromCol);
         int badToSq = row_col_to_sq(badQuiets[i].toRow, badQuiets[i].toCol);
         int badPieceType = badQuiets[i].pieceType;
@@ -93,13 +91,14 @@ void update_continuation_history(const Board& board, const Move& move, int depth
         int badColor = board.isWhiteTurn ? WHITE : BLACK;
         int badIdx = get_piece_index(badPieceType, badColor);
         
-        int malus = bonus;
+        // Progressive penalty - moves tried later get penalized more
+        int malus = bonus + (i * 30);
         int& badEntry = continuationHistory[prevIdx][prevToSq][badIdx][badToSq];
         badEntry -= malus + (badEntry * std::abs(malus)) / CH_MAX;
     }
 }
 
-void update_history(int fromSq, int toSq, int depth, const Move badQuiets[64], const int& badQuietCount) {
+void update_history(int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount) {
     const int HISTORY_MAX = 16384; 
 
     int bonus = std::min(10 + 200 * depth, 4096);
@@ -108,8 +107,6 @@ void update_history(int fromSq, int toSq, int depth, const Move badQuiets[64], c
     bestScore += bonus - (bestScore * std::abs(bonus)) / HISTORY_MAX;
 
     for (int i = 0; i < badQuietCount; ++i) {
-        if (i >= 64) break;
-
         int badFrom = row_col_to_sq(badQuiets[i].fromRow, badQuiets[i].fromCol);
         int badTo = row_col_to_sq(badQuiets[i].toRow, badQuiets[i].toCol);
 
