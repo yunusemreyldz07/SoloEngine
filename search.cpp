@@ -200,7 +200,9 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
     }
 
     moveScore += get_history_score(from, to);
-    moveScore += get_continuation_history_score(board, move);
+    if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
+        moveScore += get_continuation_history_score(board, move);
+    }
 
     return moveScore;
 }

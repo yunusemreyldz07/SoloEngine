@@ -262,6 +262,9 @@ int main(int argc, char* argv[]) {
                 
                 while (ss >> moveToken) {
                     Move m = uci_to_move(moveToken);
+                    const int fromSq = row_col_to_sq(m.fromRow, m.fromCol);
+                    const int movingPiece = board.mailbox[fromSq];
+                    m.pieceType = std::abs(movingPiece);
                     board.makeMove(m);
                     gameHistory.push_back(position_key(board));
                 }
