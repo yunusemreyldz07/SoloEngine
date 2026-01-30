@@ -11,7 +11,7 @@
 #include <thread>
 #include <atomic>
 
-#define VERSION "1.2.2"
+#define VERSION "1.3.0"
 
 static uint64_t perft(Board& board, int depth) {
     if (depth <= 0) return 1ULL;
