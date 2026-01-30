@@ -1,0 +1,18 @@
+# Build artifacts
+SoloEngine
+SoloEngine.exe
+SoloEngine_asan
+SoloEngine_asan.exe
+*.o
+*.obj
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
