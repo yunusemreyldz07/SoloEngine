@@ -10,7 +10,7 @@ extern Move killerMove[2][100]; // 2 slots, max 100 ply
 
 // History functions
 
-void update_continuation_history(const Board& board, const Move& currentMove, int depth); // Update continuation history
+void update_continuation_history(const Board& board, const Move& currentMove, int depth, const Move badQuiets[64], const int& badQuietCount); // Update continuation history
 int get_continuation_history_score(const Board& board, const Move& currentMove); //
 
 void clear_history();                          // Reset history table
