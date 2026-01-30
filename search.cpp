@@ -199,9 +199,8 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
         moveScore += 500;
     }
 
-    if (get_history_score(from, to) != 0) {
-        moveScore += get_history_score(from, to);
-    }
+    moveScore += get_history_score(from, to);
+    moveScore += get_continuation_history_score(board, move);
 
     return moveScore;
 }
@@ -279,7 +278,7 @@ int quiescence(Board& board, int alpha, int beta, int ply){
 // Negamax
 int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine) {
 
-    Move badQuiets[100]; // Store bad quiet moves for move ordering
+    Move badQuiets[256]; // Store bad quiet moves for move ordering
     int badQuietCount = 0;
 
     nodeCount.fetch_add(1, std::memory_order_relaxed);
@@ -509,6 +508,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 if (ply < 100 && !(move.fromCol == get_killer_move(0, ply).fromCol && move.fromRow == get_killer_move(0, ply).fromRow && move.toCol == get_killer_move(0, ply).toCol && move.toRow == get_killer_move(0, ply).toRow)){
                     add_killer_move(move, ply);
                 }
+                update_continuation_history(board, move, depth);
             }
             int from = row_col_to_sq(move.fromRow, move.fromCol);
             int to = row_col_to_sq(move.toRow, move.toCol);
@@ -520,7 +520,9 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             break; // beta cutoff
         } else {
             if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
-            badQuiets[badQuietCount++] = move;
+                if (badQuietCount < 255){ // Prevent overflow
+                    badQuiets[badQuietCount++] = move;
+                }
             }
         }
     }

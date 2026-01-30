@@ -127,6 +127,9 @@ void Board::makeMove(Move& move) {
     const int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
     const int toSq = row_col_to_sq(move.toRow, move.toCol);
     const int movingPiece = mailbox[fromSq];
+    
+    move.pieceType = movingPiece;
+
     int target_piece = mailbox[toSq];
 
     move.capturedPiece = target_piece;
@@ -267,9 +270,15 @@ void Board::makeMove(Move& move) {
     if (enPassantCol != -1) {
         currentHash ^= z.epFile[enPassantCol];
     }
+
+    this->moveHistory.push_back(move);
 }
 
 void Board::unmakeMove(Move& move) {
+    if (!this->moveHistory.empty()) {
+        this->moveHistory.pop_back();
+    }
+
     const Zobrist& z = zobrist();
 
     isWhiteTurn = !isWhiteTurn;

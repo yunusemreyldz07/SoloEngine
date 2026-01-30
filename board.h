@@ -40,6 +40,8 @@ struct Move {
     bool isEnPassant;
     bool isCastling;
 
+    int pieceType;
+
     Move();
 };
 
@@ -62,6 +64,8 @@ public:
     int whiteKingRow, whiteKingCol;
     int blackKingRow, blackKingCol;
     int enPassantCol;
+
+    std::vector<Move> moveHistory;
 
     Board();
     void loadFromFEN(const std::string& fen);
