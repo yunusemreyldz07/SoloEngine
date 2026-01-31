@@ -8,12 +8,24 @@
 extern int historyTable[64][64];
 extern Move killerMove[2][100]; // 2 slots, max 100 ply
 
+// Continuation History
+struct SearchStackEntry {
+    int piece;   // Moving piece type (1-6: pawn-king)
+    int toSq;    // Destination square (0-63)
+};
+extern SearchStackEntry searchStack[128];
+extern int contHist[6][64][6][64]; // [prevPiece][prevTo][currPiece][currTo]
+
 // History functions
-void clear_history();                          // Reset history table
-void update_history(int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount); // Update on beta cutoff
-int get_history_score(int fromSq, int toSq);  // Get score for move ordering
-void add_killer_move(const Move& move, int ply); // Update killer moves
-Move get_killer_move(int index, int ply); // Get killer moves
-void clear_killer_moves(); // Clear killer moves
+void clear_history();
+void update_history(int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount);
+int get_history_score(int fromSq, int toSq);
+void add_killer_move(const Move& move, int ply);
+Move get_killer_move(int index, int ply);
+void clear_killer_moves();
+
+// Continuation History functions
+int get_conthist_score(int ply, int piece, int to);
+void update_conthist(int ply, int piece, int to, int bonus);
 
 #endif

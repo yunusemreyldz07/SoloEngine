@@ -1,13 +1,19 @@
 #include "history.h"
+#include "search.h"
 #include <cstring>
 #include <algorithm>
 
 int historyTable[64][64];
 Move killerMove[2][100];
-int HISTORY_MAX = 16384;
+SearchStackEntry searchStack[128];
+int contHist[6][64][6][64];
+
+static const int HISTORY_MAX = 16384;
 
 void clear_history() {
     std::memset(historyTable, 0, sizeof(historyTable));
+    std::memset(contHist, 0, sizeof(contHist));
+    std::memset(searchStack, 0, sizeof(searchStack));
 }
 
 void update_history(int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount) {
@@ -73,4 +79,27 @@ void clear_killer_moves() {
             killerMove[i][j] = Move(); // Reset to default Move
         }
     }
+}
+
+// Continuation History - minimal implementation
+static const int CH_MAX = 16384;
+
+int get_conthist_score(int ply, int piece, int to) {
+    // piece: 1-6 (pawn-king), to: 0-63
+    if (ply < 1 || piece < 1 || piece > 6) return 0;
+    
+    const SearchStackEntry& prev = searchStack[ply - 1];
+    if (prev.piece < 1 || prev.piece > 6) return 0;
+    
+    return contHist[prev.piece - 1][prev.toSq][piece - 1][to];
+}
+
+void update_conthist(int ply, int piece, int to, int bonus) {
+    if (ply < 1 || piece < 1 || piece > 6) return;
+    
+    const SearchStackEntry& prev = searchStack[ply - 1];
+    if (prev.piece < 1 || prev.piece > 6) return;
+    
+    int& score = contHist[prev.piece - 1][prev.toSq][piece - 1][to];
+    score += bonus - score * std::abs(bonus) / CH_MAX;
 }

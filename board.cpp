@@ -89,7 +89,7 @@ inline bool is_pawn_attack_possible(const Board& board, bool attackerIsWhite, in
 } // namespace
 
 Move::Move()
-    : fromRow(0), fromCol(0), toRow(0), toCol(0), capturedPiece(0), promotion(0),
+    : fromRow(0), fromCol(0), toRow(0), toCol(0), capturedPiece(0), promotion(0), pieceType(0),
       prevW_KingSide(false), prevW_QueenSide(false), prevB_KingSide(false), prevB_QueenSide(false),
       prevEnPassantCol(-1), isEnPassant(false), isCastling(false) {}
 

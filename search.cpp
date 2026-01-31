@@ -203,6 +203,12 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
         moveScore += get_history_score(from, to);
     }
 
+    // Continuation history for quiet moves
+    if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
+        int chScore = get_conthist_score(ply, move.pieceType, to);
+        moveScore += chScore;
+    }
+
     return moveScore;
 }
 
@@ -452,6 +458,12 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
 
         board.makeMove(move);
+        
+        // Store move info in search stack for continuation history
+        int toSq = row_col_to_sq(move.toRow, move.toCol);
+        searchStack[ply].piece = move.pieceType;
+        searchStack[ply].toSq = toSq;
+        
         movesSearched++;
         std::vector<Move> childPv;
         uint64_t newHash = position_key(board);
@@ -508,6 +520,17 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
                 if (ply < 100 && !(move.fromCol == get_killer_move(0, ply).fromCol && move.fromRow == get_killer_move(0, ply).fromRow && move.toCol == get_killer_move(0, ply).toCol && move.toRow == get_killer_move(0, ply).toRow)){
                     add_killer_move(move, ply);
+                }
+                
+                // Continuation history update
+                int bonus = std::min(16 * depth * depth, 1200);
+                int to = row_col_to_sq(move.toRow, move.toCol);
+                update_conthist(ply, move.pieceType, to, bonus);
+                
+                // Malus for bad quiets
+                for (int i = 0; i < badQuietCount; i++) {
+                    int badTo = row_col_to_sq(badQuiets[i].toRow, badQuiets[i].toCol);
+                    update_conthist(ply, badQuiets[i].pieceType, badTo, -bonus);
                 }
             }
             int from = row_col_to_sq(move.fromRow, move.fromCol);
