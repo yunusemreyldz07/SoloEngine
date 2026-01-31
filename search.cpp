@@ -203,10 +203,10 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
         moveScore += get_history_score(from, to);
     }
 
-    // Continuation history for quiet moves
+    // Continuation history for quiet moves (scaled down)
     if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
         int chScore = get_conthist_score(ply, move.pieceType, to);
-        moveScore += chScore;
+        moveScore += chScore / 2;
     }
 
     return moveScore;
@@ -522,8 +522,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                     add_killer_move(move, ply);
                 }
                 
-                // Continuation history update
-                int bonus = std::min(16 * depth * depth, 1200);
+                // Continuation history update (conservative bonus)
+                int bonus = std::min(8 * depth * depth, 800);
                 int to = row_col_to_sq(move.toRow, move.toCol);
                 update_conthist(ply, move.pieceType, to, bonus);
                 
