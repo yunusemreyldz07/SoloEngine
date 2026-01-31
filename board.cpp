@@ -9,19 +9,20 @@ char columns[] = "abcdefgh";
 
 namespace {
 
-constexpr Bitboard W_PAWNS   = 0x000000000000FF00ULL;
-constexpr Bitboard W_KNIGHTS = 0x0000000000000042ULL;
-constexpr Bitboard W_BISHOPS = 0x0000000000000024ULL;
-constexpr Bitboard W_ROOKS   = 0x0000000000000081ULL;
-constexpr Bitboard W_QUEEN   = 0x0000000000000008ULL;
-constexpr Bitboard W_KING    = 0x0000000000000010ULL;
+// Starting position bitboards
+constexpr Bitboard START_W_PAWNS   = 0x000000000000FF00ULL;
+constexpr Bitboard START_W_KNIGHTS = 0x0000000000000042ULL;
+constexpr Bitboard START_W_BISHOPS = 0x0000000000000024ULL;
+constexpr Bitboard START_W_ROOKS   = 0x0000000000000081ULL;
+constexpr Bitboard START_W_QUEEN   = 0x0000000000000008ULL;
+constexpr Bitboard START_W_KING    = 0x0000000000000010ULL;
 
-constexpr Bitboard B_PAWNS   = 0x00FF000000000000ULL;
-constexpr Bitboard B_KNIGHTS = 0x4200000000000000ULL;
-constexpr Bitboard B_BISHOPS = 0x2400000000000000ULL;
-constexpr Bitboard B_ROOKS   = 0x8100000000000000ULL;
-constexpr Bitboard B_QUEEN   = 0x0800000000000000ULL;
-constexpr Bitboard B_KING    = 0x1000000000000000ULL;
+constexpr Bitboard START_B_PAWNS   = 0x00FF000000000000ULL;
+constexpr Bitboard START_B_KNIGHTS = 0x4200000000000000ULL;
+constexpr Bitboard START_B_BISHOPS = 0x2400000000000000ULL;
+constexpr Bitboard START_B_ROOKS   = 0x8100000000000000ULL;
+constexpr Bitboard START_B_QUEEN   = 0x0800000000000000ULL;
+constexpr Bitboard START_B_KING    = 0x1000000000000000ULL;
 
 inline Bitboard bit_at_sq(int sq) {
     return 1ULL << sq;
@@ -29,8 +30,8 @@ inline Bitboard bit_at_sq(int sq) {
 
 inline void bb_clear(Board& board, int piece, int sq) {
     if (piece == 0) return;
-    int idx = std::abs(piece) - 1;
-    int c = (piece > 0) ? WHITE : BLACK;
+    int idx = piece_type(piece) - 1;
+    int c = piece_color(piece);
     Bitboard mask = bit_at_sq(sq);
     board.piece[idx] &= ~mask;
     board.color[c] &= ~mask;
@@ -38,23 +39,23 @@ inline void bb_clear(Board& board, int piece, int sq) {
 
 inline void bb_set(Board& board, int piece, int sq) {
     if (piece == 0) return;
-    int idx = std::abs(piece) - 1;
-    int c = (piece > 0) ? WHITE : BLACK;
+    int idx = piece_type(piece) - 1;
+    int c = piece_color(piece);
     Bitboard mask = bit_at_sq(sq);
     board.piece[idx] |= mask;
     board.color[c] |= mask;
 }
 
 inline void set_start_position(Board& board) {
-    board.piece[pawn - 1]   = W_PAWNS | B_PAWNS;
-    board.piece[knight - 1] = W_KNIGHTS | B_KNIGHTS;
-    board.piece[bishop - 1] = W_BISHOPS | B_BISHOPS;
-    board.piece[rook - 1]   = W_ROOKS | B_ROOKS;
-    board.piece[queen - 1]  = W_QUEEN | B_QUEEN;
-    board.piece[king - 1]   = W_KING | B_KING;
+    board.piece[PAWN - 1]   = START_W_PAWNS | START_B_PAWNS;
+    board.piece[KNIGHT - 1] = START_W_KNIGHTS | START_B_KNIGHTS;
+    board.piece[BISHOP - 1] = START_W_BISHOPS | START_B_BISHOPS;
+    board.piece[ROOK - 1]   = START_W_ROOKS | START_B_ROOKS;
+    board.piece[QUEEN - 1]  = START_W_QUEEN | START_B_QUEEN;
+    board.piece[KING - 1]   = START_W_KING | START_B_KING;
 
-    board.color[WHITE] = W_PAWNS | W_KNIGHTS | W_BISHOPS | W_ROOKS | W_QUEEN | W_KING;
-    board.color[BLACK] = B_PAWNS | B_KNIGHTS | B_BISHOPS | B_ROOKS | B_QUEEN | B_KING;
+    board.color[WHITE] = START_W_PAWNS | START_W_KNIGHTS | START_W_BISHOPS | START_W_ROOKS | START_W_QUEEN | START_W_KING;
+    board.color[BLACK] = START_B_PAWNS | START_B_KNIGHTS | START_B_BISHOPS | START_B_ROOKS | START_B_QUEEN | START_B_KING;
 
     for (int i = 0; i < 64; i++) board.mailbox[i] = 0;
 
@@ -62,25 +63,25 @@ inline void set_start_position(Board& board) {
     for (int sq = 0; sq < 64; ++sq) {
         Bitboard mask = bit_at_sq(sq);
         if (board.color[WHITE] & mask) {
-            if (board.piece[pawn - 1] & mask) board.mailbox[sq] = pawn;
-            else if (board.piece[knight - 1] & mask) board.mailbox[sq] = knight;
-            else if (board.piece[bishop - 1] & mask) board.mailbox[sq] = bishop;
-            else if (board.piece[rook - 1] & mask) board.mailbox[sq] = rook;
-            else if (board.piece[queen - 1] & mask) board.mailbox[sq] = queen;
-            else if (board.piece[king - 1] & mask) board.mailbox[sq] = king;
+            if (board.piece[PAWN - 1] & mask) board.mailbox[sq] = W_PAWN;
+            else if (board.piece[KNIGHT - 1] & mask) board.mailbox[sq] = W_KNIGHT;
+            else if (board.piece[BISHOP - 1] & mask) board.mailbox[sq] = W_BISHOP;
+            else if (board.piece[ROOK - 1] & mask) board.mailbox[sq] = W_ROOK;
+            else if (board.piece[QUEEN - 1] & mask) board.mailbox[sq] = W_QUEEN;
+            else if (board.piece[KING - 1] & mask) board.mailbox[sq] = W_KING;
         } else if (board.color[BLACK] & mask) {
-            if (board.piece[pawn - 1] & mask) board.mailbox[sq] = -pawn;
-            else if (board.piece[knight - 1] & mask) board.mailbox[sq] = -knight;
-            else if (board.piece[bishop - 1] & mask) board.mailbox[sq] = -bishop;
-            else if (board.piece[rook - 1] & mask) board.mailbox[sq] = -rook;
-            else if (board.piece[queen - 1] & mask) board.mailbox[sq] = -queen;
-            else if (board.piece[king - 1] & mask) board.mailbox[sq] = -king;
+            if (board.piece[PAWN - 1] & mask) board.mailbox[sq] = B_PAWN;
+            else if (board.piece[KNIGHT - 1] & mask) board.mailbox[sq] = B_KNIGHT;
+            else if (board.piece[BISHOP - 1] & mask) board.mailbox[sq] = B_BISHOP;
+            else if (board.piece[ROOK - 1] & mask) board.mailbox[sq] = B_ROOK;
+            else if (board.piece[QUEEN - 1] & mask) board.mailbox[sq] = B_QUEEN;
+            else if (board.piece[KING - 1] & mask) board.mailbox[sq] = B_KING;
         }
     }
 }
 
 inline bool is_pawn_attack_possible(const Board& board, bool attackerIsWhite, int epSq) {
-    Bitboard pawns = board.piece[pawn - 1] & board.color[attackerIsWhite ? WHITE : BLACK];
+    Bitboard pawns = board.piece[PAWN - 1] & board.color[attackerIsWhite ? WHITE : BLACK];
     if (attackerIsWhite) {
         return (pawn_attacks[BLACK][epSq] & pawns) != 0;
     }
@@ -89,7 +90,7 @@ inline bool is_pawn_attack_possible(const Board& board, bool attackerIsWhite, in
 } // namespace
 
 Move::Move()
-    : fromRow(0), fromCol(0), toRow(0), toCol(0), capturedPiece(0), promotion(0),
+    : fromRow(0), fromCol(0), toRow(0), toCol(0), capturedPiece(0), promotion(0), pieceType(0),
       prevW_KingSide(false), prevW_QueenSide(false), prevB_KingSide(false), prevB_QueenSide(false),
       prevEnPassantCol(-1), isEnPassant(false), isCastling(false) {}
 
@@ -124,12 +125,20 @@ void Board::makeMove(Move& move) {
     move.isEnPassant = false;
     move.isCastling = false;
 
-    const int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
-    const int toSq = row_col_to_sq(move.toRow, move.toCol);
+    const int fromSq = move.from_sq();
+    const int toSq = move.to_sq();
     const int movingPiece = mailbox[fromSq];
     int target_piece = mailbox[toSq];
 
     move.capturedPiece = target_piece;
+    
+    // Set pieceType if not already set (from movegen)
+    if (move.pieceType == 0) {
+        move.pieceType = piece_type(movingPiece);
+    }
+    
+    // Add to move history for continuation history
+    moveHistory.push_back(move);
 
     // Hash: remove side-to-move, old ep and old castling
     currentHash ^= z.side;
@@ -154,22 +163,22 @@ void Board::makeMove(Move& move) {
     mailbox[fromSq] = 0;
     if (target_piece != 0) mailbox[toSq] = 0;
 
-    if (std::abs(movingPiece) == pawn && move.fromCol != move.toCol && move.capturedPiece == 0) {
+    if (piece_type(movingPiece) == PAWN && move.fromCol != move.toCol && move.capturedPiece == 0) {
         move.isEnPassant = true;
         int captureRow = move.fromRow;
         int captureSq = row_col_to_sq(captureRow, move.toCol);
-        int capturedPawn = (movingPiece > 0) ? -pawn : pawn;
+        int capturedPawn = (piece_color(movingPiece) == WHITE) ? B_PAWN : W_PAWN;
         bb_clear(*this, capturedPawn, captureSq);
         mailbox[captureSq] = 0;
         currentHash ^= z.piece[piece_to_zobrist_index(capturedPawn)][captureSq];
         move.capturedPiece = capturedPawn;
     }
 
-    if (std::abs(movingPiece) == king && std::abs(move.fromCol - move.toCol) == 2) {
+    if (piece_type(movingPiece) == KING && std::abs(move.fromCol - move.toCol) == 2) {
         if (move.toCol > move.fromCol) {
             int rookFromSq = row_col_to_sq(move.toRow, move.toCol + 1);
             int rookToSq = row_col_to_sq(move.toRow, move.toCol - 1);
-            int rookPiece = (movingPiece > 0) ? rook : -rook;
+            int rookPiece = make_piece(ROOK, piece_color(movingPiece));
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookToSq] = mailbox[rookFromSq];
@@ -179,7 +188,7 @@ void Board::makeMove(Move& move) {
         } else {
             int rookFromSq = row_col_to_sq(move.toRow, move.toCol - 2);
             int rookToSq = row_col_to_sq(move.toRow, move.toCol + 1);
-            int rookPiece = (movingPiece > 0) ? rook : -rook;
+            int rookPiece = make_piece(ROOK, piece_color(movingPiece));
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookToSq] = mailbox[rookFromSq];
@@ -191,10 +200,10 @@ void Board::makeMove(Move& move) {
     }
 
     int placedPiece = movingPiece;
-    if (std::abs(movingPiece) == pawn) {
-        int promotionRank = movingPiece > 0 ? 0 : 7;
+    if (piece_type(movingPiece) == PAWN) {
+        int promotionRank = (piece_color(movingPiece) == WHITE) ? 0 : 7;
         if (move.toRow == promotionRank && move.promotion != 0) {
-            placedPiece = (movingPiece > 0) ? move.promotion : -move.promotion;
+            placedPiece = make_piece(move.promotion, piece_color(movingPiece));
             bb_clear(*this, movingPiece, toSq);
             bb_set(*this, placedPiece, toSq);
         }
@@ -203,7 +212,7 @@ void Board::makeMove(Move& move) {
     mailbox[toSq] = placedPiece;
     currentHash ^= z.piece[piece_to_zobrist_index(placedPiece)][toSq];
 
-    if (std::abs(movingPiece) == pawn && std::abs(move.fromRow - move.toRow) == 2) {
+    if (piece_type(movingPiece) == PAWN && std::abs(move.fromRow - move.toRow) == 2) {
         const bool opponentWhite = !isWhiteTurn;
         const int epRow = opponentWhite ? 2 : 5;
         const int epSq = row_col_to_sq(epRow, move.toCol);
@@ -218,42 +227,42 @@ void Board::makeMove(Move& move) {
 
     isWhiteTurn = !isWhiteTurn;
 
-    if (movingPiece == rook && move.fromRow == 7 && move.fromCol == 7){
+    if (movingPiece == W_ROOK && move.fromRow == 7 && move.fromCol == 7){
         whiteCanCastleKingSide = false;
     }
-    else if (movingPiece == rook && move.fromRow == 7 && move.fromCol == 0){
+    else if (movingPiece == W_ROOK && move.fromRow == 7 && move.fromCol == 0){
         whiteCanCastleQueenSide = false;
     }
-    else if (movingPiece == -rook && move.fromRow == 0 && move.fromCol == 7){
+    else if (movingPiece == B_ROOK && move.fromRow == 0 && move.fromCol == 7){
         blackCanCastleKingSide = false;
     }
-    else if (movingPiece == -rook && move.fromRow == 0 && move.fromCol == 0){
+    else if (movingPiece == B_ROOK && move.fromRow == 0 && move.fromCol == 0){
         blackCanCastleQueenSide = false;
     }
 
-    if (movingPiece == king) {
+    if (movingPiece == W_KING) {
         whiteCanCastleKingSide = false;
         whiteCanCastleQueenSide = false;
         whiteKingRow = move.toRow;
         whiteKingCol = move.toCol;
     }
-    if (movingPiece == -king) {
+    if (movingPiece == B_KING) {
         blackCanCastleKingSide = false;
         blackCanCastleQueenSide = false;
         blackKingRow = move.toRow;
         blackKingCol = move.toCol;
     }
 
-    if (move.capturedPiece == rook && move.toRow == 7 && move.toCol == 7) {
+    if (move.capturedPiece == W_ROOK && move.toRow == 7 && move.toCol == 7) {
         whiteCanCastleKingSide = false;
     }
-    if (move.capturedPiece == rook && move.toRow == 7 && move.toCol == 0) {
+    if (move.capturedPiece == W_ROOK && move.toRow == 7 && move.toCol == 0) {
         whiteCanCastleQueenSide = false;
     }
-    if (move.capturedPiece == -rook && move.toRow == 0 && move.toCol == 7) {
+    if (move.capturedPiece == B_ROOK && move.toRow == 0 && move.toCol == 7) {
         blackCanCastleKingSide = false;
     }
-    if (move.capturedPiece == -rook && move.toRow == 0 && move.toCol == 0) {
+    if (move.capturedPiece == B_ROOK && move.toRow == 0 && move.toCol == 0) {
         blackCanCastleQueenSide = false;
     }
 
@@ -271,6 +280,11 @@ void Board::makeMove(Move& move) {
 
 void Board::unmakeMove(Move& move) {
     const Zobrist& z = zobrist();
+    
+    // Remove from move history
+    if (!moveHistory.empty()) {
+        moveHistory.pop_back();
+    }
 
     isWhiteTurn = !isWhiteTurn;
 
@@ -284,13 +298,13 @@ void Board::unmakeMove(Move& move) {
     if (blackCanCastleQueenSide) currCastling |= 8;
     currentHash ^= z.castling[currCastling];
 
-    const int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
-    const int toSq = row_col_to_sq(move.toRow, move.toCol);
+    const int fromSq = move.from_sq();
+    const int toSq = move.to_sq();
 
     int pieceOnTo = mailbox[toSq];
     int pieceBase = pieceOnTo;
     if (move.promotion != 0) {
-        pieceBase = (pieceOnTo > 0) ? pawn : -pawn;
+        pieceBase = make_piece(PAWN, piece_color(pieceOnTo));
     }
 
     // Remove moved piece from destination
@@ -298,12 +312,12 @@ void Board::unmakeMove(Move& move) {
     mailbox[toSq] = 0;
     currentHash ^= z.piece[piece_to_zobrist_index(pieceOnTo)][toSq];
 
-    // Undo castling rook move if needed
+    // Undo castling ROOK move if needed
     if (move.isCastling) {
         if (move.toCol > move.fromCol) {
             int rookFromSq = row_col_to_sq(move.toRow, move.toCol - 1);
             int rookToSq = row_col_to_sq(move.toRow, move.toCol + 1);
-            int rookPiece = isWhiteTurn ? rook : -rook;
+            int rookPiece = isWhiteTurn ? W_ROOK : B_ROOK;
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookFromSq] = 0;
@@ -313,7 +327,7 @@ void Board::unmakeMove(Move& move) {
         } else {
             int rookFromSq = row_col_to_sq(move.toRow, move.toCol + 1);
             int rookToSq = row_col_to_sq(move.toRow, move.toCol - 2);
-            int rookPiece = isWhiteTurn ? rook : -rook;
+            int rookPiece = isWhiteTurn ? W_ROOK : B_ROOK;
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookFromSq] = 0;
@@ -330,7 +344,7 @@ void Board::unmakeMove(Move& move) {
 
     // Restore captured piece
     if (move.isEnPassant) {
-        int capturedPawn = isWhiteTurn ? -pawn : pawn;
+        int capturedPawn = isWhiteTurn ? B_PAWN : W_PAWN;
         int captureSq = row_col_to_sq(move.fromRow, move.toCol);
         bb_set(*this, capturedPawn, captureSq);
         mailbox[captureSq] = capturedPawn;
@@ -347,11 +361,11 @@ void Board::unmakeMove(Move& move) {
     blackCanCastleQueenSide = move.prevB_QueenSide;
     enPassantCol = move.prevEnPassantCol;
 
-    if (pieceBase == king) {
+    if (pieceBase == W_KING) {
         whiteKingRow = move.fromRow;
         whiteKingCol = move.fromCol;
     }
-    if (pieceBase == -king) {
+    if (pieceBase == B_KING) {
         blackKingRow = move.fromRow;
         blackKingCol = move.fromCol;
     }
@@ -384,22 +398,23 @@ void Board::loadFromFEN(const std::string& fen) {
         } else if (c >= '1' && c <= '8') {
             col += (c - '0');
         } else {
-            int pieceType = 0;
+            int pt = 0;
             switch (std::tolower(static_cast<unsigned char>(c))) {
-                case 'p': pieceType = pawn; break;
-                case 'n': pieceType = knight; break;
-                case 'b': pieceType = bishop; break;
-                case 'r': pieceType = rook; break;
-                case 'q': pieceType = queen; break;
-                case 'k': pieceType = king; break;
+                case 'p': pt = PAWN; break;
+                case 'n': pt = KNIGHT; break;
+                case 'b': pt = BISHOP; break;
+                case 'r': pt = ROOK; break;
+                case 'q': pt = QUEEN; break;
+                case 'k': pt = KING; break;
             }
-            int signedPiece = std::isupper(static_cast<unsigned char>(c)) ? pieceType : -pieceType;
+            bool isWhite = std::isupper(static_cast<unsigned char>(c));
+            int pieceVal = make_piece(pt, isWhite ? WHITE : BLACK);
             int sq = row_col_to_sq(row, col);
-            bb_set(*this, signedPiece, sq);
-            mailbox[sq] = signedPiece;
+            bb_set(*this, pieceVal, sq);
+            mailbox[sq] = pieceVal;
 
-            if (pieceType == king) {
-                if (std::isupper(static_cast<unsigned char>(c))) {
+            if (pt == KING) {
+                if (isWhite) {
                     whiteKingRow = row;
                     whiteKingCol = col;
                 } else {
@@ -441,16 +456,16 @@ void printBoard(const Board& board) {
             char cStr = '.';
             if (p != 0) {
                 char ch = ' ';
-                int ap = std::abs(p);
-                switch (ap) {
-                    case pawn: ch = 'p'; break;
-                    case knight: ch = 'n'; break;
-                    case bishop: ch = 'b'; break;
-                    case rook: ch = 'r'; break;
-                    case queen: ch = 'q'; break;
-                    case king: ch = 'k'; break;
+                int pt = piece_type(p);
+                switch (pt) {
+                    case PAWN: ch = 'p'; break;
+                    case KNIGHT: ch = 'n'; break;
+                    case BISHOP: ch = 'b'; break;
+                    case ROOK: ch = 'r'; break;
+                    case QUEEN: ch = 'q'; break;
+                    case KING: ch = 'k'; break;
                 }
-                if (p > 0) ch = static_cast<char>(ch - 'a' + 'A');
+                if (piece_color(p) == WHITE) ch = static_cast<char>(ch - 'a' + 'A');
                 cStr = ch;
             }
             std::cout << cStr << " ";
@@ -470,10 +485,10 @@ Move uci_to_move(const std::string& uci) {
     if (uci.length() == 5) {
         char promoChar = uci[4];
         switch (promoChar) {
-            case 'q': move.promotion = queen; break;
-            case 'r': move.promotion = rook; break;
-            case 'b': move.promotion = bishop; break;
-            case 'n': move.promotion = knight; break;
+            case 'q': move.promotion = QUEEN; break;
+            case 'r': move.promotion = ROOK; break;
+            case 'b': move.promotion = BISHOP; break;
+            case 'n': move.promotion = KNIGHT; break;
         }
     }
     return move;
@@ -504,10 +519,10 @@ const Zobrist& zobrist() {
 }
 
 int piece_to_zobrist_index(int piece) {
-    int absP = std::abs(piece);
-    if (absP < 1 || absP > 6) return -1;
-    int base = (piece > 0) ? 0 : 6;
-    return base + (absP - 1);
+    // New encoding: 1-6 = white, 7-12 = black
+    // Returns 0-5 for white pieces, 6-11 for black pieces
+    if (piece < 1 || piece > 12) return -1;
+    return piece - 1;  // piece 1 -> index 0, piece 12 -> index 11
 }
 
 uint64_t position_key(const Board& board) {
@@ -562,7 +577,7 @@ uint16_t TranspositionTable::packMove(const Move& m) {
     if (from < 0 || from >= 64) from = 0;
     if (to < 0 || to >= 64) to = 0;
 
-    int promo = std::abs(m.promotion);
+    int promo = m.promotion;
     if (promo < 0) promo = 0;
     if (promo > 7) promo = 7;
 
@@ -666,22 +681,22 @@ static Bitboard attackers_to_sq(Bitboard pieces[2][6], int sq, int side, Bitboar
     Bitboard attackers = 0ULL;
 
     // Pawns: to find pawns of 'side' that attack 'sq', use pawn_attacks of the opposite side.
-    attackers |= ((side == WHITE) ? pawn_attacks[BLACK][sq] : pawn_attacks[WHITE][sq]) & pieces[side][pawn - 1];
-    attackers |= knight_attacks[sq] & pieces[side][knight - 1];
-    attackers |= king_attacks[sq] & pieces[side][king - 1];
-    attackers |= bishop_attacks_on_the_fly(sq, occ) & (pieces[side][bishop - 1] | pieces[side][queen - 1]);
-    attackers |= rook_attacks_on_the_fly(sq, occ) & (pieces[side][rook - 1] | pieces[side][queen - 1]);
+    attackers |= ((side == WHITE) ? pawn_attacks[BLACK][sq] : pawn_attacks[WHITE][sq]) & pieces[side][PAWN - 1];
+    attackers |= knight_attacks[sq] & pieces[side][KNIGHT - 1];
+    attackers |= king_attacks[sq] & pieces[side][KING - 1];
+    attackers |= bishop_attacks_on_the_fly(sq, occ) & (pieces[side][BISHOP - 1] | pieces[side][QUEEN - 1]);
+    attackers |= rook_attacks_on_the_fly(sq, occ) & (pieces[side][ROOK - 1] | pieces[side][QUEEN - 1]);
     return attackers;
 }
 
 int see_exchange(const Board& board, const Move& move) {
-    if (move.capturedPiece == 0 && !move.isEnPassant) return 0;
+    if (!is_capture(move)) return 0;
 
-    int fromSq = row_col_to_sq(move.fromRow, move.fromCol);
-    int toSq = row_col_to_sq(move.toRow, move.toCol);
+    int fromSq = move.from_sq();
+    int toSq = move.to_sq();
 
     int movingPiece = piece_at_sq(board, fromSq);
-    int captured = move.isEnPassant ? pawn : std::abs(move.capturedPiece);
+    int captured = move.isEnPassant ? PAWN : piece_type(move.capturedPiece);
     
     int victimValue = see_piece_values[captured];
 
@@ -702,17 +717,17 @@ int see_exchange(const Board& board, const Move& move) {
 
     if (!move.isEnPassant && move.capturedPiece != 0) {
         occ &= ~bit_at_sq(toSq);
-        pieces[opp][std::abs(move.capturedPiece) - 1] &= ~bit_at_sq(toSq);
+        pieces[opp][piece_type(move.capturedPiece) - 1] &= ~bit_at_sq(toSq);
     }
     if (move.isEnPassant) {
         int capRow = move.fromRow;
         int capSq = row_col_to_sq(capRow, move.toCol);
         occ &= ~bit_at_sq(capSq);
-        pieces[opp][pawn - 1] &= ~bit_at_sq(capSq);
+        pieces[opp][PAWN - 1] &= ~bit_at_sq(capSq);
     }
     occ &= ~bit_at_sq(fromSq);
-    pieces[side][std::abs(movingPiece) - 1] &= ~bit_at_sq(fromSq);
-    int promoteType = move.promotion != 0 ? std::abs(move.promotion) : std::abs(movingPiece);
+    pieces[side][piece_type(movingPiece) - 1] &= ~bit_at_sq(fromSq);
+    int promoteType = move.promotion != 0 ? move.promotion : piece_type(movingPiece);
     pieces[side][promoteType - 1] |= bit_at_sq(toSq);
     occ |= bit_at_sq(toSq);
 
@@ -726,24 +741,24 @@ int see_exchange(const Board& board, const Move& move) {
 
         Bitboard allAttackers = attackers_to_sq(pieces, toSq, attackerSide, occ);
 
-        if ((pieces[attackerSide][pawn - 1] & allAttackers)) {
-            attackerSq = lsb(pieces[attackerSide][pawn - 1] & allAttackers);
-            nextVictimPiece = pawn;
-        } else if ((pieces[attackerSide][knight - 1] & allAttackers)) {
-            attackerSq = lsb(pieces[attackerSide][knight - 1] & allAttackers);
-            nextVictimPiece = knight;
-        } else if ((pieces[attackerSide][bishop - 1] & allAttackers)) {
-            attackerSq = lsb(pieces[attackerSide][bishop - 1] & allAttackers);
-            nextVictimPiece = bishop;
-        } else if ((pieces[attackerSide][rook - 1] & allAttackers)) {
-            attackerSq = lsb(pieces[attackerSide][rook - 1] & allAttackers);
-            nextVictimPiece = rook;
-        } else if ((pieces[attackerSide][queen - 1] & allAttackers)) {
-            attackerSq = lsb(pieces[attackerSide][queen - 1] & allAttackers);
-            nextVictimPiece = queen;
-        } else if ((pieces[attackerSide][king - 1] & allAttackers)) {
-            attackerSq = lsb(pieces[attackerSide][king - 1] & allAttackers);
-            nextVictimPiece = king;
+        if ((pieces[attackerSide][PAWN - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][PAWN - 1] & allAttackers);
+            nextVictimPiece = PAWN;
+        } else if ((pieces[attackerSide][KNIGHT - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][KNIGHT - 1] & allAttackers);
+            nextVictimPiece = KNIGHT;
+        } else if ((pieces[attackerSide][BISHOP - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][BISHOP - 1] & allAttackers);
+            nextVictimPiece = BISHOP;
+        } else if ((pieces[attackerSide][ROOK - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][ROOK - 1] & allAttackers);
+            nextVictimPiece = ROOK;
+        } else if ((pieces[attackerSide][QUEEN - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][QUEEN - 1] & allAttackers);
+            nextVictimPiece = QUEEN;
+        } else if ((pieces[attackerSide][KING - 1] & allAttackers)) {
+            attackerSq = lsb(pieces[attackerSide][KING - 1] & allAttackers);
+            nextVictimPiece = KING;
         } else {
             break;
         }
