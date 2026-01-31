@@ -57,7 +57,7 @@ static int get_all_ch_score(const Board& board, const Move& move, int mainHistSc
     return (ch1 + mainHistScore) / 2 + ch2 + ch4;
 }
 
-// Get single CH score for update (after makeMove, so offset is adjusted)
+// Get single CH score for update (after makeMove, so offset is adjusted and colors are flipped)
 static int get_single_ch_score_for_update(const Board& board, int offset, const Move& currentMove) {
     int historySize = static_cast<int>(board.moveHistory.size());
     int prevIdx = historySize - offset - 1; // -1 because current move is already in history
@@ -66,13 +66,14 @@ static int get_single_ch_score_for_update(const Board& board, int offset, const 
     const Move& prevMove = board.moveHistory[prevIdx];
     if (prevMove.pieceType == 0) return 0;
 
-    int prevColor = board.isWhiteTurn ? BLACK : WHITE;
+    // After makeMove, isWhiteTurn is flipped, so we flip the logic
+    int prevColor = board.isWhiteTurn ? WHITE : BLACK; // Flipped from scoring
     int prevPieceIdx = get_piece_index(prevMove.pieceType, prevColor);
     int prevToSq = row_col_to_sq(prevMove.toRow, prevMove.toCol);
 
     int currPieceType = currentMove.pieceType;
     if (currPieceType == 0) return 0;
-    int currColor = board.isWhiteTurn ? WHITE : BLACK;
+    int currColor = board.isWhiteTurn ? BLACK : WHITE; // Flipped from scoring
     int currPieceIdx = get_piece_index(currPieceType, currColor);
     int currToSq = row_col_to_sq(currentMove.toRow, currentMove.toCol);
 
@@ -89,7 +90,7 @@ static int get_all_ch_score_for_update(const Board& board, const Move& move, int
 
 // Update a single CH entry
 // Note: This is called AFTER makeMove, so moveHistory already contains the current move
-// Therefore we need to add 1 to the offset to get the correct previous move
+// and isWhiteTurn is flipped
 static void update_single_ch(const Board& board, const Move& move, int offset, int bonus, int mainHistScore) {
     int historySize = static_cast<int>(board.moveHistory.size());
     int prevIdx = historySize - offset - 1; // -1 because current move is already in history
@@ -98,13 +99,14 @@ static void update_single_ch(const Board& board, const Move& move, int offset, i
     const Move& prevMove = board.moveHistory[prevIdx];
     if (prevMove.pieceType == 0) return;
 
-    int prevColor = board.isWhiteTurn ? BLACK : WHITE;
+    // After makeMove, isWhiteTurn is flipped, so we flip the logic
+    int prevColor = board.isWhiteTurn ? WHITE : BLACK; // Flipped from scoring
     int prevPieceIdx = get_piece_index(prevMove.pieceType, prevColor);
     int prevToSq = row_col_to_sq(prevMove.toRow, prevMove.toCol);
 
     int currPieceType = move.pieceType;
     if (currPieceType == 0) return;
-    int currColor = board.isWhiteTurn ? WHITE : BLACK;
+    int currColor = board.isWhiteTurn ? BLACK : WHITE; // Flipped from scoring
     int currPieceIdx = get_piece_index(currPieceType, currColor);
     int currToSq = row_col_to_sq(move.toRow, move.toCol);
 
