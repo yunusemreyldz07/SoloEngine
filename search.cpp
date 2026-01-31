@@ -391,6 +391,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
             board.enPassantCol = -1; // En passant rights vanish after a null move.
             board.isWhiteTurn = !board.isWhiteTurn;
+            
+            // Clear search stack for null move (no piece moved)
+            searchStack[ply].piece = 0;
+            searchStack[ply].toSq = 0;
 
             // Push new position key to history so threefold repetition checks remain correct
             uint64_t nullHash = position_key(board);
