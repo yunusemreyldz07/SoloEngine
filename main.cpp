@@ -11,7 +11,7 @@
 #include <thread>
 #include <atomic>
 
-#define VERSION "1.3.0"
+#define VERSION "1.3.1"
 
 static uint64_t perft(Board& board, int depth) {
     if (depth <= 0) return 1ULL;
@@ -58,11 +58,11 @@ void bench() {
         s += columns[m.toCol];
         s += static_cast<char>('0' + (8 - m.toRow));
         if (m.promotion != 0) {
-            switch (std::abs(m.promotion)) {
-                case queen: s += 'q'; break;
-                case rook: s += 'r'; break;
-                case bishop: s += 'b'; break;
-                case knight: s += 'n'; break;
+            switch (m.promotion) {
+                case QUEEN: s += 'q'; break;
+                case ROOK: s += 'r'; break;
+                case BISHOP: s += 'b'; break;
+                case KNIGHT: s += 'n'; break;
                 default: break;
             }
         }
@@ -338,10 +338,10 @@ int main(int argc, char* argv[]) {
                               << columns[best.toCol] << (8 - best.toRow);
                     if (best.promotion != 0) {
                         switch (abs(best.promotion)) {
-                            case queen: std::cout << 'q'; break;
-                            case rook: std::cout << 'r'; break;
-                            case bishop: std::cout << 'b'; break;
-                            case knight: std::cout << 'n'; break;
+                            case QUEEN: std::cout << 'q'; break;
+                            case ROOK: std::cout << 'r'; break;
+                            case BISHOP: std::cout << 'b'; break;
+                            case KNIGHT: std::cout << 'n'; break;
                             default: break;
                         }
                     }

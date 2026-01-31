@@ -8,10 +8,10 @@
 #include <cstring>
 
 extern char columns[];
-extern Move killerMove[2][100]; // 2 slots, max 100 ply
-extern int historyTable[64][64]; // fromSquare x toSquare
+extern Move killerMove[2][MAX_PLY]; // 2 slots
+extern int historyTable[64][64];    // fromSquare x toSquare
 extern std::atomic<long long> nodeCount; // visited node counter
-extern int LMR_TABLE[256][256]; // Late Move Reduction table
+extern int LMR_TABLE[256][256];     // Late Move Reduction table
 
 extern void initLMRtables();
 
@@ -26,8 +26,6 @@ struct SearchParams {
 	int lmp_max_depth = 8;        // Maximum depth to consider LMP
 
 	int aspiration_delta = 50;    // Initial aspiration half-window in centipawns
-
-	int mate_score = 100000;        // Score assigned to a checkmate position
 };
 
 const SearchParams& get_search_params();

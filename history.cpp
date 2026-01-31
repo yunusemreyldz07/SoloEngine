@@ -3,7 +3,7 @@
 #include <algorithm>
 
 int historyTable[64][64];
-Move killerMove[2][100];
+Move killerMove[2][MAX_PLY];
 int HISTORY_MAX = 16384;
 
 void clear_history() {
@@ -38,22 +38,14 @@ int get_history_score(int fromSq, int toSq) {
 }
 
 void add_killer_move(const Move& move, int ply) {
-    const bool is_killer0 = (move.fromRow == killerMove[0][ply].fromRow &&
-        move.fromCol == killerMove[0][ply].fromCol &&
-        move.toRow == killerMove[0][ply].toRow &&
-        move.toCol == killerMove[0][ply].toCol);
-
-    const bool is_killer1 = (move.fromRow == killerMove[1][ply].fromRow &&
-        move.fromCol == killerMove[1][ply].fromCol &&
-        move.toRow == killerMove[1][ply].toRow &&
-        move.toCol == killerMove[1][ply].toCol);
-
-    if (is_killer0) {
+    if (ply < 0 || ply >= MAX_PLY) return;
+    
+    if (moves_equal(move, killerMove[0][ply])) {
         return;
     }
 
     // Promote killer1 to killer0 when it triggers again.
-    if (is_killer1) {
+    if (moves_equal(move, killerMove[1][ply])) {
         killerMove[1][ply] = killerMove[0][ply];
         killerMove[0][ply] = move;
         return;
@@ -64,6 +56,7 @@ void add_killer_move(const Move& move, int ply) {
 }
 
 Move get_killer_move(int index, int ply) {
+    if (ply < 0 || ply >= MAX_PLY) return Move();
     return killerMove[index][ply];
 }
 

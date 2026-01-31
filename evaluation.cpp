@@ -32,7 +32,7 @@ const int gamephaseInc[6] = { 0, 1, 1, 2, 4, 0 };
 const int KnightMobility[9] = { -20, -10, -5, -2, 0, 5, 10, 12, 15 };
 
 // Can go to 13 squares max
-// Same logic here, hopefully this will prevent bad bishop placements lol
+// Same logic here, hopefully this will prevent bad BISHOP placements lol
 // 0 squares = -20
 // 6 squares = 0
 // 13 squares = +20
@@ -41,7 +41,7 @@ const int BishopMobility[14] = { -20, -10, -5, -2, 0, 2, 4, 6, 8, 10, 12, 15, 18
 // and the rest...
 const int RookMobility[15] = { -10, -5, -2, 0, 2, 4, 6, 8, 10, 12, 14, 16, 20, 25, 30 };
 
-// Queen bonuses are not that much according to other pieces, it is because queen already can go to many squares and this might cause our engine to get its queen out too early
+// QUEEN bonuses are not that much according to other pieces, it is because QUEEN already can go to many squares and this might cause our engine to get its QUEEN out too early
 const int QueenMobility[28] = { -5, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15 };
 
 // Pesto tables
@@ -229,16 +229,16 @@ int evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard 
         Bitboard attacks = 0ULL;
 
         switch (pieceType) {
-            case knight:
+            case KNIGHT:
                 attacks = knight_attacks[sq];
                 break;
-            case bishop:
+            case BISHOP:
                 attacks = get_bishop_attacks(sq, occupy);
                 break;
-            case rook:
+            case ROOK:
                 attacks = get_rook_attacks(sq, occupy);
                 break;
-            case queen:
+            case QUEEN:
                 attacks = get_bishop_attacks(sq, occupy) | get_rook_attacks(sq, occupy);
                 break;
         }
@@ -247,10 +247,10 @@ int evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard 
         
         int mobilityCount = count_bits(validMoves);
 
-        if (pieceType == knight) totalMobility += KnightMobility[mobilityCount];
-        else if (pieceType == bishop) totalMobility += BishopMobility[mobilityCount];
-        else if (pieceType == rook) totalMobility += RookMobility[mobilityCount];
-        else if (pieceType == queen) totalMobility += QueenMobility[mobilityCount];
+        if (pieceType == KNIGHT) totalMobility += KnightMobility[mobilityCount];
+        else if (pieceType == BISHOP) totalMobility += BishopMobility[mobilityCount];
+        else if (pieceType == ROOK) totalMobility += RookMobility[mobilityCount];
+        else if (pieceType == QUEEN) totalMobility += QueenMobility[mobilityCount];
     }
     
     return totalMobility;
@@ -292,7 +292,7 @@ int evaluate_board(const Board& board) {
     // Mobility evaluation
     int mobilityScore = 0;
     Bitboard occupy = board.color[WHITE] | board.color[BLACK];
-    for (int pieceType = knight; pieceType <= queen; pieceType++) {
+    for (int pieceType = KNIGHT; pieceType <= QUEEN; pieceType++) {
         mobilityScore += evaluate_mobility(board, pieceType, board.isWhiteTurn, occupy);
         mobilityScore -= evaluate_mobility(board, pieceType, !board.isWhiteTurn, occupy);
     }

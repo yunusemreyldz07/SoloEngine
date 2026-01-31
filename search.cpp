@@ -12,8 +12,6 @@
 #include <cstring>
 #include <cmath>
 
-int MATE_SCORE = 100000;
-
 const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
 
 std::atomic<long long> nodeCount{0};
@@ -79,12 +77,12 @@ static bool is_square_attacked_otf(const Board& board, int row, int col, bool by
     const int us = byWhite ? WHITE : BLACK;
     Bitboard occ = board.color[WHITE] | board.color[BLACK];
 
-    Bitboard pawns = board.piece[pawn - 1] & board.color[us];
-    Bitboard knights = board.piece[knight - 1] & board.color[us];
-    Bitboard bishops = board.piece[bishop - 1] & board.color[us];
-    Bitboard rooks = board.piece[rook - 1] & board.color[us];
-    Bitboard queens = board.piece[queen - 1] & board.color[us];
-    Bitboard kings = board.piece[king - 1] & board.color[us];
+    Bitboard pawns = board.piece[PAWN - 1] & board.color[us];
+    Bitboard knights = board.piece[KNIGHT - 1] & board.color[us];
+    Bitboard bishops = board.piece[BISHOP - 1] & board.color[us];
+    Bitboard rooks = board.piece[ROOK - 1] & board.color[us];
+    Bitboard queens = board.piece[QUEEN - 1] & board.color[us];
+    Bitboard kings = board.piece[KING - 1] & board.color[us];
 
     if (byWhite) {
         if (pawn_attacks[BLACK][sq] & pawns) return true;
@@ -128,11 +126,11 @@ static std::string move_to_uci(const Move& m) {
     s += columns[m.toCol];
     s += static_cast<char>('0' + (8 - m.toRow));
     if (m.promotion != 0) {
-        switch (std::abs(m.promotion)) {
-            case queen: s += 'q'; break;
-            case rook: s += 'r'; break;
-            case bishop: s += 'b'; break;
-            case knight: s += 'n'; break;
+        switch (m.promotion) {
+            case QUEEN: s += 'q'; break;
+            case ROOK: s += 'r'; break;
+            case BISHOP: s += 'b'; break;
+            case KNIGHT: s += 'n'; break;
             default: break;
         }
     }
@@ -141,60 +139,55 @@ static std::string move_to_uci(const Move& m) {
 
 int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove) {
     int moveScore = 0;
-    int from = row_col_to_sq(move.fromRow, move.fromCol);
-    int to = row_col_to_sq(move.toRow, move.toCol);
-    if (move.capturedPiece != 0 || move.isEnPassant) {
-        int victimPiece = move.isEnPassant ? pawn : std::abs(move.capturedPiece);
+    int from = move.from_sq();
+    int to = move.to_sq();
+    if (is_capture(move)) {
+        int victimPiece = move.isEnPassant ? PAWN : piece_type(move.capturedPiece);
         int victimValue = PIECE_VALUES[victimPiece];
 
         int attackerPiece = piece_at_sq(board, from);
-        int attackerValue = PIECE_VALUES[std::abs(attackerPiece)];
+        int attackerValue = PIECE_VALUES[piece_type(attackerPiece)];
         int mvvScore = victimValue * 10 - attackerValue;
 
         int see_value = see_exchange(board, move); // For MVV-LVA ordering
 
         if (see_value >= 0) {
             // Good trades. they must be on the top of the list.
-            moveScore += 1000000 + see_value + mvvScore;
+            moveScore += SCORE_GOOD_CAPTURE + see_value + mvvScore;
         }
         else {
             // Bad trades. apply penalty to push them down the list.
-            moveScore += -100000 + see_value + mvvScore;
+            moveScore += SCORE_BAD_CAPTURE + see_value + mvvScore;
         }
 
         moveScore += 10000 + (victimValue * 10) - attackerValue;
     }
 
-    if (ttMove != nullptr && 
-        move.fromRow == ttMove->fromRow && move.fromCol == ttMove->fromCol &&
-        move.toRow == ttMove->toRow && move.toCol == ttMove->toCol) {
-        moveScore += 1000000; // TT move always has the highest priority
+    if (ttMove != nullptr && moves_equal(move, *ttMove)) {
+        moveScore += SCORE_TT_MOVE; // TT move always has the highest priority
     }
 
-    if (ply >= 0 && ply < 100) { 
-        if (move.fromCol == get_killer_move(0, ply).fromCol && move.fromRow == get_killer_move(0, ply).fromRow &&
-            move.toCol == get_killer_move(0, ply).toCol && move.toRow == get_killer_move(0, ply).toRow) {
-            moveScore += 8000;
+    if (ply >= 0 && ply < MAX_PLY) { 
+        if (moves_equal(move, get_killer_move(0, ply))) {
+            moveScore += SCORE_KILLER_1;
         }
-
-        if (move.fromCol == get_killer_move(1, ply).fromCol && move.fromRow == get_killer_move(1, ply).fromRow &&
-            move.toCol == get_killer_move(1, ply).toCol && move.toRow == get_killer_move(1, ply).toRow) {
-            moveScore += 7000;
+        else if (moves_equal(move, get_killer_move(1, ply))) {
+            moveScore += SCORE_KILLER_2;
         }
     }
 
     if (move.promotion != 0) {
-        switch (std::abs(move.promotion)){
-            case queen: moveScore += 90000; break;
-            case rook: moveScore += 80000; break;
-            case bishop: moveScore -= 70000; break;
-            case knight: moveScore -= 60000; break;
+        switch (move.promotion){
+            case QUEEN: moveScore += SCORE_PROMO_QUEEN; break;
+            case ROOK: moveScore += SCORE_PROMO_ROOK; break;
+            case BISHOP: moveScore += SCORE_PROMO_BISHOP; break;
+            case KNIGHT: moveScore += SCORE_PROMO_KNIGHT; break;
             default: break;
         }
     }
 
     if (move.isCastling) {
-        // Castling is good for king safety, but keep the bonus modest so we don't prefer it over
+        // Castling is good for KING safety, but keep the bonus modest so we don't prefer it over
         // urgent defensive moves (like saving a hanging piece) at shallow depth
         moveScore += 500;
     }
@@ -244,7 +237,7 @@ int quiescence(Board& board, int alpha, int beta, int ply){
 
         // Delta Pruning
         // If even the most optimistic evaluation (stand_pat + value of captured piece + margin) is worse than alpha, skip 
-        int capturedValue = PIECE_VALUES[std::abs(move.capturedPiece)];
+        int capturedValue = PIECE_VALUES[piece_type(move.capturedPiece)];
         if (stand_pat + capturedValue + 200 < alpha) {
             continue; 
         }
@@ -292,8 +285,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     bool pvNode = (beta - alpha) > 1;
     bool firstMove = true;
     const int alphaOrig = alpha;
-    int maxEval = -200000;
-    int MATE_VALUE = 100000;
+    int maxEval = VALUE_NONE;
 
     if (depth <= 0) {
         pvLine.clear();
@@ -322,7 +314,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     }
 
     int movesSearched = 0;
-    int eval = -MATE_VALUE;
+    int eval = -MATE_SCORE;
     bool is_repetition_candidate = false;
 
     if (history.size() > 1) {
@@ -417,7 +409,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             return 0;
         }
         if (is_square_attacked(board, kingRow, kingCol, !board.isWhiteTurn)) 
-            return -MATE_VALUE + ply; // Mate
+            return -MATE_SCORE + ply; // Mate
         return 0; // Stalemate
     }
 
@@ -435,19 +427,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             depth <= params.lmp_max_depth &&
             movesSearched >= lmpCount &&
             !inCheck && move.promotion == 0 && move.capturedPiece == 0) {
-            if (!move.isEnPassant) {
-                bool isKiller = false;
-                // Checking if the move is a killer move, they are important so we should not prune them
-                if (ply < 100) {
-                    if (move.fromCol == get_killer_move(0, ply).fromCol && move.fromRow == get_killer_move(0, ply).fromRow &&
-                        move.toCol == get_killer_move(0, ply).toCol && move.toRow == get_killer_move(0, ply).toRow) isKiller = true;
-                    else if (move.fromCol == get_killer_move(1, ply).fromCol && move.fromRow == get_killer_move(1, ply).fromRow &&
-                        move.toCol == get_killer_move(1, ply).toCol && move.toRow == get_killer_move(1, ply).toRow) isKiller = true;
-                }
-                
-                if (!isKiller) {
-                    continue; // skip this move (late move pruning)
-                }
+            if (!move.isEnPassant && !is_killer_move(move, ply)) {
+                continue; // skip this move (late move pruning)
             }
         }
 
@@ -465,7 +446,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             int reduction = 0;
             std::vector<Move> nullWindowPv;
             if (params.use_lmr &&
-                depth > 1 && move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
+                depth > 1 && is_quiet(move)) {
                 int lmrTableDepth = std::min(depth, 255);
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
@@ -505,21 +486,21 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
 
         if (beta <= alpha) {
-            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
-                if (ply < 100 && !(move.fromCol == get_killer_move(0, ply).fromCol && move.fromRow == get_killer_move(0, ply).fromRow && move.toCol == get_killer_move(0, ply).toCol && move.toRow == get_killer_move(0, ply).toRow)){
-                    add_killer_move(move, ply);
-                }
+            // Quiet move caused beta cutoff - update killer moves
+            if (is_quiet(move)) {
+                add_killer_move(move, ply);
             }
-            int from = row_col_to_sq(move.fromRow, move.fromCol);
-            int to = row_col_to_sq(move.toRow, move.toCol);
             
+            // Update history
+            int from = move.from_sq();
+            int to = move.to_sq();
             if (from >= 0 && from < 64 && to >= 0 && to < 64) {
                 update_history(from, to, depth, badQuiets, badQuietCount);
             }
             
             break; // beta cutoff
         } else {
-            if (move.capturedPiece == 0 && !move.isEnPassant && move.promotion == 0) {
+            if (is_quiet(move)) {
                 if (badQuietCount < 256){
                     badQuiets[badQuietCount++] = move;
                 }
@@ -586,12 +567,12 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
         if (stop_search.load(std::memory_order_relaxed)) break;
 
         int delta = params.aspiration_delta; // Aspiration window margin
-        int alpha = -2000000000;
-        int beta = 2000000000;
+        int alpha = -VALUE_INF;
+        int beta = VALUE_INF;
         
         if (params.use_aspiration && depth >= 5){
-            alpha = std::max(-2000000000, lastScore - delta);
-            beta = std::min(2000000000, lastScore + delta);
+            alpha = std::max(-VALUE_INF, lastScore - delta);
+            beta = std::min(VALUE_INF, lastScore + delta);
         }
         while (true) {
             const int alphaStart = alpha;
@@ -671,8 +652,8 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             // Aspiration window re-search logic
             if (params.use_aspiration && depth >= 5 && (bestValue <= alphaStart || bestValue >= betaStart)) {
                 // Fail-low or fail-high: widen the window and re-search this depth.
-                alpha = std::max(-2000000000, bestValue - delta);
-                beta = std::min(2000000000, bestValue + delta);
+                alpha = std::max(-VALUE_INF, bestValue - delta);
+                beta = std::min(VALUE_INF, bestValue + delta);
                 delta += delta / 2;
                 continue; // Restart the depth search
             }
@@ -706,7 +687,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             break; // Exit aspiration window loop
         }
         
-        if (stop_search.load(std::memory_order_relaxed) || bestValue >= 100000 - 50) {
+        if (stop_search.load(std::memory_order_relaxed) || bestValue >= MATE_SCORE - 50) {
             break;
         }
     }
