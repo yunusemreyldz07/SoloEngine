@@ -49,6 +49,7 @@ int get_continuation_history_score(const Board& board, const Move& currentMove) 
 }
 
 // Get all CH score for gravity calculation: (CH1 + mainHist) / 2 + CH2 + CH4
+// Used during scoring (before makeMove)
 static int get_all_ch_score(const Board& board, const Move& move, int mainHistScore) {
     int ch1 = get_single_ch_score(board, 1, move);
     int ch2 = get_single_ch_score(board, 2, move);
@@ -56,10 +57,42 @@ static int get_all_ch_score(const Board& board, const Move& move, int mainHistSc
     return (ch1 + mainHistScore) / 2 + ch2 + ch4;
 }
 
+// Get single CH score for update (after makeMove, so offset is adjusted)
+static int get_single_ch_score_for_update(const Board& board, int offset, const Move& currentMove) {
+    int historySize = static_cast<int>(board.moveHistory.size());
+    int prevIdx = historySize - offset - 1; // -1 because current move is already in history
+    if (prevIdx < 0) return 0;
+
+    const Move& prevMove = board.moveHistory[prevIdx];
+    if (prevMove.pieceType == 0) return 0;
+
+    int prevColor = board.isWhiteTurn ? BLACK : WHITE;
+    int prevPieceIdx = get_piece_index(prevMove.pieceType, prevColor);
+    int prevToSq = row_col_to_sq(prevMove.toRow, prevMove.toCol);
+
+    int currPieceType = currentMove.pieceType;
+    if (currPieceType == 0) return 0;
+    int currColor = board.isWhiteTurn ? WHITE : BLACK;
+    int currPieceIdx = get_piece_index(currPieceType, currColor);
+    int currToSq = row_col_to_sq(currentMove.toRow, currentMove.toCol);
+
+    return continuationHistory[prevPieceIdx][prevToSq][currPieceIdx][currToSq];
+}
+
+// Get all CH score for update (after makeMove)
+static int get_all_ch_score_for_update(const Board& board, const Move& move, int mainHistScore) {
+    int ch1 = get_single_ch_score_for_update(board, 1, move);
+    int ch2 = get_single_ch_score_for_update(board, 2, move);
+    int ch4 = get_single_ch_score_for_update(board, 4, move);
+    return (ch1 + mainHistScore) / 2 + ch2 + ch4;
+}
+
 // Update a single CH entry
+// Note: This is called AFTER makeMove, so moveHistory already contains the current move
+// Therefore we need to add 1 to the offset to get the correct previous move
 static void update_single_ch(const Board& board, const Move& move, int offset, int bonus, int mainHistScore) {
     int historySize = static_cast<int>(board.moveHistory.size());
-    int prevIdx = historySize - offset;
+    int prevIdx = historySize - offset - 1; // -1 because current move is already in history
     if (prevIdx < 0) return;
 
     const Move& prevMove = board.moveHistory[prevIdx];
@@ -75,7 +108,7 @@ static void update_single_ch(const Board& board, const Move& move, int offset, i
     int currPieceIdx = get_piece_index(currPieceType, currColor);
     int currToSq = row_col_to_sq(move.toRow, move.toCol);
 
-    int baseScore = get_all_ch_score(board, move, mainHistScore);
+    int baseScore = get_all_ch_score_for_update(board, move, mainHistScore);
     int scaledBonus = bonus - baseScore * std::abs(bonus) / CH_MAX;
 
     continuationHistory[prevPieceIdx][prevToSq][currPieceIdx][currToSq] += scaledBonus;
