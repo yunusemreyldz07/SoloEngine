@@ -2,6 +2,7 @@
 #include "bitboard.h"
 #include "search.h"
 #include "evaluation.h"
+#include "history.h"
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -92,6 +93,9 @@ void bench() {
     Board board;
     if (globalTT.entryCount() == 0) globalTT.resize(16);
     globalTT.clear();
+    clear_history();
+    clear_conhist();
+    clear_killer_moves();
 
     for (size_t i = 0; i < fens.size(); ++i) {
         board.loadFromFEN(fens[i]);
