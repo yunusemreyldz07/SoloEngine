@@ -281,7 +281,7 @@ int quiescence(Board& board, int alpha, int beta, int ply){
 
     return alpha;
 }
-
+int iirCounter = 0;
 // Negamax
 int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& positionHistory, std::vector<Move>& pvLine) {
 
@@ -370,12 +370,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             return beta;
         }
     }
-
-    if (depth >= iirDepth && pvNode && (!ttHit || ttDepth < depth - iirSubtractor) ) {
-        // Internal Iterative Reductions (IIR)
-        depth--;
-    }
-
     // Reverse Futility Pruning 
     // Only makes sense in non-PV nodes (null-window), otherwise it can prune good PV continuations.
     if ((beta - alpha) == 1 && depth < 9 && !inCheck && beta < MATE_SCORE - 100) {
@@ -429,6 +423,16 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             }
         }
     }
+
+    
+    if (depth >= iirDepth && pvNode && (!ttHit || ttDepth < depth - iirSubtractor) ) {
+        // Internal Iterative Reductions (IIR)
+        depth--;
+        std::cout << "info string IIR applied at depth " << depth + 1 << " to " << depth << std::endl;
+        iirCounter++;
+        std::cout << "info string Total IIR applications: " << iirCounter << std::endl;
+    }
+
 
     std::vector<Move> possibleMoves = get_all_moves(board, board.isWhiteTurn);
     Move bestMove = possibleMoves.empty() ? Move() : possibleMoves[0];
