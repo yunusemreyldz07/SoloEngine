@@ -4,14 +4,13 @@
 
 int historyTable[64][64];
 Move killerMove[2][MAX_PLY];
-int HISTORY_MAX = 16384;
+constexpr int HISTORY_MAX = 16384;
 
 void clear_history() {
     std::memset(historyTable, 0, sizeof(historyTable));
 }
 
-void update_history(int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount) {
-    const int HISTORY_MAX = 16384; 
+void update_history(int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount) { 
 
     int bonus = std::min(10 + 200 * depth, 4096);
     int& bestScore = historyTable[fromSq][toSq];
@@ -62,7 +61,7 @@ Move get_killer_move(int index, int ply) {
 
 void clear_killer_moves() {
     for (int i = 0; i < 2; ++i) {
-        for (int j = 0; j < 100; ++j) {
+        for (int j = 0; j < MAX_PLY; ++j) {
             killerMove[i][j] = Move(); // Reset to default Move
         }
     }

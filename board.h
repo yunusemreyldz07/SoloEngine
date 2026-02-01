@@ -92,6 +92,7 @@ struct Move {
     bool prevB_QueenSide;
 
     int prevEnPassantCol;
+    int prevHalfMoveClock;  // For 50-move rule undo
 
     bool isEnPassant;
     bool isCastling;
@@ -140,6 +141,7 @@ public:
     int whiteKingRow, whiteKingCol;
     int blackKingRow, blackKingCol;
     int enPassantCol;
+    int halfMoveClock;  // Moves since last pawn move or capture (50-move rule)
 
     Board();
     void loadFromFEN(const std::string& fen);
@@ -202,7 +204,18 @@ struct Zobrist {
 const Zobrist& zobrist();
 int piece_to_zobrist_index(int piece);
 uint64_t position_key(const Board& board);
-bool is_threefold_repetition(const std::vector<uint64_t>& history);
+bool is_threefold_repetition(const std::vector<uint64_t>& positionHistory);
+
+// Draw detection
+inline bool is_fifty_move_draw(const Board& board) {
+    return board.halfMoveClock >= 100;  // 100 half-moves = 50 full moves
+}
+
+// Insufficient material detection
+// Returns true only for positions where checkmate is IMPOSSIBLE
+// Conservative: K vs K, K+B vs K, K+N vs K
+// Does NOT include K+B+N vs K (can mate) or K+B vs K+B same color (can mate in corners with help)
+bool is_insufficient_material(const Board& board);
 
 enum TTFlag {
     EXACT,      // Exact score
