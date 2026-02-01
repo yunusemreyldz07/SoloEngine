@@ -4,7 +4,7 @@
 
 int historyTable[64][64];
 Move killerMove[2][MAX_PLY];
-int conhistTable[12][64][12][64];  // Continuation history with color
+int conhistTable[6][64][6][64];  // Continuation history with color
 
 constexpr int HISTORY_MAX = 16384;
 
@@ -75,17 +75,17 @@ void clear_killer_moves() {
 
 // Continuation history update
 void update_conhist(const Move& prevMove, const Move& currMove, int depth, const Move badQuiets[256], int badQuietCount) {
-    // Validate both moves have valid piece types
-    if (prevMove.pieceType == 0 || currMove.pieceType == 0) return;
+    // Validate both moves have valid piece types (1-6)
+    if (prevMove.pieceType < 1 || prevMove.pieceType > 6) return;
+    if (currMove.pieceType < 1 || currMove.pieceType > 6) return;
     
-    // Calculate piece index: (pieceType - 1) + (color * 6) = 0-11
-    int prevIdx = (prevMove.pieceType - 1) + (prevMove.pieceColor * 6);
+    // Calculate piece index: pieceType - 1 = 0-5
+    int prevIdx = prevMove.pieceType - 1;
     int prevTo = prevMove.to_sq();
-    int currIdx = (currMove.pieceType - 1) + (currMove.pieceColor * 6);
+    int currIdx = currMove.pieceType - 1;
     int currTo = currMove.to_sq();
     
     // Bounds check
-    if (prevIdx < 0 || prevIdx > 11 || currIdx < 0 || currIdx > 11) return;
     if (prevTo < 0 || prevTo > 63 || currTo < 0 || currTo > 63) return;
     
     int bonus = std::min(10 + 200 * depth, 4096);
@@ -94,29 +94,30 @@ void update_conhist(const Move& prevMove, const Move& currMove, int depth, const
     // Update best move score with gravity formula
     bestScore += bonus - (bestScore * std::abs(bonus)) / HISTORY_MAX;
     
-    // Apply malus to bad quiet moves
+    // Apply malus to bad quiet moves (less aggressive)
     for (int i = 0; i < badQuietCount; ++i) {
-        int badIdx = (badQuiets[i].pieceType - 1) + (badQuiets[i].pieceColor * 6);
+        if (badQuiets[i].pieceType < 1 || badQuiets[i].pieceType > 6) continue;
+        
+        int badIdx = badQuiets[i].pieceType - 1;
         int badTo = badQuiets[i].to_sq();
         
-        if (badIdx < 0 || badIdx > 11 || badTo < 0 || badTo > 63) continue;
+        if (badTo < 0 || badTo > 63) continue;
         if (badIdx == currIdx && badTo == currTo) continue;  // Skip the good move
         
-        int malus = bonus + (i * 30);
         int& badScore = conhistTable[prevIdx][prevTo][badIdx][badTo];
-        badScore -= malus + (badScore * std::abs(malus)) / HISTORY_MAX;
+        badScore -= bonus - (badScore * std::abs(bonus)) / HISTORY_MAX;
     }
 }
 
 int get_conhist_score(const Move& prevMove, const Move& currMove) {
-    if (prevMove.pieceType == 0 || currMove.pieceType == 0) return 0;
+    if (prevMove.pieceType < 1 || prevMove.pieceType > 6) return 0;
+    if (currMove.pieceType < 1 || currMove.pieceType > 6) return 0;
     
-    int prevIdx = (prevMove.pieceType - 1) + (prevMove.pieceColor * 6);
+    int prevIdx = prevMove.pieceType - 1;
     int prevTo = prevMove.to_sq();
-    int currIdx = (currMove.pieceType - 1) + (currMove.pieceColor * 6);
+    int currIdx = currMove.pieceType - 1;
     int currTo = currMove.to_sq();
     
-    if (prevIdx < 0 || prevIdx > 11 || currIdx < 0 || currIdx > 11) return 0;
     if (prevTo < 0 || prevTo > 63 || currTo < 0 || currTo > 63) return 0;
     
     return conhistTable[prevIdx][prevTo][currIdx][currTo];
