@@ -75,8 +75,8 @@ void clear_killer_moves() {
 
 // Continuation history update
 void update_conhist(const Move& prevMove, const Move& currMove, int depth, const Move badQuiets[256], int badQuietCount) {
-    // Validate previous move exists
-    if (prevMove.pieceType == 0) return;
+    // Validate both moves have valid piece types
+    if (prevMove.pieceType == 0 || currMove.pieceType == 0) return;
     
     // Calculate piece index: (pieceType - 1) + (color * 6) = 0-11
     int prevIdx = (prevMove.pieceType - 1) + (prevMove.pieceColor * 6);
@@ -109,7 +109,7 @@ void update_conhist(const Move& prevMove, const Move& currMove, int depth, const
 }
 
 int get_conhist_score(const Move& prevMove, const Move& currMove) {
-    if (prevMove.pieceType == 0) return 0;
+    if (prevMove.pieceType == 0 || currMove.pieceType == 0) return 0;
     
     int prevIdx = (prevMove.pieceType - 1) + (prevMove.pieceColor * 6);
     int prevTo = prevMove.to_sq();
