@@ -208,6 +208,14 @@ int quiescence(Board& board, int alpha, int beta, int ply){
     if (ply >= 99) {
         return evaluate_board(board); // Prevent infinite quiescence depth and overflows
     }
+    
+    // Draw detection in quiescence
+    if (is_fifty_move_draw(board)) {
+        return 0;
+    }
+    if (is_insufficient_material(board)) {
+        return 0;
+    }
 
     // Do not stop until you reach a quiet position
     int stand_pat = evaluate_board(board);
@@ -270,7 +278,7 @@ int quiescence(Board& board, int alpha, int beta, int ply){
 }
 
 // Negamax
-int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& history, std::vector<Move>& pvLine) {
+int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& positionHistory, std::vector<Move>& pvLine) {
 
     Move badQuiets[256]; // Store bad quiet moves for move ordering
     int badQuietCount = 0;
@@ -292,10 +300,24 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         return quiescence(board, alpha, beta, ply);
     }
 
-    if (is_threefold_repetition(history)) {
+    // Draw detection: threefold repetition
+    if (is_threefold_repetition(positionHistory)) {
         pvLine.clear();
         return 0; // Draw
     }
+    
+    // Draw detection: 50-move rule
+    if (is_fifty_move_draw(board)) {
+        pvLine.clear();
+        return 0; // Draw
+    }
+    
+    // Draw detection: insufficient material
+    if (is_insufficient_material(board)) {
+        pvLine.clear();
+        return 0; // Draw
+    }
+
     int kRow = 0;
     int kCol = 0;
     if (!king_square(board, board.isWhiteTurn, kRow, kCol)) {
@@ -317,9 +339,9 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     int eval = -MATE_SCORE;
     bool is_repetition_candidate = false;
 
-    if (history.size() > 1) {
-        for (int i = static_cast<int>(history.size()) - 2; i >= 0; i--) {
-            if (history[i] == currentHash) {
+    if (positionHistory.size() > 1) {
+        for (int i = static_cast<int>(positionHistory.size()) - 2; i >= 0; i--) {
+            if (positionHistory[i] == currentHash) {
                 is_repetition_candidate = true;
                 break;
             }
@@ -378,17 +400,17 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             board.enPassantCol = -1; // En passant rights vanish after a null move.
             board.isWhiteTurn = !board.isWhiteTurn;
 
-            // Push new position key to history so threefold repetition checks remain correct
+            // Push new position key to positionHistory so threefold repetition checks remain correct
             uint64_t nullHash = position_key(board);
-            history.push_back(nullHash);
+            positionHistory.push_back(nullHash);
 
             // Reduction factor R (typical values 2..3). Ensure we don't search negative depth
             int R = std::min(3, std::max(1, depth - 2));
             std::vector<Move> nullPv;
-            int nullScore = -negamax(board, depth - 1 - R, -beta, -beta + 1, ply + 1, history, nullPv);
+            int nullScore = -negamax(board, depth - 1 - R, -beta, -beta + 1, ply + 1, positionHistory, nullPv);
 
-            // Undo history change and null move
-            if (!history.empty()) history.pop_back();
+            // Undo positionHistory change and null move
+            if (!positionHistory.empty()) positionHistory.pop_back();
             board.isWhiteTurn = !board.isWhiteTurn;
             board.enPassantCol = prevEnPassantCol;
 
@@ -436,9 +458,9 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         movesSearched++;
         std::vector<Move> childPv;
         uint64_t newHash = position_key(board);
-        history.push_back(newHash);
+        positionHistory.push_back(newHash);
         if (firstMove){
-            eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
+            eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, positionHistory, childPv);
             firstMove = false;
         }
         else {
@@ -456,21 +478,21 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             }
             int lmrDepth = std::max(0, depth - 1 - reduction);
 
-            eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, history, nullWindowPv);
+            eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, positionHistory, nullWindowPv);
 
             if (reduction > 0 && eval > alpha) {
                 // Re-search at full depth if reduced search suggests a better move
-                eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, history, childPv);
+                eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, positionHistory, childPv);
             }
 
             if (eval > alpha && eval < beta) {
                 childPv.clear();
-                eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, history, childPv);
+                eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, positionHistory, childPv);
             } else {
                 childPv.clear();
             }
         }
-        if (!history.empty()) history.pop_back();
+        if (!positionHistory.empty()) positionHistory.pop_back();
         board.unmakeMove(move);
 
         if (eval > maxEval) {
@@ -519,7 +541,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     return maxEval;
 }
 
-Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<uint64_t>& history, int ply) {
+Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<uint64_t>& positionHistory, int ply) {
 
     // Reset variables
     resetNodeCounter();
@@ -555,10 +577,10 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
     const int effectiveMaxDepth = gTimeLimited ? 128 : maxDepth;
     int bestValue;
 
-    std::vector<uint64_t> localHistory;
-    localHistory.reserve(std::min((size_t)100, history.size()) + 1);
-    auto startIt = (history.size() > 100) ? (history.end() - 100) : history.begin(); // Keep only last 100 entries
-    localHistory.assign(startIt, history.end());
+    std::vector<uint64_t> localPositionHistory;
+    localPositionHistory.reserve(std::min((size_t)100, positionHistory.size()) + 1);
+    auto startIt = (positionHistory.size() > 100) ? (positionHistory.end() - 100) : positionHistory.begin(); // Keep only last 100 entries
+    localPositionHistory.assign(startIt, positionHistory.end());
 
     int lastScore = 0; // for aspiration windows
 
@@ -617,9 +639,9 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                 std::vector<Move> childPv;
 
                 uint64_t newHash = position_key(board);
-                localHistory.push_back(newHash);
-                int val = -negamax(board, depth - 1, -beta, -alpha, ply + 1, localHistory, childPv);
-                localHistory.pop_back();
+                localPositionHistory.push_back(newHash);
+                int val = -negamax(board, depth - 1, -beta, -alpha, ply + 1, localPositionHistory, childPv);
+                localPositionHistory.pop_back();
                 
                 board.unmakeMove(move);
 

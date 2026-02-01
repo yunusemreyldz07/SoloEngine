@@ -4,11 +4,11 @@
 #include "bitboard.h"
 #include <iostream>
 
+// Bit manipulation - using inline functions from types.h
+// popcount() and lsb() are defined there
 #define set_bit(bitboard, square) ((bitboard) |= (1ULL << (square)))
 #define get_bit(bitboard, square) ((bitboard) & (1ULL << (square)))
 #define pop_bit(bitboard, square) (get_bit(bitboard, square) ? (bitboard) ^= (1ULL << (square)) : 0)
-#define count_bits(bitboard) __builtin_popcountll(bitboard)
-#define lsb(bitboard) __builtin_ctzll(bitboard)
 
 namespace {
 
@@ -245,7 +245,7 @@ int evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard 
 
         Bitboard validMoves = attacks & ~myPieces;
         
-        int mobilityCount = count_bits(validMoves);
+        int mobilityCount = popcount(validMoves);
 
         if (pieceType == KNIGHT) totalMobility += KnightMobility[mobilityCount];
         else if (pieceType == BISHOP) totalMobility += BishopMobility[mobilityCount];
