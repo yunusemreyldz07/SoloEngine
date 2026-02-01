@@ -22,7 +22,7 @@ float LMR_DIVISION = 2.32f;
 
 // INTERNAL ITERATIVE REDUCTIONS
 int iirDepth = 6;
-int iirSubtractor = 3;
+int iirSubtractor = 2;
 
 
 void initLMRtables(){
