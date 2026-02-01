@@ -68,7 +68,7 @@ void set_use_tt(bool enabled) {
 
 void clear_search_heuristics() {
     clear_history();
-
+    clear_conhist();
     clear_killer_moves();
 }
 
@@ -137,7 +137,7 @@ static std::string move_to_uci(const Move& m) {
     return s;
 }
 
-int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove) {
+int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove, const Move* prevMove) {
     int moveScore = 0;
     int from = move.from_sq();
     int to = move.to_sq();
@@ -194,6 +194,11 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
 
     if (get_history_score(from, to) != 0) {
         moveScore += get_history_score(from, to);
+    }
+
+    // Continuation history bonus
+    if (prevMove != nullptr && prevMove->pieceType != 0) {
+        moveScore += get_conhist_score(*prevMove, move);
     }
 
     return moveScore;
@@ -436,9 +441,15 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     }
 
     // Move Ordering
+    // Get previous move for continuation history
+    const Move* prevMovePtr = nullptr;
+    if (!board.moveHistory.empty()) {
+        prevMovePtr = &board.moveHistory.back();
+    }
+    
     std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
         const Move* ttMovePtr = ttHit ? &ttMove : nullptr;
-        return scoreMove(board, a, ply, ttMovePtr) > scoreMove(board, b, ply, ttMovePtr);
+        return scoreMove(board, a, ply, ttMovePtr, prevMovePtr) > scoreMove(board, b, ply, ttMovePtr, prevMovePtr);
     });
     
     for (Move& move : possibleMoves) {
@@ -518,6 +529,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             int to = move.to_sq();
             if (from >= 0 && from < 64 && to >= 0 && to < 64) {
                 update_history(from, to, depth, badQuiets, badQuietCount);
+            }
+            
+            // Update continuation history
+            if (prevMovePtr != nullptr && is_quiet(move)) {
+                update_conhist(*prevMovePtr, move, depth, badQuiets, badQuietCount);
             }
             
             break; // beta cutoff

@@ -8,6 +8,11 @@
 extern int historyTable[64][64];
 extern Move killerMove[2][MAX_PLY]; // 2 slots
 
+// Continuation history: [prevPieceType][prevToSq][currPieceType][currToSq]
+// Tracks how good a move is based on the previous move played
+// pieceType is 0-5 (PAWN-1 to KING-1), toSq is 0-63
+extern int conhistTable[6][64][6][64];
+
 // History functions
 void clear_history();                          // Reset history table
 void update_history(int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount); // Update on beta cutoff
@@ -15,6 +20,11 @@ int get_history_score(int fromSq, int toSq);  // Get score for move ordering
 void add_killer_move(const Move& move, int ply); // Update killer moves
 Move get_killer_move(int index, int ply); // Get killer moves
 void clear_killer_moves(); // Clear killer moves
+
+// Continuation history functions
+void clear_conhist();
+void update_conhist(const Move& prevMove, const Move& currMove, int depth, const Move badQuiets[256], int badQuietCount);
+int get_conhist_score(const Move& prevMove, const Move& currMove);
 
 // Helper to check if a move is a killer move at given ply
 inline bool is_killer_move(const Move& move, int ply) {
