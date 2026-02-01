@@ -92,7 +92,7 @@ inline bool is_pawn_attack_possible(const Board& board, bool attackerIsWhite, in
 Move::Move()
     : fromRow(0), fromCol(0), toRow(0), toCol(0), capturedPiece(0), promotion(0), pieceType(0),
       prevW_KingSide(false), prevW_QueenSide(false), prevB_KingSide(false), prevB_QueenSide(false),
-      prevEnPassantCol(-1), isEnPassant(false), isCastling(false) {}
+      prevEnPassantCol(-1), prevHalfMoveClock(0), isEnPassant(false), isCastling(false) {}
 
 Board::Board() {
     resetBoard();
@@ -107,6 +107,7 @@ void Board::resetBoard() {
     blackCanCastleQueenSide = true;
     isWhiteTurn = true;
     enPassantCol = -1;
+    halfMoveClock = 0;
     whiteKingRow = 7; whiteKingCol = 4;
     blackKingRow = 0; blackKingCol = 4;
 
@@ -121,6 +122,7 @@ void Board::makeMove(Move& move) {
     move.prevB_KingSide = blackCanCastleKingSide;
     move.prevB_QueenSide = blackCanCastleQueenSide;
     move.prevEnPassantCol = enPassantCol;
+    move.prevHalfMoveClock = halfMoveClock;
 
     move.isEnPassant = false;
     move.isCastling = false;
@@ -131,6 +133,13 @@ void Board::makeMove(Move& move) {
     int target_piece = mailbox[toSq];
 
     move.capturedPiece = target_piece;
+    
+    // Update 50-move clock: reset on pawn move or capture, otherwise increment
+    if (piece_type(movingPiece) == PAWN || target_piece != 0) {
+        halfMoveClock = 0;
+    } else {
+        halfMoveClock++;
+    }
     
     // Set pieceType if not already set (from movegen)
     if (move.pieceType == 0) {
@@ -360,6 +369,7 @@ void Board::unmakeMove(Move& move) {
     blackCanCastleKingSide = move.prevB_KingSide;
     blackCanCastleQueenSide = move.prevB_QueenSide;
     enPassantCol = move.prevEnPassantCol;
+    halfMoveClock = move.prevHalfMoveClock;
 
     if (pieceBase == W_KING) {
         whiteKingRow = move.fromRow;
@@ -441,6 +451,15 @@ void Board::loadFromFEN(const std::string& fen) {
         }
     } else {
         enPassantCol = -1;
+    }
+
+    // Parse halfmove clock (50-move rule) if present
+    int halfMoveClockFromFen = 0;
+    int fullMoveNumber = 1;
+    if (ss >> halfMoveClockFromFen >> fullMoveNumber) {
+        halfMoveClock = halfMoveClockFromFen;
+    } else {
+        halfMoveClock = 0;
     }
 
     currentHash = position_key(*this);
@@ -555,12 +574,12 @@ uint64_t position_key(const Board& board) {
     return h;
 }
 
-bool is_threefold_repetition(const std::vector<uint64_t>& history) {
-    if (history.empty()) return false;
-    uint64_t current = history.back();
+bool is_threefold_repetition(const std::vector<uint64_t>& positionHistory) {
+    if (positionHistory.empty()) return false;
+    uint64_t current = positionHistory.back();
     int count = 0;
-    for (int i = static_cast<int>(history.size()) - 1; i >= 0; i--) {
-        if (history[i] == current) {
+    for (int i = static_cast<int>(positionHistory.size()) - 1; i >= 0; i--) {
+        if (positionHistory[i] == current) {
             count++;
             if (count >= 3) return true;
         }
@@ -783,4 +802,33 @@ int see_exchange(const Board& board, const Move& move) {
     }
 
     return gain[0];
+}
+
+// Insufficient material detection
+bool is_insufficient_material(const Board& board) {
+    // If any pawns exist, there's always mating potential through promotion
+    if (board.piece[PAWN - 1] != 0) return false;
+    
+    // If any rooks or queens exist, checkmate is possible
+    if (board.piece[ROOK - 1] != 0) return false;
+    if (board.piece[QUEEN - 1] != 0) return false;
+    
+    // Count minor pieces
+    int whiteKnights = popcount(board.piece[KNIGHT - 1] & board.color[WHITE]);
+    int whiteBishops = popcount(board.piece[BISHOP - 1] & board.color[WHITE]);
+    int blackKnights = popcount(board.piece[KNIGHT - 1] & board.color[BLACK]);
+    int blackBishops = popcount(board.piece[BISHOP - 1] & board.color[BLACK]);
+    
+    int whiteMinors = whiteKnights + whiteBishops;
+    int blackMinors = blackKnights + blackBishops;
+    
+    // K vs K
+    if (whiteMinors == 0 && blackMinors == 0) return true;
+    
+    // K+minor vs K (one side has exactly one minor, other has none)
+    if (whiteMinors == 1 && blackMinors == 0) return true;
+    if (blackMinors == 1 && whiteMinors == 0) return true;
+
+    
+    return false;
 }
