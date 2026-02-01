@@ -8,10 +8,10 @@
 extern int historyTable[64][64];
 extern Move killerMove[2][MAX_PLY]; // 2 slots
 
-// Continuation history: [prevPieceType][prevToSq][currPieceType][currToSq]
+// Continuation history: [piece][toSq][piece][toSq]
+// piece index = (pieceType - 1) + (color * 6), giving 0-11 for all pieces
 // Tracks how good a move is based on the previous move played
-// pieceType is 0-5 (PAWN-1 to KING-1), toSq is 0-63
-extern int conhistTable[6][64][6][64];
+extern int conhistTable[12][64][12][64];
 
 // History functions
 void clear_history();                          // Reset history table

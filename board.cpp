@@ -90,7 +90,7 @@ inline bool is_pawn_attack_possible(const Board& board, bool attackerIsWhite, in
 } // namespace
 
 Move::Move()
-    : fromRow(0), fromCol(0), toRow(0), toCol(0), capturedPiece(0), promotion(0), pieceType(0),
+    : fromRow(0), fromCol(0), toRow(0), toCol(0), capturedPiece(0), promotion(0), pieceType(0), pieceColor(0),
       prevW_KingSide(false), prevW_QueenSide(false), prevB_KingSide(false), prevB_QueenSide(false),
       prevEnPassantCol(-1), prevHalfMoveClock(0), isEnPassant(false), isCastling(false) {}
 
@@ -141,9 +141,10 @@ void Board::makeMove(Move& move) {
         halfMoveClock++;
     }
     
-    // Set pieceType if not already set (from movegen)
+    // Set pieceType and pieceColor if not already set (from movegen)
     if (move.pieceType == 0) {
         move.pieceType = piece_type(movingPiece);
+        move.pieceColor = piece_color(movingPiece);
     }
     
     // Add to move history for continuation history

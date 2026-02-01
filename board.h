@@ -84,7 +84,8 @@ struct Move {
     int toRow, toCol;
     int capturedPiece;
     int promotion;
-    int pieceType;  // Moving piece type (1-6: pawn-king)
+    int pieceType;   // Moving piece type (1-6: pawn-king)
+    int pieceColor;  // Moving piece color (0=WHITE, 1=BLACK)
 
     bool prevW_KingSide;
     bool prevW_QueenSide;
