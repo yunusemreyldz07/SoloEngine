@@ -281,7 +281,6 @@ int quiescence(Board& board, int alpha, int beta, int ply){
 
     return alpha;
 }
-int iirCounter = 0;
 // Negamax
 int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& positionHistory, std::vector<Move>& pvLine) {
 
@@ -428,9 +427,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     if (depth >= iirDepth && pvNode && (!ttHit || ttDepth < depth - iirSubtractor) ) {
         // Internal Iterative Reductions (IIR)
         depth--;
-        std::cout << "info string IIR applied at depth " << depth + 1 << " to " << depth << std::endl;
-        iirCounter++;
-        std::cout << "info string Total IIR applications: " << iirCounter << std::endl;
     }
 
 
