@@ -442,9 +442,12 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     // Move Ordering
     // Get previous move for continuation history
+    // USE COPY TO AVOID POINTER INVALIDATION ON VECTOR RESIZE
     const Move* prevMovePtr = nullptr;
+    Move prevMoveCopy;
     if (!board.moveHistory.empty()) {
-        prevMovePtr = &board.moveHistory.back();
+        prevMoveCopy = board.moveHistory.back();
+        prevMovePtr = &prevMoveCopy;
     }
     
     std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
