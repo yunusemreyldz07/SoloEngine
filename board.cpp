@@ -110,6 +110,7 @@ void Board::resetBoard() {
     halfMoveClock = 0;
     whiteKingRow = 7; whiteKingCol = 4;
     blackKingRow = 0; blackKingCol = 4;
+    moveHistory.clear();  // Clear move history for continuation history
 
     currentHash = position_key(*this);
 }
@@ -396,6 +397,7 @@ void Board::loadFromFEN(const std::string& fen) {
     color[WHITE] = 0ULL;
     color[BLACK] = 0ULL;
     for (int i = 0; i < 64; i++) mailbox[i] = 0;
+    moveHistory.clear();  // Clear move history for continuation history
 
     std::istringstream ss(fen);
     std::string position, turn, castling, enPassant;
