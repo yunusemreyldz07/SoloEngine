@@ -22,7 +22,7 @@ float LMR_DIVISION = 2.32f;
 
 // INTERNAL ITERATIVE REDUCTIONS
 int iirDepth = 6;
-int iirSubtractor = 2;
+int iirSubtractor = 2; // not used now. kept for future adjustments
 
 
 void initLMRtables(){
@@ -369,6 +369,13 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             return beta;
         }
     }
+
+        
+    if (depth >= iirDepth && pvNode && !ttHit) {
+        // Internal Iterative Reductions (IIR)
+        depth--;
+    }
+
     // Reverse Futility Pruning 
     // Only makes sense in non-PV nodes (null-window), otherwise it can prune good PV continuations.
     if ((beta - alpha) == 1 && depth < 9 && !inCheck && beta < MATE_SCORE - 100) {
@@ -422,13 +429,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             }
         }
     }
-
-    
-    if (depth >= iirDepth && pvNode && (!ttHit || ttDepth < depth - iirSubtractor) ) {
-        // Internal Iterative Reductions (IIR)
-        depth--;
-    }
-
 
     std::vector<Move> possibleMoves = get_all_moves(board, board.isWhiteTurn);
     Move bestMove = possibleMoves.empty() ? Move() : possibleMoves[0];
