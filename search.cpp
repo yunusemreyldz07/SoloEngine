@@ -21,7 +21,7 @@ float LMR_BASE = 0.77f;
 float LMR_DIVISION = 2.32f;
 
 // INTERNAL ITERATIVE REDUCTIONS
-int iirDepth = 8;
+int iirDepth = 6;
 int iirSubtractor = 3;
 
 
