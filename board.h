@@ -206,6 +206,13 @@ int piece_to_zobrist_index(int piece);
 uint64_t position_key(const Board& board);
 bool is_threefold_repetition(const std::vector<uint64_t>& positionHistory);
 
+unsigned long long generatePawnKey(const Board& board);
+
+inline int clamp(int d, int min, int max) {
+    const int t = d < min ? min : d;
+    return t > max ? max : t;
+}
+
 // Draw detection
 inline bool is_fifty_move_draw(const Board& board) {
     return board.halfMoveClock >= 100;  // 100 half-moves = 50 full moves

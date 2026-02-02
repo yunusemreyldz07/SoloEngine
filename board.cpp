@@ -574,6 +574,37 @@ uint64_t position_key(const Board& board) {
     return h;
 }
 
+unsigned long long generatePawnKey(const Board& board) {
+    
+    unsigned long long final_key = 0ULL;
+
+    unsigned long long bitboard;
+
+    bitboard = board.piece[PAWN - 1] & board.color[WHITE];
+
+    while (bitboard){
+        int square = lsb(bitboard);
+
+        final_key ^= zobrist().piece[piece_to_zobrist_index(W_PAWN)][square];
+
+        bitboard &= bitboard - 1;
+    }
+
+    bitboard = board.piece[PAWN - 1] & board.color[BLACK];
+
+    while (bitboard){
+        int square = lsb(bitboard);
+
+        final_key ^= zobrist().piece[piece_to_zobrist_index(B_PAWN)][square];
+
+        bitboard &= bitboard - 1;
+    }
+
+
+    return final_key;
+}
+
+
 bool is_threefold_repetition(const std::vector<uint64_t>& positionHistory) {
     if (positionHistory.empty()) return false;
     uint64_t current = positionHistory.back();
