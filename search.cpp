@@ -325,6 +325,9 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         return 0;
     }
     bool inCheck = is_square_attacked(board, kRow, kCol, !board.isWhiteTurn);
+
+    int checkExtension = inCheck ? 1 : 0;
+
     uint64_t currentHash = position_key(board);
     int ttScore = 0;
     int ttDepth = 0;
@@ -460,7 +463,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         uint64_t newHash = position_key(board);
         positionHistory.push_back(newHash);
         if (firstMove){
-            eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, positionHistory, childPv);
+            eval = -negamax(board, depth - 1 + checkExtension, -beta, -alpha, ply + 1, positionHistory, childPv);
             firstMove = false;
         }
         else {
@@ -476,18 +479,18 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 if (reduction > depth - 1) reduction = depth - 1;
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we don't search negative depth
             }
-            int lmrDepth = std::max(0, depth - 1 - reduction);
+            int lmrDepth = std::max(0, depth - 1 - reduction + checkExtension);
 
             eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, positionHistory, nullWindowPv);
 
             if (reduction > 0 && eval > alpha) {
                 // Re-search at full depth if reduced search suggests a better move
-                eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, positionHistory, childPv);
+                eval = -negamax(board, depth - 1 + checkExtension, -alpha - 1, -alpha, ply + 1, positionHistory, childPv);
             }
 
             if (eval > alpha && eval < beta) {
                 childPv.clear();
-                eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, positionHistory, childPv);
+                eval = -negamax(board, depth - 1 + checkExtension, -beta, -alpha, ply + 1, positionHistory, childPv);
             } else {
                 childPv.clear();
             }
