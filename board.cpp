@@ -111,6 +111,7 @@ void Board::resetBoard() {
     whiteKingRow = 7; whiteKingCol = 4;
     blackKingRow = 0; blackKingCol = 4;
 
+    moveHistory.clear();
     currentHash = position_key(*this);
 }
 
@@ -145,9 +146,6 @@ void Board::makeMove(Move& move) {
     if (move.pieceType == 0) {
         move.pieceType = piece_type(movingPiece);
     }
-    
-    // Add to move history for continuation history
-    moveHistory.push_back(move);
 
     // Hash: remove side-to-move, old ep and old castling
     currentHash ^= z.side;
@@ -285,6 +283,24 @@ void Board::makeMove(Move& move) {
     if (enPassantCol != -1) {
         currentHash ^= z.epFile[enPassantCol];
     }
+
+    // Add to move history for continuation history
+    // Check if this move gives check to the opponent
+    int oppKingRow, oppKingCol;
+    bool causedCheck = false;
+    if (king_square(*this, isWhiteTurn, oppKingRow, oppKingCol)) {
+        causedCheck = is_square_attacked(*this, oppKingRow, oppKingCol, !isWhiteTurn);
+    }
+    
+    moveHistoryEntry entry;
+    entry.move = move;
+    entry.eval = 0;        // Will be filled by search
+    entry.staticEval = 0;  // Will be filled by search
+    entry.positionHash = currentHash;
+    entry.ply = static_cast<int16_t>(moveHistory.size());
+    entry.piece = static_cast<int8_t>(movingPiece);
+    entry.causedCheck = causedCheck;
+    moveHistory.push_back(entry);
 }
 
 void Board::unmakeMove(Move& move) {
@@ -462,6 +478,7 @@ void Board::loadFromFEN(const std::string& fen) {
         halfMoveClock = 0;
     }
 
+    moveHistory.clear();
     currentHash = position_key(*this);
 }
 

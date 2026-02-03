@@ -120,6 +120,16 @@ inline bool is_capture(const Move& m) {
     return m.capturedPiece != 0 || m.isEnPassant;
 }
 
+struct moveHistoryEntry {
+    Move move;
+    int eval;               // Search score (filled after search)
+    int staticEval;         // Static evaluation at this position (for improving heuristic)
+    uint64_t positionHash;  // Hash at the time of the move
+    int16_t ply;            // Ply at which this move was played
+    int8_t piece;           // Piece that moved (1-12, includes color info)
+    bool causedCheck;       // Did this move give check?
+};
+
 class Board {
 public:
     int pieces_otb[14];
@@ -131,7 +141,7 @@ public:
     int mailbox[64]; // Redundant mailbox for O(1) piece lookups
     uint64_t currentHash; // Incremental Zobrist hash of the current position
     
-    std::vector<Move> moveHistory; // History of moves for continuation history
+    std::vector<moveHistoryEntry> moveHistory; // History of moves for continuation history
 
     bool whiteCanCastleKingSide;
     bool whiteCanCastleQueenSide;

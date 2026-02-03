@@ -355,6 +355,20 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     // Static evaluation (from side-to-move perspective). Used by forward/reverse pruning.
     const int staticEval = evaluate_board(board);
+    
+    // Store static eval in move history for improving heuristic
+    if (!board.moveHistory.empty()) {
+        board.moveHistory.back().staticEval = staticEval;
+    }
+    
+    // Improving heuristic: compare with static eval from 2 plies ago (same side to move)
+    // If we're doing better than 2 plies ago, we're "improving" and can prune more aggressively
+    bool improving = false;
+    if (board.moveHistory.size() >= 2) {
+        int prevStaticEval = board.moveHistory[board.moveHistory.size() - 2].staticEval;
+        improving = (staticEval > prevStaticEval);
+    }
+    
     if (!is_repetition_candidate && ttHit && ttDepth >= depth) {
         if (ttFlag == EXACT) {
             pvLine.clear();
@@ -374,11 +388,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     // Reverse Futility Pruning 
     // Only makes sense in non-PV nodes (null-window), otherwise it can prune good PV continuations.
+    // Improving: position getting better -> can prune more aggressively (smaller margin)
+    // Not improving: opponent may be pressing -> be more careful (larger margin)
     if ((beta - alpha) == 1 && depth < 9 && !inCheck && beta < MATE_SCORE - 100) {
-        
-        // margin: for every depth, we allow a margin of 100 centipawns
-        // The deeper we go, the larger the margin should be
-        int margin = 80 * depth; 
+        int margin = improving ? (80 * depth) : (100 * depth);
 
         if (staticEval - margin >= beta) {
             // "I'm so far ahead that even if I reduce the margin, I still surpass the opponent's threshold, so I don't need to search further and lose time"
@@ -411,6 +424,16 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
             // Reduction factor R (typical values 2..3). Ensure we don't search negative depth
             int R = std::min(3, std::max(1, depth - 2));
+            // Improving: prune more aggressively (increase reduction)
+            // Not improving: be more careful (decrease reduction)
+            if (improving) {
+                R = std::min(4, R + 1);
+            } else {
+                R = std::max(1, R - 1);
+            }
+            if (depth - 1 - R < 1) {
+                R = std::max(1, depth - 2);
+            }
             std::vector<Move> nullPv;
             int nullScore = -negamax(board, depth - 1 - R, -beta, -beta + 1, ply + 1, positionHistory, nullPv);
 
@@ -476,7 +499,16 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 depth > 1 && is_quiet(move)) {
                 int lmrTableDepth = std::min(depth, 255);
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
-                reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
+                reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched];
+                
+                // Improving: we're doing well, can reduce more aggressively
+                // Not improving: opponent pressing, reduce less to search more carefully
+                if (improving) {
+                    reduction += 1;
+                } else {
+                    reduction -= 1;
+                }
+                
                 if (reduction < 0) reduction = 0;
                 if (reduction > depth - 1) reduction = depth - 1;
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we don't search negative depth
@@ -498,6 +530,12 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             }
         }
         if (!positionHistory.empty()) positionHistory.pop_back();
+        
+        // Update eval in move history before unmake
+        if (!board.moveHistory.empty()) {
+            board.moveHistory.back().eval = eval;
+        }
+        
         board.unmakeMove(move);
 
         if (eval > maxEval) {
@@ -647,6 +685,11 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                 localPositionHistory.push_back(newHash);
                 int val = -negamax(board, depth - 1, -beta, -alpha, ply + 1, localPositionHistory, childPv);
                 localPositionHistory.pop_back();
+                
+                // Update eval in move history before unmake
+                if (!board.moveHistory.empty()) {
+                    board.moveHistory.back().eval = val;
+                }
                 
                 board.unmakeMove(move);
 
