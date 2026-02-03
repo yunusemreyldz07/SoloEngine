@@ -362,7 +362,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     }
     
     // Improving heuristic: compare with static eval from 2 plies ago (same side to move)
-    // If we're doing better than 2 plies ago, we're "improving" and can prune more aggressively
     bool improving = false;
     if (board.moveHistory.size() >= 2) {
         int prevStaticEval = board.moveHistory[board.moveHistory.size() - 2].staticEval;
@@ -388,10 +387,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     // Reverse Futility Pruning 
     // Only makes sense in non-PV nodes (null-window), otherwise it can prune good PV continuations.
-    // Improving: position getting better -> can prune more aggressively (smaller margin)
-    // Not improving: opponent may be pressing -> be more careful (larger margin)
     if ((beta - alpha) == 1 && depth < 9 && !inCheck && beta < MATE_SCORE - 100) {
-        int margin = improving ? (80 * depth) : (100 * depth);
+        int margin = 90 * depth;
 
         if (staticEval - margin >= beta) {
             // "I'm so far ahead that even if I reduce the margin, I still surpass the opponent's threshold, so I don't need to search further and lose time"
@@ -424,16 +421,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
             // Reduction factor R (typical values 2..3). Ensure we don't search negative depth
             int R = std::min(3, std::max(1, depth - 2));
-            // Improving: prune more aggressively (increase reduction)
-            // Not improving: be more careful (decrease reduction)
-            if (improving) {
-                R = std::min(4, R + 1);
-            } else {
-                R = std::max(1, R - 1);
-            }
-            if (depth - 1 - R < 1) {
-                R = std::max(1, depth - 2);
-            }
             std::vector<Move> nullPv;
             int nullScore = -negamax(board, depth - 1 - R, -beta, -beta + 1, ply + 1, positionHistory, nullPv);
 
@@ -501,13 +488,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched];
                 
-                // Improving: we're doing well, can reduce more aggressively
-                // Not improving: opponent pressing, reduce less to search more carefully
-                if (improving) {
-                    reduction += 1;
-                } else {
-                    reduction -= 1;
-                }
+                // Improving heuristic temporarily disabled due to regression
                 
                 if (reduction < 0) reduction = 0;
                 if (reduction > depth - 1) reduction = depth - 1;
