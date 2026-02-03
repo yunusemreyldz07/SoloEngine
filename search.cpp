@@ -542,10 +542,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     else flag = EXACT;
 
     // Update pawn correction history
-    if (!inCheck && is_quiet(bestMove) &&
-        !(flag == ALPHA && maxEval <= staticEval) &&
-        !(flag == BETA && maxEval >= staticEval)) {
-        updatePawnCorrectionHistory(board, depth, maxEval - staticEval);
+    // Only update on EXACT or BETA nodes where we have reliable information
+    // Use rawEval (not corrected staticEval) to avoid circular dependency
+    if (!inCheck && flag != ALPHA && is_quiet(bestMove)) {
+        updatePawnCorrectionHistory(board, depth, maxEval - rawEval);
     }
     
     if (use_tt.load(std::memory_order_relaxed)) {
