@@ -708,100 +708,135 @@ static Bitboard attackers_to_sq(Bitboard pieces[2][6], int sq, int side, Bitboar
     return attackers;
 }
 
-int see_exchange(const Board& board, const Move& move) {
-    if (!is_capture(move)) return 0;
+inline int moveEstimatedValue(const Move& move){
+    int value = 0;
+    if (is_quiet(move)) return 0;
+    if (move.promotion != 0) {
+        value += see_piece_values[move.promotion] - see_piece_values[PAWN]; // A pawn goes, a promoted piece comes
+    }
+    value += see_piece_values[piece_type(move.capturedPiece)];
+    return value;
+}
 
-    int fromSq = move.from_sq();
-    int toSq = move.to_sq();
-
-    int movingPiece = piece_at_sq(board, fromSq);
-    int captured = move.isEnPassant ? PAWN : piece_type(move.capturedPiece);
+// All attackers to a square (both sides)
+static Bitboard all_attackers_to_sq(const Board& board, int sq, Bitboard occ) {
+    Bitboard attackers = 0ULL;
     
-    int victimValue = see_piece_values[captured];
+    // Pawns
+    attackers |= pawn_attacks[BLACK][sq] & board.piece[PAWN - 1] & board.color[WHITE];
+    attackers |= pawn_attacks[WHITE][sq] & board.piece[PAWN - 1] & board.color[BLACK];
+    // Knights
+    attackers |= knight_attacks[sq] & board.piece[KNIGHT - 1];
+    // Kings
+    attackers |= king_attacks[sq] & board.piece[KING - 1];
+    // Bishops and Queens (diagonal)
+    attackers |= bishop_attacks_on_the_fly(sq, occ) & (board.piece[BISHOP - 1] | board.piece[QUEEN - 1]);
+    // Rooks and Queens (orthogonal)
+    attackers |= rook_attacks_on_the_fly(sq, occ) & (board.piece[ROOK - 1] | board.piece[QUEEN - 1]);
+    
+    return attackers;
+}
 
-    int gain[32];
-    int depth = 0;
+int staticExchangeEvaluation(const Board& board, const Move& move, int threshold) {
+    // Ethereal-style threshold-based SEE
+    int from = move.from_sq();
+    int to = move.to_sq();
+    
+    int balance, nextVictim;
+    Bitboard bishops, rooks, occupied, attackers, myAttackers;
 
-    gain[depth++] = victimValue;
+    // Determine the piece that will be on 'to' after the move (for recapture value)
+    // If promotion, it's the promoted piece; otherwise, it's the moving piece
+    nextVictim = (move.promotion != 0) 
+               ? move.promotion 
+               : piece_type(board.mailbox[from]);
 
-    int side = board.isWhiteTurn ? WHITE : BLACK;
-    int opp = side ^ 1;
-    Bitboard occ = board.color[WHITE] | board.color[BLACK];
-    Bitboard pieces[2][6];
-    for (int c = 0; c < 2; c++) {
-        for (int p = 0; p < 6; p++) {
-            pieces[c][p] = board.piece[p] & board.color[c];
-        }
-    }
+    // Balance is the value of the move minus threshold
+    balance = moveEstimatedValue(move) - threshold;
 
-    if (!move.isEnPassant && move.capturedPiece != 0) {
-        occ &= ~bit_at_sq(toSq);
-        pieces[opp][piece_type(move.capturedPiece) - 1] &= ~bit_at_sq(toSq);
-    }
+    // Best case still fails to beat the threshold
+    if (balance < 0) return 0;
+
+    // Worst case is losing the moved piece (or promoted piece)
+    balance -= see_piece_values[nextVictim];
+
+    // If the balance is positive even if losing the moved piece,
+    // the exchange is guaranteed to beat the threshold.
+    if (balance >= 0) return 1;
+
+    // Grab sliders for updating revealed attackers
+    bishops = board.piece[BISHOP - 1] | board.piece[QUEEN - 1];
+    rooks = board.piece[ROOK - 1] | board.piece[QUEEN - 1];
+
+    // Let occupied suppose that the move was actually made
+    occupied = board.color[WHITE] | board.color[BLACK];
+    occupied = (occupied ^ (1ULL << from)) | (1ULL << to);
+
+    // Handle en passant: remove the captured pawn
     if (move.isEnPassant) {
         int capRow = move.fromRow;
-        int capSq = row_col_to_sq(capRow, move.toCol);
-        occ &= ~bit_at_sq(capSq);
-        pieces[opp][PAWN - 1] &= ~bit_at_sq(capSq);
+        int capCol = move.toCol;
+        int capSq = row_col_to_sq(capRow, capCol);
+        occupied ^= (1ULL << capSq);
     }
-    occ &= ~bit_at_sq(fromSq);
-    pieces[side][piece_type(movingPiece) - 1] &= ~bit_at_sq(fromSq);
-    int promoteType = move.promotion != 0 ? move.promotion : piece_type(movingPiece);
-    pieces[side][promoteType - 1] |= bit_at_sq(toSq);
-    occ |= bit_at_sq(toSq);
 
-    victimValue = see_piece_values[promoteType];
-    
-    int attackerSide = opp;
+    // Get all pieces which attack the target square
+    attackers = all_attackers_to_sq(board, to, occupied) & occupied;
+
+    // Now opponent's turn to recapture
+    int colour = board.isWhiteTurn ? BLACK : WHITE;
 
     while (true) {
-        int attackerSq = -1;
-        int nextVictimPiece = 0;
+        // If we have no more attackers left, we lose
+        myAttackers = attackers & board.color[colour];
+        if (myAttackers == 0ULL) break;
 
-        Bitboard allAttackers = attackers_to_sq(pieces, toSq, attackerSide, occ);
-
-        if ((pieces[attackerSide][PAWN - 1] & allAttackers)) {
-            attackerSq = lsb(pieces[attackerSide][PAWN - 1] & allAttackers);
-            nextVictimPiece = PAWN;
-        } else if ((pieces[attackerSide][KNIGHT - 1] & allAttackers)) {
-            attackerSq = lsb(pieces[attackerSide][KNIGHT - 1] & allAttackers);
-            nextVictimPiece = KNIGHT;
-        } else if ((pieces[attackerSide][BISHOP - 1] & allAttackers)) {
-            attackerSq = lsb(pieces[attackerSide][BISHOP - 1] & allAttackers);
-            nextVictimPiece = BISHOP;
-        } else if ((pieces[attackerSide][ROOK - 1] & allAttackers)) {
-            attackerSq = lsb(pieces[attackerSide][ROOK - 1] & allAttackers);
-            nextVictimPiece = ROOK;
-        } else if ((pieces[attackerSide][QUEEN - 1] & allAttackers)) {
-            attackerSq = lsb(pieces[attackerSide][QUEEN - 1] & allAttackers);
-            nextVictimPiece = QUEEN;
-        } else if ((pieces[attackerSide][KING - 1] & allAttackers)) {
-            attackerSq = lsb(pieces[attackerSide][KING - 1] & allAttackers);
-            nextVictimPiece = KING;
-        } else {
-            break;
+        // Find our weakest piece to attack with
+        for (nextVictim = PAWN; nextVictim <= QUEEN; nextVictim++) {
+            if (myAttackers & board.piece[nextVictim - 1])
+                break;
         }
 
-        gain[depth] = victimValue - gain[depth - 1];
+        // If only king can attack, check if it's safe
+        if (nextVictim > QUEEN) {
+            nextVictim = KING;
+        }
 
-        if (std::max(-gain[depth - 1], gain[depth]) < 0) break;
+        // Remove this attacker from occupied
+        Bitboard attackerBB = myAttackers & board.piece[nextVictim - 1];
+        if (attackerBB == 0ULL) break;
+        occupied ^= (1ULL << lsb(attackerBB));
 
-        occ &= ~bit_at_sq(attackerSq);
-        pieces[attackerSide][nextVictimPiece - 1] &= ~bit_at_sq(attackerSq);
+        // A diagonal move may reveal bishop or queen attackers
+        if (nextVictim == PAWN || nextVictim == BISHOP || nextVictim == QUEEN)
+            attackers |= bishop_attacks_on_the_fly(to, occupied) & bishops;
 
-        attackerSide ^= 1;
-        depth++;
+        // A vertical or horizontal move may reveal rook or queen attackers
+        if (nextVictim == ROOK || nextVictim == QUEEN)
+            attackers |= rook_attacks_on_the_fly(to, occupied) & rooks;
 
-        victimValue = see_piece_values[nextVictimPiece];
-        
-        if (depth >= 31) break;
+        // Make sure we did not add any already used attacks
+        attackers &= occupied;
+
+        // Swap the turn
+        colour ^= 1;
+
+        // Negamax the balance and add the value of the next victim
+        balance = -balance - 1 - see_piece_values[nextVictim];
+
+        // If the balance is non-negative after giving away our piece then we win
+        if (balance >= 0) {
+            // Speed-up for move legality: if our last attacking piece is a king,
+            // and opponent still has attackers, then we've lost (move would be illegal)
+            if (nextVictim == KING && (attackers & board.color[colour]))
+                colour ^= 1;
+
+            break;
+        }
     }
 
-    while (--depth) {
-        gain[depth - 1] = -std::max(-gain[depth - 1], gain[depth]);
-    }
-
-    return gain[0];
+    // Side to move after the loop loses
+    return (board.isWhiteTurn ? WHITE : BLACK) != colour;
 }
 
 // Insufficient material detection
