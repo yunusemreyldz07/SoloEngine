@@ -804,6 +804,138 @@ int see_exchange(const Board& board, const Move& move) {
     return gain[0];
 }
 
+
+inline int moveEstimatedValue(const Move& move){
+    int value = 0;
+    if (is_quiet(move)) return 0;
+    if (move.promotion != 0) {
+        value += see_piece_values[move.promotion] - see_piece_values[PAWN]; // A pawn goes, a promoted piece comes
+    }
+    value += see_piece_values[piece_type(move.capturedPiece)];
+    return value;
+}
+
+// All attackers to a square (both sides)
+static Bitboard all_attackers_to_sq(const Board& board, int sq, Bitboard occ) {
+    Bitboard attackers = 0ULL;
+    
+    // Pawns
+    attackers |= pawn_attacks[BLACK][sq] & board.piece[PAWN - 1] & board.color[WHITE];
+    attackers |= pawn_attacks[WHITE][sq] & board.piece[PAWN - 1] & board.color[BLACK];
+    // Knights
+    attackers |= knight_attacks[sq] & board.piece[KNIGHT - 1];
+    // Kings
+    attackers |= king_attacks[sq] & board.piece[KING - 1];
+    // Bishops and Queens (diagonal)
+    attackers |= bishop_attacks_on_the_fly(sq, occ) & (board.piece[BISHOP - 1] | board.piece[QUEEN - 1]);
+    // Rooks and Queens (orthogonal)
+    attackers |= rook_attacks_on_the_fly(sq, occ) & (board.piece[ROOK - 1] | board.piece[QUEEN - 1]);
+    
+    return attackers;
+}
+
+int staticExchangeEvaluation(const Board& board, const Move& move, int threshold) {
+    // Ethereal-style threshold-based SEE
+    int from = move.from_sq();
+    int to = move.to_sq();
+    
+    int balance, nextVictim;
+    Bitboard bishops, rooks, occupied, attackers, myAttackers;
+
+    // Determine the piece that will be on 'to' after the move (for recapture value)
+    // If promotion, it's the promoted piece; otherwise, it's the moving piece
+    nextVictim = (move.promotion != 0) 
+               ? move.promotion 
+               : piece_type(board.mailbox[from]);
+
+    // Balance is the value of the move minus threshold
+    balance = moveEstimatedValue(move) - threshold;
+
+    // Best case still fails to beat the threshold
+    if (balance < 0) return 0;
+
+    // Worst case is losing the moved piece (or promoted piece)
+    balance -= see_piece_values[nextVictim];
+
+    // If the balance is positive even if losing the moved piece,
+    // the exchange is guaranteed to beat the threshold.
+    if (balance >= 0) return 1;
+
+    // Grab sliders for updating revealed attackers
+    bishops = board.piece[BISHOP - 1] | board.piece[QUEEN - 1];
+    rooks = board.piece[ROOK - 1] | board.piece[QUEEN - 1];
+
+    // Let occupied suppose that the move was actually made
+    occupied = board.color[WHITE] | board.color[BLACK];
+    occupied = (occupied ^ (1ULL << from)) | (1ULL << to);
+
+    // Handle en passant: remove the captured pawn
+    if (move.isEnPassant) {
+        int capRow = move.fromRow;
+        int capCol = move.toCol;
+        int capSq = row_col_to_sq(capRow, capCol);
+        occupied ^= (1ULL << capSq);
+    }
+
+    // Get all pieces which attack the target square
+    attackers = all_attackers_to_sq(board, to, occupied) & occupied;
+
+    // Now opponent's turn to recapture
+    int colour = board.isWhiteTurn ? BLACK : WHITE;
+
+    while (true) {
+        // If we have no more attackers left, we lose
+        myAttackers = attackers & board.color[colour];
+        if (myAttackers == 0ULL) break;
+
+        // Find our weakest piece to attack with
+        for (nextVictim = PAWN; nextVictim <= QUEEN; nextVictim++) {
+            if (myAttackers & board.piece[nextVictim - 1])
+                break;
+        }
+
+        // If only king can attack, check if it's safe
+        if (nextVictim > QUEEN) {
+            nextVictim = KING;
+        }
+
+        // Remove this attacker from occupied
+        Bitboard attackerBB = myAttackers & board.piece[nextVictim - 1];
+        if (attackerBB == 0ULL) break;
+        occupied ^= (1ULL << lsb(attackerBB));
+
+        // A diagonal move may reveal bishop or queen attackers
+        if (nextVictim == PAWN || nextVictim == BISHOP || nextVictim == QUEEN)
+            attackers |= bishop_attacks_on_the_fly(to, occupied) & bishops;
+
+        // A vertical or horizontal move may reveal rook or queen attackers
+        if (nextVictim == ROOK || nextVictim == QUEEN)
+            attackers |= rook_attacks_on_the_fly(to, occupied) & rooks;
+
+        // Make sure we did not add any already used attacks
+        attackers &= occupied;
+
+        // Swap the turn
+        colour ^= 1;
+
+        // Negamax the balance and add the value of the next victim
+        balance = -balance - 1 - see_piece_values[nextVictim];
+
+        // If the balance is non-negative after giving away our piece then we win
+        if (balance >= 0) {
+            // Speed-up for move legality: if our last attacking piece is a king,
+            // and opponent still has attackers, then we've lost (move would be illegal)
+            if (nextVictim == KING && (attackers & board.color[colour]))
+                colour ^= 1;
+
+            break;
+        }
+    }
+
+    // Side to move after the loop loses
+    return (board.isWhiteTurn ? WHITE : BLACK) != colour;
+}
+
 // Insufficient material detection
 bool is_insufficient_material(const Board& board) {
     // If any pawns exist, there's always mating potential through promotion
