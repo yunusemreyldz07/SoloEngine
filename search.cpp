@@ -137,6 +137,8 @@ static std::string move_to_uci(const Move& m) {
     return s;
 }
 
+const int SEE_MOVE_ORDERING_THRESHOLD = -82; // ~minus pawn
+
 int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove) {
     int moveScore = 0;
     int from = move.from_sq();
@@ -149,15 +151,14 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
         int attackerValue = PIECE_VALUES[piece_type(attackerPiece)];
         int mvvScore = victimValue * 10 - attackerValue;
 
-        int see_value = see_exchange(board, move); // For MVV-LVA ordering
-
-        if (see_value >= 0) {
-            // Good trades. they must be on the top of the list.
-            moveScore += SCORE_GOOD_CAPTURE + see_value + mvvScore;
+        // Use threshold-based SEE for move ordering
+        if (staticExchangeEvaluation(board, move, SEE_MOVE_ORDERING_THRESHOLD)) {
+            // Good trades (passes threshold). they must be on the top of the list.
+            moveScore += SCORE_GOOD_CAPTURE + mvvScore;
         }
         else {
-            // Bad trades. apply penalty to push them down the list.
-            moveScore += SCORE_BAD_CAPTURE + see_value + mvvScore;
+            // Bad trades (fails threshold). apply penalty to push them down the list.
+            moveScore += SCORE_BAD_CAPTURE + mvvScore;
         }
 
         moveScore += 10000 + (victimValue * 10) - attackerValue;
@@ -237,8 +238,8 @@ int quiescence(Board& board, int alpha, int beta, int ply){
     const SearchParams& params = get_search_params();
     for (Move& move : captureMoves) {
         if (params.use_qsearch_see) {
-            int seeValue = see_exchange(board, move);
-            if (seeValue < 0) {
+            // Use threshold-based SEE with threshold 0 (must not lose material)
+            if (!staticExchangeEvaluation(board, move, 0)) {
                 continue; // Bad capture, skip it
             }
         }
