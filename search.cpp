@@ -238,8 +238,8 @@ int quiescence(Board& board, int alpha, int beta, int ply){
     const SearchParams& params = get_search_params();
     for (Move& move : captureMoves) {
         if (params.use_qsearch_see) {
-            int seeValue = see_exchange(board, move);
-            if (seeValue < 0) {
+            // Use threshold-based SEE with threshold 0 (must not lose material)
+            if (!staticExchangeEvaluation(board, move, 0)) {
                 continue; // Bad capture, skip it
             }
         }
