@@ -448,6 +448,16 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     });
     
     for (Move& move : possibleMoves) {
+
+        // Futility Pruning
+        if (depth < 3 && !inCheck && move.promotion == 0 && is_quiet(move)) {
+            int futilityMargin = 100 + 60 * depth; // Margin increases with depth
+            if (staticEval + futilityMargin < alpha) {
+                continue; // Skip this move, it's unlikely to raise the evaluation enough
+            }
+
+        }
+
         int lmpCount = (3 * depth * depth) + 4;
         // Late Move Pruning (LMP) logic
         if (params.use_lmp && !pvNode &&
