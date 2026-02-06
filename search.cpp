@@ -470,6 +470,12 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             }
         }
 
+        // SEE PVS Pruning
+        int seeThreshold = is_quiet(move) ? -67 * depth : -32 * depth * depth;
+        if (movesSearched > 0 && !staticExchangeEvaluation(board, move, seeThreshold)) {
+            continue;
+        }
+
         board.makeMove(move);
         movesSearched++;
         std::vector<Move> childPv;
