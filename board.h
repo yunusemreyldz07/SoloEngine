@@ -51,11 +51,11 @@ inline constexpr int VALUE_INF = 2000000000;   // Infinite score for alpha-beta 
 inline constexpr int VALUE_NONE = -200000;     // Initial value before any move is searched
 
 // Move ordering scores
-inline constexpr int SCORE_TT_MOVE      = 1000000;
+inline constexpr int SCORE_TT_MOVE      = 2000000;
 inline constexpr int SCORE_GOOD_CAPTURE = 1000000;
 inline constexpr int SCORE_BAD_CAPTURE  = -100000;
-inline constexpr int SCORE_KILLER_1     = 8000;
-inline constexpr int SCORE_KILLER_2     = 7000;
+inline constexpr int SCORE_KILLER_1     = 1500000;
+inline constexpr int SCORE_KILLER_2     = 1400000;
 inline constexpr int SCORE_PROMO_QUEEN  = 90000;
 inline constexpr int SCORE_PROMO_ROOK   = 80000;
 inline constexpr int SCORE_PROMO_BISHOP = -70000;
