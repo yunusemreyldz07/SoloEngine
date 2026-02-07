@@ -281,6 +281,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     const SearchParams& params = get_search_params();
     bool pvNode = (beta - alpha) > 1;
+    bool rootNode = (ply == 0);
     bool firstMove = true;
     const int alphaOrig = alpha;
     int maxEval = VALUE_NONE;
@@ -438,18 +439,17 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     
     for (Move& move : possibleMoves) {
 
-        // Futility Pruning
-        if (depth < 3 && !inCheck && move.promotion == 0 && is_quiet(move)) {
+        // Futility Pruning (skip only in non-PV, non-root nodes)
+        if (!pvNode && !rootNode && depth < 3 && !inCheck && move.promotion == 0 && is_quiet(move)) {
             int futilityMargin = 100 + 60 * depth; // Margin increases with depth
             if (staticEval + futilityMargin < alpha) {
                 continue; // Skip this move, it's unlikely to raise the evaluation enough
             }
-
         }
 
         int lmpCount = (3 * depth * depth) + 4;
         // Late Move Pruning (LMP) logic
-        if (params.use_lmp && !pvNode &&
+        if (params.use_lmp && !pvNode && !rootNode &&
             depth >= params.lmp_min_depth &&
             depth <= params.lmp_max_depth &&
             movesSearched >= lmpCount &&
@@ -459,10 +459,12 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             }
         }
 
-        // SEE PVS Pruning
-        int seeThreshold = is_quiet(move) ? -67 * depth : -32 * depth * depth;
-        if (movesSearched > 0 && !staticExchangeEvaluation(board, move, seeThreshold)) {
-            continue;
+        // SEE PVS Pruning (skip in root nodes)
+        if (!rootNode && movesSearched > 0) {
+            int seeThreshold = is_quiet(move) ? -67 * depth : -32 * depth * depth;
+            if (!staticExchangeEvaluation(board, move, seeThreshold)) {
+                continue;
+            }
         }
 
         board.makeMove(move);
