@@ -15,16 +15,15 @@ A bitboard-based chess engine with advanced search techniques and evaluation.
   - Late move reductions (LMR)
   - Late move pruning (LMP)
   - Quiescence search with delta pruning
-  - Principal Variation Search (PVS)
+  - Principal Variation Search (PVS) with null-window re-search
+  - Futility Pruning (FP)
   - Reverse Futility Pruning (RFP)
-  - Internal Iterative Reductions (IIR)
-  - Static Exchange Evaluation (SEE)
+  - Static Exchange Evaluation (SEE) with pruning
   - Transposition Table with lockless thread-safe design
 
 - **Move Ordering**:
   - Transposition Table (TT) move first
   - MVV-LVA with SEE pruning for bad captures
-  - Killer move heuristic (2 slots per ply)
   - History heuristic with depth-squared bonus
   - PV move from previous iteration prioritized
 
@@ -33,6 +32,8 @@ A bitboard-based chess engine with advanced search techniques and evaluation.
   - Tapered evaluation (midgame/endgame interpolation)
   - Incremental Zobrist hashing
   - Threefold repetition detection
+  - Mobility Bonus
+  - 50-moves & insufficient material draw detection
 
 ## Building
 
@@ -50,7 +51,7 @@ make mac
 make clean
 ```
 
-**Output**: Executable will be created as `SoloBot.exe` (Windows) or `SoloBot` (Linux/Mac)
+**Output**: Executable will be created as `SoloEngine.exe` (Windows) or `SoloEngine` (Linux/Mac)
 
 ### Manual Compilation
 
@@ -83,20 +84,20 @@ go depth 10
 ./SoloEngine bench
 ```
 
-Runs a built-in benchmark on 6 different positions at depth 7.
+Runs a built-in benchmark on 12 positions at depth 8.
 
 ## UCI Options
 
 | Option | Type | Default | Range | Description |
 |--------|------|---------|-------|-------------|
-| `Hash` | spin | 16 | 1-2048 | Transposition table size in MB |
+| `Hash` | spin | 128 | 1-2048 | Transposition table size in MB |
 | `Threads` | spin | 1 | 1-8 | Number of search threads *(not implemented yet)* |
 | `UseTT` | check | true | - | Enable/disable transposition table |
 
 ## Strength
 
 - **Estimated ELO**: ~2136 (based on benchmark tests)
-- **Lichess ELO**: [~1750](https://lichess.org/@/SoloBot) (limited match data)
+- **Lichess ELO**: [~2100](https://lichess.org/@/SoloBot)
 - **Perft Verified**: Passes standard perft test suites
 
 ## Roadmap
@@ -104,7 +105,6 @@ Runs a built-in benchmark on 6 different positions at depth 7.
 - [ ] Multi-threading support (lazy SMP)
 - [ ] Syzygy endgame tablebase support
 - [ ] Improved time management (soft/hard bounds)
-- [ ] Tuned evaluation parameters (Texel tuning)
 - [ ] NNUE evaluation (future consideration)
 
 ## Project Structure
@@ -125,7 +125,7 @@ Runs a built-in benchmark on 6 different positions at depth 7.
 - **Author**: xsolod3v
 - **Inspired by**: Potential Engine by ProgramciDusunur
 - **Evaluation**: PeSTO piece-square tables by Ronald Friederich
-- **Resources**: Chess Programming Wiki, Potential source code
+- **Resources**: Chess Programming Wiki, Potential source code, Ethereal source code
 
 ## License
 
