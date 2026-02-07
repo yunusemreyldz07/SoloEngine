@@ -3,7 +3,6 @@
 #include <algorithm>
 
 int historyTable[64][64];
-Move killerMove[2][MAX_PLY];
 constexpr int HISTORY_MAX = 16384;
 
 void clear_history() {
@@ -34,35 +33,4 @@ void update_history(int fromSq, int toSq, int depth, const Move badQuiets[256], 
 
 int get_history_score(int fromSq, int toSq) {
     return historyTable[fromSq][toSq];
-}
-
-void add_killer_move(const Move& move, int ply) {
-    if (ply < 0 || ply >= MAX_PLY) return;
-    
-    if (moves_equal(move, killerMove[0][ply])) {
-        return;
-    }
-
-    // Promote killer1 to killer0 when it triggers again.
-    if (moves_equal(move, killerMove[1][ply])) {
-        killerMove[1][ply] = killerMove[0][ply];
-        killerMove[0][ply] = move;
-        return;
-    }
-
-    killerMove[1][ply] = killerMove[0][ply];
-    killerMove[0][ply] = move;
-}
-
-Move get_killer_move(int index, int ply) {
-    if (ply < 0 || ply >= MAX_PLY) return Move();
-    return killerMove[index][ply];
-}
-
-void clear_killer_moves() {
-    for (int i = 0; i < 2; ++i) {
-        for (int j = 0; j < MAX_PLY; ++j) {
-            killerMove[i][j] = Move(); // Reset to default Move
-        }
-    }
 }

@@ -68,8 +68,6 @@ void set_use_tt(bool enabled) {
 
 void clear_search_heuristics() {
     clear_history();
-
-    clear_killer_moves();
 }
 
 static bool is_square_attacked_otf(const Board& board, int row, int col, bool byWhite) {
@@ -166,15 +164,6 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
 
     if (ttMove != nullptr && moves_equal(move, *ttMove)) {
         moveScore += SCORE_TT_MOVE; // TT move always has the highest priority
-    }
-
-    if (ply >= 0 && ply < MAX_PLY) { 
-        if (moves_equal(move, get_killer_move(0, ply))) {
-            moveScore += SCORE_KILLER_1;
-        }
-        else if (moves_equal(move, get_killer_move(1, ply))) {
-            moveScore += SCORE_KILLER_2;
-        }
     }
 
     if (move.promotion != 0) {
@@ -465,7 +454,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             depth <= params.lmp_max_depth &&
             movesSearched >= lmpCount &&
             !inCheck && move.promotion == 0 && move.capturedPiece == 0) {
-            if (!move.isEnPassant && !is_killer_move(move, ply)) {
+            if (!move.isEnPassant) {
                 continue; // skip this move (late move pruning)
             }
         }
@@ -530,11 +519,6 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
 
         if (beta <= alpha) {
-            // Quiet move caused beta cutoff - update killer moves
-            if (is_quiet(move)) {
-                add_killer_move(move, ply);
-            }
-            
             // Update history
             int from = move.from_sq();
             int to = move.to_sq();
