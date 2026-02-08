@@ -485,7 +485,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
                 if (reduction < 0) reduction = 0;
                 if (reduction > depth - 1) reduction = depth - 1;
-                if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we don't search negative depth
+                if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we dont search negative depth
             }
             int lmrDepth = std::max(0, depth - 1 - reduction);
 
