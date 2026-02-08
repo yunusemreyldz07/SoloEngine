@@ -182,8 +182,8 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
         moveScore += 500;
     }
 
-    if (get_history_score(from, to) != 0) {
-        moveScore += get_history_score(from, to);
+    if (get_history_score(board.isWhiteTurn ? 0 : 1, from, to) != 0) {
+        moveScore += get_history_score(board.isWhiteTurn ? 0 : 1, from, to);
     }
 
     return moveScore;
@@ -523,7 +523,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             int from = move.from_sq();
             int to = move.to_sq();
             if (from >= 0 && from < 64 && to >= 0 && to < 64) {
-                update_history(from, to, depth, badQuiets, badQuietCount);
+                update_history(board.isWhiteTurn ? 0 : 1, from, to, depth, badQuiets, badQuietCount);
             }
             
             break; // beta cutoff
