@@ -277,16 +277,6 @@ int evaluate_board(const Board& board) {
             }
         }
     }
-
-    /* tapered eval */
-    int mgScore = mg[side2move] - mg[OTHER(side2move)];
-    int egScore = eg[side2move] - eg[OTHER(side2move)];
-    
-    int mgPhase = gamePhase;
-    if (mgPhase > 24) mgPhase = 24; 
-    
-    int egPhase = 24 - mgPhase;
-    
     // Mobility evaluation
     int mobilityScore = 0;
     Bitboard occupy = board.color[WHITE] | board.color[BLACK];
@@ -300,21 +290,26 @@ int evaluate_board(const Board& board) {
     int kingShieldEg = 2;
     int whiteKinqSq = board.whiteKingRow * 8 + board.whiteKingCol;
     int blackKinqSq = board.blackKingRow * 8 + board.blackKingCol;
-    int kingShieldBonus = 0;
-    if (side2move == WHITE) {
-        kingShieldBonus += (kingShieldMg * mgPhase + kingShieldEg * egPhase) * popcount(king_attacks[whiteKinqSq] & board.color[WHITE]) / 8;
-        kingShieldBonus -= (kingShieldMg * mgPhase + kingShieldEg * egPhase) * popcount(king_attacks[blackKinqSq] & board.color[BLACK]) / 8;
-    } else {
-        kingShieldBonus += (kingShieldMg * mgPhase + kingShieldEg * egPhase) * popcount(king_attacks[blackKinqSq] & board.color[BLACK]) / 8;
-        kingShieldBonus -= (kingShieldMg * mgPhase + kingShieldEg * egPhase) * popcount(king_attacks[whiteKinqSq] & board.color[WHITE]) / 8;
-    }
+    int shieldW = popcount(king_attacks[whiteKinqSq] & board.color[WHITE]);
+    int shieldB = popcount(king_attacks[blackKinqSq] & board.color[BLACK]);
+
+    mg[WHITE] += kingShieldMg * shieldW;
+    mg[BLACK] += kingShieldMg * shieldB;
+
+    /* tapered eval */
+    int mgScore = mg[side2move] - mg[OTHER(side2move)];
+    int egScore = eg[side2move] - eg[OTHER(side2move)];
     
+    int mgPhase = gamePhase;
+    if (mgPhase > 24) mgPhase = 24; 
+    
+    int egPhase = 24 - mgPhase;
     
     
     // static eval
     int staticEval = (mgScore * mgPhase + egScore * egPhase) / 24;
 
-    return (staticEval + mobilityScore + kingShieldBonus);
+    return (staticEval + mobilityScore);
 }
 
 int evaluate_board_pesto(const Board& board) {
