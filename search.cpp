@@ -522,7 +522,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
 
         if (beta <= alpha) {
-            // Update history
+            // Update history.
             Move prevMove = board.moveHistory.empty() ? Move() : board.moveHistory.back();
             int from = move.from_sq();
             int to = move.to_sq();
