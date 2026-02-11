@@ -3,10 +3,23 @@
 #include <algorithm>
 
 int historyTable[64][64];
+int conhistTable[12][64][12][64]; // continuation history [prevpiece][to][piece][to]
 constexpr int HISTORY_MAX = 16384;
 
 void clear_history() {
     std::memset(historyTable, 0, sizeof(historyTable));
+    std::memset(conhistTable, 0, sizeof(conhistTable));
+}
+
+void update_conhist(int prevPiece, int prevTo, int piece, int to, int depth) {
+    int bonus = std::min(10 + 200 * depth, 4096);
+    int& bestScore = conhistTable[prevPiece - 1][prevTo][piece - 1][to];
+
+    bestScore += bonus - (bestScore * std::abs(bonus)) / HISTORY_MAX;
+}
+
+int get_conhist_score(int prevPiece, int prevTo, int piece, int to) {
+    return conhistTable[prevPiece - 1][prevTo][piece - 1][to];
 }
 
 void update_history(int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount) { 

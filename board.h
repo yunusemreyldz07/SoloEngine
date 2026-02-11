@@ -82,7 +82,7 @@ struct Move {
     int toRow, toCol;
     int capturedPiece;
     int promotion;
-    int pieceType;  // Moving piece type (1-6: pawn-king)
+    int pieceType;  // Moving piece (1-12: W_PAWN..B_KING)
 
     bool prevW_KingSide;
     bool prevW_QueenSide;

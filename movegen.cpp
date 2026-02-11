@@ -93,16 +93,16 @@ void generate_pawn_moves_bb(const Board& board, std::vector<Move>& moves) {
                 bool isPromo = whiteToMove ? (from >= 48) : (from <= 15);
                 if (isPromo) {
                     for (int promo : {QUEEN, ROOK, BISHOP, KNIGHT}) {
-                        push_move(moves, from, to, 0, promo, false, false, PAWN);
+                        push_move(moves, from, to, 0, promo, false, false, make_piece(PAWN, us));
                     }
                 } else {
-                    push_move(moves, from, to, 0, 0, false, false, PAWN);
+                    push_move(moves, from, to, 0, 0, false, false, make_piece(PAWN, us));
                     bool onStartRank = whiteToMove ? (from >= 8 && from <= 15) : (from >= 48 && from <= 55);
                     if (onStartRank) {
                         int to2 = whiteToMove ? (from + 16) : (from - 16);
                         Bitboard to2Mask = 1ULL << to2;
                         if (empty & to2Mask) {
-                            push_move(moves, from, to2, 0, 0, false, false, PAWN);
+                            push_move(moves, from, to2, 0, 0, false, false, make_piece(PAWN, us));
                         }
                     }
                 }
@@ -118,10 +118,10 @@ void generate_pawn_moves_bb(const Board& board, std::vector<Move>& moves) {
             bool isPromo = whiteToMove ? (capSq >= 56) : (capSq <= 7);
             if (isPromo) {
                 for (int promo : {QUEEN, ROOK, BISHOP, KNIGHT}) {
-                    push_move(moves, from, capSq, captured, promo, false, false, PAWN);
+                    push_move(moves, from, capSq, captured, promo, false, false, make_piece(PAWN, us));
                 }
             } else {
-                push_move(moves, from, capSq, captured, 0, false, false, PAWN);
+                push_move(moves, from, capSq, captured, 0, false, false, make_piece(PAWN, us));
             }
         }
 
@@ -130,7 +130,7 @@ void generate_pawn_moves_bb(const Board& board, std::vector<Move>& moves) {
             int epSq = row_col_to_sq(epRow, board.enPassantCol);
             if (pawn_attacks[us][from] & (1ULL << epSq)) {
                 int captured = whiteToMove ? B_PAWN : W_PAWN;
-                push_move(moves, from, epSq, captured, 0, true, false, PAWN);
+                push_move(moves, from, epSq, captured, 0, true, false, make_piece(PAWN, us));
             }
         }
     }
@@ -155,7 +155,7 @@ void generate_knight_moves_bb(const Board& board, std::vector<Move>& moves) {
             targets &= targets - 1;
             int captured = (opp & (1ULL << to)) ? piece_on_square_bb(board, to) : 0;
             if (is_king_piece(captured)) continue;
-            push_move(moves, from, to, captured, 0, false, false, KNIGHT);
+            push_move(moves, from, to, captured, 0, false, false, make_piece(KNIGHT, us));
         }
     }
 }
@@ -180,7 +180,7 @@ void generate_bishop_moves_bb(const Board& board, std::vector<Move>& moves) {
             targets &= targets - 1;
             int captured = (opp & (1ULL << to)) ? piece_on_square_bb(board, to) : 0;
             if (is_king_piece(captured)) continue;
-            push_move(moves, from, to, captured, 0, false, false, BISHOP);
+            push_move(moves, from, to, captured, 0, false, false, make_piece(BISHOP, us));
         }
     }
 }
@@ -205,7 +205,7 @@ void generate_rook_moves_bb(const Board& board, std::vector<Move>& moves) {
             targets &= targets - 1;
             int captured = (opp & (1ULL << to)) ? piece_on_square_bb(board, to) : 0;
             if (is_king_piece(captured)) continue;
-            push_move(moves, from, to, captured, 0, false, false, ROOK);
+            push_move(moves, from, to, captured, 0, false, false, make_piece(ROOK, us));
         }
     }
 }
@@ -230,7 +230,7 @@ void generate_queen_moves_bb(const Board& board, std::vector<Move>& moves) {
             targets &= targets - 1;
             int captured = (opp & (1ULL << to)) ? piece_on_square_bb(board, to) : 0;
             if (is_king_piece(captured)) continue;
-            push_move(moves, from, to, captured, 0, false, false, QUEEN);
+            push_move(moves, from, to, captured, 0, false, false, make_piece(QUEEN, us));
         }
     }
 }
@@ -253,7 +253,7 @@ void generate_king_moves_bb(const Board& board, std::vector<Move>& moves) {
         targets &= targets - 1;
         int captured = (opp & (1ULL << to)) ? piece_on_square_bb(board, to) : 0;
         if (is_king_piece(captured)) continue;
-        push_move(moves, from, to, captured, 0, false, false, KING);
+        push_move(moves, from, to, captured, 0, false, false, make_piece(KING, us));
     }
 
     Bitboard occ = board_occupancy(board);
@@ -268,7 +268,7 @@ void generate_king_moves_bb(const Board& board, std::vector<Move>& moves) {
                 !is_square_attacked_bb(board, 5, opponentIsWhite) &&
                 !is_square_attacked_bb(board, 6, opponentIsWhite) &&
                 rookPresent) {
-                push_move(moves, 4, 6, 0, 0, false, true, KING);
+                push_move(moves, 4, 6, 0, 0, false, true, W_KING);
             }
         }
         if (board.whiteCanCastleQueenSide) {
@@ -279,7 +279,7 @@ void generate_king_moves_bb(const Board& board, std::vector<Move>& moves) {
                 !is_square_attacked_bb(board, 3, opponentIsWhite) &&
                 !is_square_attacked_bb(board, 2, opponentIsWhite) &&
                 rookPresent) {
-                push_move(moves, 4, 2, 0, 0, false, true, KING);
+                push_move(moves, 4, 2, 0, 0, false, true, W_KING);
             }
         }
     }
@@ -293,7 +293,7 @@ void generate_king_moves_bb(const Board& board, std::vector<Move>& moves) {
                 !is_square_attacked_bb(board, 61, opponentIsWhite) &&
                 !is_square_attacked_bb(board, 62, opponentIsWhite) &&
                 rookPresent) {
-                push_move(moves, 60, 62, 0, 0, false, true, KING);
+                push_move(moves, 60, 62, 0, 0, false, true, B_KING);
             }
         }
         if (board.blackCanCastleQueenSide) {
@@ -304,7 +304,7 @@ void generate_king_moves_bb(const Board& board, std::vector<Move>& moves) {
                 !is_square_attacked_bb(board, 59, opponentIsWhite) &&
                 !is_square_attacked_bb(board, 58, opponentIsWhite) &&
                 rookPresent) {
-                push_move(moves, 60, 58, 0, 0, false, true, KING);
+                push_move(moves, 60, 58, 0, 0, false, true, B_KING);
             }
         }
     }

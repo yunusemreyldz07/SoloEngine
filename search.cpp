@@ -181,9 +181,12 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
         // urgent defensive moves (like saving a hanging piece) at shallow depth
         moveScore += 500;
     }
-
-    if (get_history_score(from, to) != 0) {
-        moveScore += get_history_score(from, to);
+    moveScore += get_history_score(from, to);
+    if (!board.moveHistory.empty()) {
+        const Move& prev = board.moveHistory.back();
+        if (prev.pieceType >= 1 && prev.pieceType <= 12 && prev.to_sq() >= 0 && prev.to_sq() < 64) {
+            moveScore += get_conhist_score(prev.pieceType, prev.to_sq(), move.pieceType, to);
+        }
     }
 
     return moveScore;
@@ -520,10 +523,14 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
         if (beta <= alpha) {
             // Update history
+            Move prevMove = board.moveHistory.empty() ? Move() : board.moveHistory.back();
             int from = move.from_sq();
             int to = move.to_sq();
             if (from >= 0 && from < 64 && to >= 0 && to < 64) {
                 update_history(from, to, depth, badQuiets, badQuietCount);
+                if (!board.moveHistory.empty() && prevMove.pieceType >= 1 && prevMove.pieceType <= 12 && prevMove.to_sq() >= 0 && prevMove.to_sq() < 64) {
+                    update_conhist(prevMove.pieceType, prevMove.to_sq(), move.pieceType, to, depth);
+                }
             }
             
             break; // beta cutoff

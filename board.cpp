@@ -143,7 +143,7 @@ void Board::makeMove(Move& move) {
     
     // Set pieceType if not already set (from movegen)
     if (move.pieceType == 0) {
-        move.pieceType = piece_type(movingPiece);
+        move.pieceType = movingPiece;  // full piece 1-12
     }
     
     // Add to move history for continuation history
