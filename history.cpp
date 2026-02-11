@@ -2,17 +2,17 @@
 #include <cstring>
 #include <algorithm>
 
-int historyTable[64][64];
+int historyTable[2][64][64]; // color x fromSquare x toSquare
 constexpr int HISTORY_MAX = 16384;
 
 void clear_history() {
     std::memset(historyTable, 0, sizeof(historyTable));
 }
 
-void update_history(int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount) { 
+void update_history(int color, int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount) { 
 
     int bonus = std::min(10 + 200 * depth, 4096);
-    int& bestScore = historyTable[fromSq][toSq];
+    int& bestScore = historyTable[color][fromSq][toSq];
 
     bestScore += bonus - (bestScore * std::abs(bonus)) / HISTORY_MAX;
 
@@ -25,12 +25,12 @@ void update_history(int fromSq, int toSq, int depth, const Move badQuiets[256], 
         }
 
         int malus = bonus + (i * 30);
-        int& badScore = historyTable[badFrom][badTo];
+        int& badScore = historyTable[color][badFrom][badTo];
         
         badScore -= malus + (badScore * std::abs(malus)) / HISTORY_MAX;
     }
 }
 
-int get_history_score(int fromSq, int toSq) {
-    return historyTable[fromSq][toSq];
+int get_history_score(int color, int fromSq, int toSq) {
+    return historyTable[color][fromSq][toSq];
 }
