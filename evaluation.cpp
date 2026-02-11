@@ -287,8 +287,6 @@ int evaluate_board(const Board& board) {
     
     int egPhase = 24 - mgPhase;
     
-    int staticEval = (mgScore * mgPhase + egScore * egPhase) / 24;
-
     // Mobility evaluation
     int mobilityScore = 0;
     Bitboard occupy = board.color[WHITE] | board.color[BLACK];
@@ -297,7 +295,26 @@ int evaluate_board(const Board& board) {
         mobilityScore -= evaluate_mobility(board, pieceType, !board.isWhiteTurn, occupy);
     }
 
-    return (staticEval + mobilityScore);
+    // King shield evaluation
+    int kingShieldMg = 6;
+    int kingShieldEg = 2;
+    int whiteKinqSq = board.whiteKingRow * 8 + board.whiteKingCol;
+    int blackKinqSq = board.blackKingRow * 8 + board.blackKingCol;
+    int kingShieldBonus = 0;
+    if (side2move == WHITE) {
+        kingShieldBonus += (kingShieldMg * mgPhase + kingShieldEg * egPhase) * popcount(king_attacks[whiteKinqSq] & board.color[WHITE]) / 8;
+        kingShieldBonus -= (kingShieldMg * mgPhase + kingShieldEg * egPhase) * popcount(king_attacks[blackKinqSq] & board.color[BLACK]) / 8;
+    } else {
+        kingShieldBonus += (kingShieldMg * mgPhase + kingShieldEg * egPhase) * popcount(king_attacks[blackKinqSq] & board.color[BLACK]) / 8;
+        kingShieldBonus -= (kingShieldMg * mgPhase + kingShieldEg * egPhase) * popcount(king_attacks[whiteKinqSq] & board.color[WHITE]) / 8;
+    }
+    
+    
+    
+    // static eval
+    int staticEval = (mgScore * mgPhase + egScore * egPhase) / 24;
+
+    return (staticEval + mobilityScore + kingShieldBonus);
 }
 
 int evaluate_board_pesto(const Board& board) {
