@@ -8,7 +8,6 @@
 #include <cstring>
 
 extern char columns[];
-extern int historyTable[64][64];    // fromSquare x toSquare
 extern std::atomic<long long> nodeCount; // visited node counter
 extern int LMR_TABLE[256][256];     // Late Move Reduction table
 
