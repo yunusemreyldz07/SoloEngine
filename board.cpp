@@ -2,6 +2,7 @@
 #include "bitboard.h"
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <iostream>
 #include <sstream>
 
@@ -617,21 +618,6 @@ Move TranspositionTable::unpackMove(uint16_t packed) {
     return m;
 }
 
-uint64_t TranspositionTable::packData(int score, int depth, TTFlag flag, uint16_t packedMove) {
-    uint64_t data = static_cast<uint32_t>(score);
-    data |= (static_cast<uint64_t>(depth) & 0xFFULL) << 32;
-    data |= (static_cast<uint64_t>(static_cast<int>(flag)) & 0x3ULL) << 40;
-    data |= (static_cast<uint64_t>(packedMove) & 0xFFFFULL) << 42;
-    return data;
-}
-
-void TranspositionTable::unpackData(uint64_t data, int& score, int& depth, TTFlag& flag, uint16_t& packedMove) {
-    score = static_cast<int32_t>(static_cast<uint32_t>(data & 0xFFFFFFFFULL));
-    depth = static_cast<int>((data >> 32) & 0xFFULL);
-    flag = static_cast<TTFlag>((data >> 40) & 0x3ULL);
-    packedMove = static_cast<uint16_t>((data >> 42) & 0xFFFFULL);
-}
-
 void TranspositionTable::resize(int mbSize) {
     delete[] table;
     table = nullptr;
@@ -639,41 +625,32 @@ void TranspositionTable::resize(int mbSize) {
 
     if (mbSize <= 0) return;
     const size_t bytes = static_cast<size_t>(mbSize) * 1024ULL * 1024ULL;
-    size_t count = bytes / sizeof(TTAtomicEntry);
+    size_t count = bytes / sizeof(TTEntry);
     if (count == 0) count = 1;
 
-    table = new TTAtomicEntry[count];
+    table = new TTEntry[count];
     size = count;
     clear();
 }
 
 void TranspositionTable::clear() {
     if (!table || size == 0) return;
-    for (size_t i = 0; i < size; i++) {
-        table[i].data.store(0, std::memory_order_relaxed);
-        table[i].key.store(0, std::memory_order_relaxed);
-    }
+    memset(table, 0, size * sizeof(TTEntry));
 }
 
 void TranspositionTable::store(uint64_t hash, int score, int depth, TTFlag flag, const Move& bestMove) {
     if (!table || size == 0) return;
 
     const size_t index = static_cast<size_t>(hash % size);
-    TTAtomicEntry& e = table[index];
+    TTEntry& e = table[index];
 
-    const uint64_t existingKey = e.key.load(std::memory_order_relaxed);
-    const uint64_t existingData = e.data.load(std::memory_order_relaxed);
-    int existingScore = 0;
-    int existingDepth = 0;
-    TTFlag existingFlag = TTFlag::EXACT;
-    uint16_t existingMove = 0;
-    unpackData(existingData, existingScore, existingDepth, existingFlag, existingMove);
-
-    if (existingKey == 0 || existingKey != hash || depth >= existingDepth) {
-        const uint16_t pm = packMove(bestMove);
-        const uint64_t newData = packData(score, depth, flag, pm);
-        e.data.store(newData, std::memory_order_relaxed);
-        e.key.store(hash, std::memory_order_release);
+    // Replace if: slot empty, same position (update), or deeper search
+    if (e.hashKey == 0 || e.hashKey == hash || depth >= e.depth) {
+        e.hashKey  = hash;
+        e.score    = static_cast<int16_t>(score);
+        e.depth    = static_cast<uint8_t>(depth);
+        e.flag     = static_cast<uint8_t>(flag);
+        e.bestMove = packMove(bestMove);
     }
 }
 
@@ -681,15 +658,14 @@ bool TranspositionTable::probe(uint64_t key, int& outScore, int& outDepth, TTFla
     if (!table || size == 0) return false;
 
     const size_t index = static_cast<size_t>(key % size);
-    const TTAtomicEntry& e = table[index];
+    const TTEntry& e = table[index];
 
-    const uint64_t foundKey = e.key.load(std::memory_order_acquire);
-    if (foundKey != key) return false;
+    if (e.hashKey != key) return false;
 
-    const uint64_t data = e.data.load(std::memory_order_relaxed);
-    uint16_t packedMove = 0;
-    unpackData(data, outScore, outDepth, outFlag, packedMove);
-    outMove = unpackMove(packedMove);
+    outScore = static_cast<int>(e.score);
+    outDepth = static_cast<int>(e.depth);
+    outFlag  = static_cast<TTFlag>(e.flag);
+    outMove  = unpackMove(e.bestMove);
     return true;
 }
 

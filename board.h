@@ -46,9 +46,9 @@ inline constexpr int KING   = 6;
 
 // Search constants
 inline constexpr int MAX_PLY = 128;
-inline constexpr int MATE_SCORE = 100000;
-inline constexpr int VALUE_INF = 2000000000;   // Infinite score for alpha-beta bounds
-inline constexpr int VALUE_NONE = -200000;     // Initial value before any move is searched
+inline constexpr int MATE_SCORE = 32000;
+inline constexpr int VALUE_INF = 32001;        // Infinite score for alpha-beta bounds
+inline constexpr int VALUE_NONE = -32001;      // Initial value before any move is searched
 
 // Move ordering scores
 inline constexpr int SCORE_TT_MOVE      = 1000000;
@@ -216,10 +216,18 @@ inline bool is_fifty_move_draw(const Board& board) {
 // Does NOT include K+B+N vs K (can mate) or K+B vs K+B same color (can mate in corners with help)
 bool is_insufficient_material(const Board& board);
 
-enum TTFlag {
+enum TTFlag : uint8_t {
     EXACT,      // Exact score
     ALPHA,      // Upper bound (fail-low)
     BETA        // Lower bound (fail-high)
+};
+
+struct TTEntry {
+    uint64_t hashKey;    // position hash
+    uint16_t bestMove;   // packed best move (from 6bit + to 6bit + promo 3bit)
+    int16_t  score;      // evaluation score
+    uint8_t  depth;      // search depth
+    uint8_t  flag;       // EXACT / ALPHA / BETA
 };
 
 class TranspositionTable {
@@ -227,34 +235,18 @@ public:
     TranspositionTable() : table(nullptr), size(0) {}
     ~TranspositionTable() { delete[] table; }
 
-    // Resize the table to given size in MB (count = bytes / sizeof(entry)).
     void resize(int mbSize);
     void clear();
-
-    // Lockless + thread-safe: write data first, then publish key with release semantics.
     void store(uint64_t hash, int score, int depth, TTFlag flag, const Move& bestMove);
-
-    // Backward-compatible overload (older call sites passing an int)
-    void store(uint64_t hash, int score, int depth, int flag, const Move& bestMove) {
-        store(hash, score, depth, static_cast<TTFlag>(flag), bestMove);
-    }
-
     bool probe(uint64_t key, int& outScore, int& outDepth, TTFlag& outFlag, Move& outMove) const;
     size_t entryCount() const { return size; }
 
-private:
-    struct TTAtomicEntry {
-        std::atomic<uint64_t> key{0};
-        std::atomic<uint64_t> data{0};
-    };
-
-    TTAtomicEntry* table;
-    size_t size;
-
     static uint16_t packMove(const Move& m);
     static Move unpackMove(uint16_t packed);
-    static uint64_t packData(int score, int depth, TTFlag flag, uint16_t packedMove);
-    static void unpackData(uint64_t data, int& score, int& depth, TTFlag& flag, uint16_t& packedMove);
+
+private:
+    TTEntry* table;
+    size_t size;
 };
 
 extern TranspositionTable globalTT;
