@@ -344,7 +344,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     }
 
     // Static evaluation (from side-to-move perspective). Used by forward/reverse pruning.
-    const int staticEval = evaluate_board(board);
+    const int rawEval = evaluate_board(board);
+    const int staticEval = adjustEvalWithCorrectionHistory(board, rawEval);
     if (!is_repetition_candidate && ttHit && ttDepth >= depth) {
         if (ttFlag == EXACT) {
             pvLine.clear();
@@ -541,6 +542,14 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     else if (maxEval >= beta) flag = BETA;
     else flag = EXACT;
     
+    // Update pawn correction history
+    bool validBestMove = (bestMove.fromRow != bestMove.toRow || bestMove.fromCol != bestMove.toCol);
+    if (!inCheck && (!validBestMove || !is_capture(bestMove)) &&
+        !(flag == ALPHA && maxEval <= staticEval) &&
+        !(flag == BETA && maxEval >= staticEval)) {
+        updatePawnCorrectionHistory(board, depth, maxEval - staticEval);
+    }
+
     if (use_tt.load(std::memory_order_relaxed)) {
         globalTT.store(currentHash, maxEval, depth, flag, bestMove);
     }
