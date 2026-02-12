@@ -223,7 +223,7 @@ enum TTFlag : uint8_t {
 };
 
 struct TTEntry {
-    uint64_t hashKey;    // position hash
+    uint16_t hashKey;    // upper 16 bits of position hash (verification)
     uint16_t bestMove;   // packed best move (from 6bit + to 6bit + promo 3bit)
     int16_t  score;      // evaluation score
     uint8_t  depth;      // search depth
