@@ -222,13 +222,15 @@ enum TTFlag : uint8_t {
     BETA        // Lower bound (fail-high)
 };
 
+#pragma pack(push, 1)
 struct TTEntry {
-    uint16_t hashKey;    // upper 16 bits of position hash (verification)
+    uint64_t hashKey;    // position hash
     uint16_t bestMove;   // packed best move (from 6bit + to 6bit + promo 3bit)
     int16_t  score;      // evaluation score
     uint8_t  depth;      // search depth
     uint8_t  flag;       // EXACT / ALPHA / BETA
 };
+#pragma pack(pop)
 
 class TranspositionTable {
 public:

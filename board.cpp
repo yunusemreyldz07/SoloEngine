@@ -642,12 +642,11 @@ void TranspositionTable::store(uint64_t hash, int score, int depth, TTFlag flag,
     if (!table || size == 0) return;
 
     const size_t index = static_cast<size_t>(hash % size);
-    const uint16_t key16 = static_cast<uint16_t>(hash >> 48);
     TTEntry& e = table[index];
 
     // Replace if: slot empty, same position (update), or deeper search
-    if (e.hashKey == 0 || e.hashKey == key16 || depth >= e.depth) {
-        e.hashKey  = key16;
+    if (e.hashKey == 0 || e.hashKey == hash || depth >= e.depth) {
+        e.hashKey  = hash;
         e.score    = static_cast<int16_t>(score);
         e.depth    = static_cast<uint8_t>(depth);
         e.flag     = static_cast<uint8_t>(flag);
@@ -659,10 +658,9 @@ bool TranspositionTable::probe(uint64_t key, int& outScore, int& outDepth, TTFla
     if (!table || size == 0) return false;
 
     const size_t index = static_cast<size_t>(key % size);
-    const uint16_t key16 = static_cast<uint16_t>(key >> 48);
     const TTEntry& e = table[index];
 
-    if (e.hashKey != key16) return false;
+    if (e.hashKey != key) return false;
 
     outScore = static_cast<int>(e.score);
     outDepth = static_cast<int>(e.depth);
