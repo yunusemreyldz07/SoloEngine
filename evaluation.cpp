@@ -216,6 +216,9 @@ void ensure_tables_init() {
 }
 }
 
+const int doublePawnPenaltyOpening = -5;
+const int doublePawnPenaltyEndgame = -10;
+
 int evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard occupy) {
     Bitboard myPieces = isWhite ? board.color[WHITE] : board.color[BLACK];
     
@@ -277,6 +280,30 @@ int evaluate_board(const Board& board) {
             }
         }
     }
+
+    // Double pawn penalty
+    Bitboard file_masks[8] = {
+        0x0101010101010101ULL, // File A
+        0x0202020202020202ULL, // File B
+        0x0404040404040404ULL, // File C
+        0x0808080808080808ULL, // File D
+        0x1010101010101010ULL, // File E
+        0x2020202020202020ULL, // File F
+        0x4040404040404040ULL, // File G
+        0x8080808080808080ULL  // File H
+    };
+
+    for (int color = 0; color < 2; color++) {
+        Bitboard pawns = board.piece[PAWN - 1] & board.color[color];
+        for (int file = 0; file < 8; file++) {
+            int count = popcount(pawns & file_masks[file]);
+            if (count > 1) {
+                mg[color] += doublePawnPenaltyOpening * (count - 1);
+                eg[color] += doublePawnPenaltyEndgame * (count - 1);
+            }
+        }
+    }
+
 
     /* tapered eval */
     int mgScore = mg[side2move] - mg[OTHER(side2move)];
