@@ -567,23 +567,25 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
         time_limit_ms.store(0, std::memory_order_relaxed);
     }
 
+    // Generate and order moves before starting the search, so we have a good move to start with for alpha-beta and aspiration windows
     bool isWhite = board.isWhiteTurn;
-    std::vector<Move> possibleMoves = get_all_moves(board, isWhite);
+    std::vector<Move> possibleMoves = get_all_moves(board, isWhite); // get all possible moves
     std::sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
         return scoreMove(board, a, 0, nullptr) > scoreMove(board, b, 0, nullptr);
-    });
+    }); // Order moves by heuristic scores so that we start with the most promising move for better alpha-beta performance and aspiration windows
     if (possibleMoves.empty()) return {};
     if (possibleMoves.size() == 1) return possibleMoves[0];
 
-    Move bestMoveSoFar = possibleMoves[0]; 
+    Move bestMoveSoFar = possibleMoves[0];
 
     auto gSearchStart = std::chrono::steady_clock::now();
     auto gTimeLimited = (movetimeMs > 0);
     auto gTimeLimitMs = gTimeLimited ? movetimeMs : std::numeric_limits<int>::max();
     const int effectiveMaxDepth = gTimeLimited ? 128 : maxDepth;
-    int bestValue;
 
-    std::vector<uint64_t> localPositionHistory;
+    int bestValue; // Best score found at the current depth
+
+    std::vector<uint64_t> localPositionHistory; // Local copy of position history for this search thread, used for repetition detection. We keep only the last 100 positions to save memory and because threefold repetition is unlikely beyond that.
     localPositionHistory.reserve(std::min((size_t)100, positionHistory.size()) + 1);
     auto startIt = (positionHistory.size() > 100) ? (positionHistory.end() - 100) : positionHistory.begin(); // Keep only last 100 entries
     localPositionHistory.assign(startIt, positionHistory.end());
