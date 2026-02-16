@@ -164,12 +164,10 @@ void search_moves_for_one_depth(
     std::vector<uint64_t>& localPositionHistory,
     int& bestValue,
     Move& currentDepthBestMove,
-    std::vector<Move>& bestPvForDepth,
-    bool& thisDepthCompleted
+    std::vector<Move>& bestPvForDepth
 ) {
     for (Move move : possibleMoves) {
         if (stop_search.load(std::memory_order_relaxed)) {
-            thisDepthCompleted = false;
             break;
         }
 
@@ -184,7 +182,6 @@ void search_moves_for_one_depth(
         board.unmakeMove(move);
 
         if (stop_search.load(std::memory_order_relaxed)) {
-            thisDepthCompleted = false;
             break;
         }
 
@@ -259,7 +256,6 @@ int search_one_depth_with_aspiration(
         const int betaStart = beta;
         bestValue = std::numeric_limits<int>::min() / 2;
         Move currentDepthBestMove; // Only the best move found at this depth
-        bool thisDepthCompleted = true; // Is this depth completed?
 
         if (depth > 1) {
             reorder_with_pv(board, possibleMoves, bestMoveSoFar);
@@ -276,8 +272,7 @@ int search_one_depth_with_aspiration(
             localPositionHistory,
             bestValue,
             currentDepthBestMove,
-            bestPvForDepth,
-            thisDepthCompleted
+            bestPvForDepth
         );
 
         if (stop_search.load(std::memory_order_relaxed)) {
@@ -291,7 +286,7 @@ int search_one_depth_with_aspiration(
             continue;
         }
 
-        if (thisDepthCompleted && (bestValue > std::numeric_limits<int>::min() / 2)) {
+        if (bestValue > std::numeric_limits<int>::min() / 2) {
             bestMoveSoFar = currentDepthBestMove;
             lastScore = bestValue;
             emit_info_line(depth, bestValue, bestPvForDepth, searchStart);
