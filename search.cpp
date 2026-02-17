@@ -833,7 +833,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             session.searchStart
         );
         
-        if (stop_search.load(std::memory_order_relaxed) || bestValue >= MATE_SCORE - 50) {
+        if (stop_search.load(std::memory_order_relaxed)) {
             break;
         }
 
