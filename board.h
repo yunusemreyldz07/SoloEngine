@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <string>
 #include <vector>
-
 #include "types.h"
 
 extern char columns[];
@@ -140,6 +139,9 @@ public:
     int blackKingRow, blackKingCol;
     int enPassantCol;
     int halfMoveClock;  // Moves since last pawn move or capture (50-move rule)
+    int fullMoveNumber; // Incremented after Black's move
+
+    std::string fen; // Board FE Notation
 
     Board();
     void loadFromFEN(const std::string& fen);

@@ -2,6 +2,7 @@
 #include "bitboard.h"
 #include "search.h"
 #include "evaluation.h"
+#include "fen.h"
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -22,6 +23,43 @@ struct SearchLimit {
     int timeToThink = -1;
     int depthLimit = -1;
 };
+
+void genfens(Board& board, const std::string& line) {
+    std::stringstream ss(line);
+    std::string token;
+    ss >> token;
+
+    int count = 0;
+    uint64_t seed = 1804289383ULL;
+    std::string bookArg;
+
+    // format: genfens <N> [seed <S>] [book <bookfile or None>]
+    if (!(ss >> count)) {
+        std::cout << "info string genfens invalid count" << std::endl;
+    }
+    while (ss >> token) {
+         if (token == "seed") {
+            if (!(ss >> seed)) {
+                std::cout << "info string genfens invalid seed" << std::endl;
+                break;
+            }
+        } else if (token == "book") {
+            ss >> bookArg; // currently unused
+        } else {
+            // Ignore unknown trailing arguments to keep parser robust.
+        }
+    }
+
+    if (count <= 0) {
+        std::cout << "info string genfens count must be > 0" << std::endl;
+        return;
+    }
+
+    set_fen_random_seed(static_cast<uint32_t>(seed));
+    for (int i = 0; i < count; ++i) {
+        generate_fen(board, 0);
+    }
+}
 
 void bench() {
     const int benchDepth = 8;
@@ -140,6 +178,18 @@ static uint64_t perft(Board& board, int depth) {
 
 int handle_uci_commands(int argc, char* argv[]){
     std::cout.setf(std::ios::unitbuf);
+    
+    Board board;
+    auto normalize_cli_line = [](std::string s) {
+        if (s.size() >= 2) {
+            const char first = s.front();
+            const char last = s.back();
+            if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+                s = s.substr(1, s.size() - 2);
+            }
+        }
+        return s;
+    };
 
     if (argc > 1 && std::string(argv[1]) == "bench") {
         bench();
@@ -148,10 +198,32 @@ int handle_uci_commands(int argc, char* argv[]){
     else if (argc > 1 && std::string(argv[1]) == "--version") {
         std::cout << "SoloEngine version " << VERSION << std::endl;
         return 0;
+    } else if (argc > 1 && normalize_cli_line(argv[1]).rfind("genfens", 0) == 0) {
+        // One-shot CLI mode, e.g.:
+        // SoloEngine.exe "genfens 4 seed 123 book None" "quit"
+        if (normalize_cli_line(argv[1]) == "genfens") {
+            std::string line;
+            for (int i = 1; i < argc; ++i) {
+                std::string arg = normalize_cli_line(argv[i]);
+                if (arg == "quit") break;
+                if (!line.empty()) line += " ";
+                line += arg;
+            }
+            genfens(board, line);
+            return 0;
+        }
+
+        for (int i = 1; i < argc; ++i) {
+            std::string line = normalize_cli_line(argv[i]);
+            if (line.empty()) continue;
+            if (line == "quit") break;
+            if (line.rfind("genfens", 0) == 0) {
+                genfens(board, line);
+            }
+        }
+        return 0;
     }
 
-    
-    Board board;
     // Default TT size matches the UCI 'Hash' option default.
     if (globalTT.entryCount() == 0) globalTT.resize(128);
     std::vector<uint64_t> gameHistory;
@@ -375,6 +447,9 @@ int handle_uci_commands(int argc, char* argv[]){
                 }
                 searchRunning.store(false, std::memory_order_relaxed);
             });
+        }
+        else if (line.substr(0, 7) == "genfens") {
+            genfens(board, line);
         }
         else if (line == "quit") {
             request_stop_search();

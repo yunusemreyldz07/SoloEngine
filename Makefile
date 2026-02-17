@@ -3,6 +3,7 @@
 EXE := SoloEngine
 
 SOURCES := main.cpp \
+		   fen.cpp \
            uci.cpp \
 		   board.cpp \
            movegen.cpp \

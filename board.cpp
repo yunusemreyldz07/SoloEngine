@@ -1,5 +1,6 @@
 #include "board.h"
 #include "bitboard.h"
+#include "fen.h"
 #include <algorithm>
 #include <cctype>
 #include <iostream>
@@ -285,6 +286,10 @@ void Board::makeMove(Move& move) {
     if (enPassantCol != -1) {
         currentHash ^= z.epFile[enPassantCol];
     }
+
+    fullMoveNumber += isWhiteTurn ? 0 : 1;
+
+    fen = get_fen(*this);
 }
 
 void Board::unmakeMove(Move& move) {
@@ -388,9 +393,14 @@ void Board::unmakeMove(Move& move) {
     currentHash ^= z.castling[prevCastling];
 
     if (enPassantCol != -1) currentHash ^= z.epFile[enPassantCol];
+
+    fullMoveNumber -= isWhiteTurn ? 0 : 1;
+
+    fen = get_fen(*this);
 }
 
 void Board::loadFromFEN(const std::string& fen) {
+
     for (int i = 0; i < 6; i++) piece[i] = 0ULL;
     color[WHITE] = 0ULL;
     color[BLACK] = 0ULL;
@@ -458,11 +468,13 @@ void Board::loadFromFEN(const std::string& fen) {
     int fullMoveNumber = 1;
     if (ss >> halfMoveClockFromFen >> fullMoveNumber) {
         halfMoveClock = halfMoveClockFromFen;
+        this->fullMoveNumber = fullMoveNumber;
     } else {
         halfMoveClock = 0;
     }
-
     currentHash = position_key(*this);
+
+    this->fen = fen;
 }
 
 void printBoard(const Board& board) {
