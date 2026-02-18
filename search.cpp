@@ -719,7 +719,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
 
         // Futility Pruning
-        if (depth < 3 && !inCheck && move.promotion == 0 && is_quiet(move) && !moves_equal(move, singularMove)) {
+        if (depth < 3 && !inCheck && move.promotion == 0 && is_quiet(move)) {
             int futilityMargin = 100 + 60 * depth; // Margin increases with depth
             if (staticEval + futilityMargin < alpha) {
                 continue; // Skip this move, it's unlikely to raise the evaluation enough
@@ -733,7 +733,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             depth >= params.lmp_min_depth &&
             depth <= params.lmp_max_depth &&
             movesSearched >= lmpCount &&
-            !inCheck && move.promotion == 0 && move.capturedPiece == 0 && !moves_equal(move, singularMove)) {
+            !inCheck && move.promotion == 0 && move.capturedPiece == 0) {
             if (!move.isEnPassant) {
                 continue; // skip this move (late move pruning)
             }
@@ -741,7 +741,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
         // SEE PVS Pruning
         int seeThreshold = is_quiet(move) ? -67 * depth : -32 * depth * depth;
-        if (movesSearched > 0 && !staticExchangeEvaluation(board, move, seeThreshold) && !moves_equal(move, singularMove)) {
+        if (movesSearched > 0 && !staticExchangeEvaluation(board, move, seeThreshold)) {
             continue;
         }
 
