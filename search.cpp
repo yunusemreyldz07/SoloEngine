@@ -50,6 +50,7 @@ std::atomic<bool> use_tt(true);
 // End TIME CONTROL params
 
 static std::string move_to_uci(const Move& m);
+static constexpr int SEARCH_STACK_SIZE = 256;
 
 // HELPERS FOR ROOT SEARCH (52-268)
 namespace {
@@ -164,7 +165,8 @@ void search_moves_for_one_depth(
     std::vector<uint64_t>& localPositionHistory,
     int& bestValue,
     Move& currentDepthBestMove,
-    std::vector<Move>& bestPvForDepth
+    std::vector<Move>& bestPvForDepth,
+    SearchStackEntry* ss
 ) {
     for (Move move : possibleMoves) {
         if (stop_search.load(std::memory_order_relaxed)) {
@@ -176,7 +178,10 @@ void search_moves_for_one_depth(
         std::vector<Move> childPv;
         uint64_t newHash = position_key(board);
         localPositionHistory.push_back(newHash);
-        int val = -negamax(board, depth - 1, -beta, -alpha, ply + 1, localPositionHistory, childPv);
+        if (ss != nullptr && ply + 1 >= 0 && ply + 1 < SEARCH_STACK_SIZE) {
+            ss[ply + 1].hasSingularMove = false;
+        }
+        int val = -negamax(board, depth - 1, -beta, -alpha, ply + 1, localPositionHistory, childPv, ss);
         localPositionHistory.pop_back();
 
         board.unmakeMove(move);
@@ -239,7 +244,8 @@ int search_one_depth_with_aspiration(
     std::vector<uint64_t>& localPositionHistory,
     Move& bestMoveSoFar,
     int& lastScore,
-    const std::chrono::steady_clock::time_point& searchStart
+    const std::chrono::steady_clock::time_point& searchStart,
+    SearchStackEntry* ss
 ) {
     int delta = params.aspiration_delta; // Aspiration window margin
     int alpha = -VALUE_INF;
@@ -272,7 +278,8 @@ int search_one_depth_with_aspiration(
             localPositionHistory,
             bestValue,
             currentDepthBestMove,
-            bestPvForDepth
+            bestPvForDepth,
+            ss
         );
 
         if (stop_search.load(std::memory_order_relaxed)) {
@@ -522,7 +529,7 @@ int quiescence(Board& board, int alpha, int beta, int ply){
 }
 
 // Negamax
-int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& positionHistory, std::vector<Move>& pvLine) {
+int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& positionHistory, std::vector<Move>& pvLine, SearchStackEntry* ss) {
 
     Move badQuiets[256]; // Store bad quiet moves for move ordering
     int badQuietCount = 0;
@@ -538,6 +545,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     bool firstMove = true;
     const int alphaOrig = alpha;
     int maxEval = VALUE_NONE;
+    SearchStackEntry* cur = (ss != nullptr && ply >= 0 && ply < SEARCH_STACK_SIZE) ? &ss[ply] : nullptr;
+    const bool inSingularVerification = (cur != nullptr && cur->hasSingularMove);
 
     int kRow = 0;
     int kCol = 0;
@@ -615,10 +624,20 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
     }
 
+    const bool singularCandidateNode =
+        params.use_singular_extensions &&
+        depth >= params.se_depth &&
+        ttHit &&
+        ttDepth >= depth - params.se_tt_depth_subtractor &&
+        (ttFlag == EXACT || ttFlag == BETA) &&
+        std::abs(ttScore) < MATE_SCORE - 1000 &&
+        !inSingularVerification &&
+        cur != nullptr;
+    const bool preserveSingularNode = singularCandidateNode;
 
     // Reverse Futility Pruning 
     // Only makes sense in non-PV nodes (null-window), otherwise it can prune good PV continuations.
-    if ((beta - alpha) == 1 && depth < 9 && !inCheck && beta < MATE_SCORE - 100) {
+    if (!preserveSingularNode && (beta - alpha) == 1 && depth < 9 && !inCheck && beta < MATE_SCORE - 100) {
         
         // margin: for every depth, we allow a margin of 100 centipawns
         // The deeper we go, the larger the margin should be
@@ -642,7 +661,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         // Check if side to move is currently in check
         bool inCheck = is_square_attacked(board, kingRow, kingCol, !board.isWhiteTurn);
 
-        if (!inCheck && depth >= 3 && (beta - alpha == 1)) {
+        if (!preserveSingularNode && !inCheck && depth >= 3 && (beta - alpha == 1)) {
             // Make a "null move" by flipping side to move
             const int prevEnPassantCol = board.enPassantCol;
 
@@ -656,7 +675,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             // Reduction factor R (typical values 2..3). Ensure we don't search negative depth
             int R = std::min(3, std::max(1, depth - 2));
             std::vector<Move> nullPv;
-            int nullScore = -negamax(board, depth - 1 - R, -beta, -beta + 1, ply + 1, positionHistory, nullPv);
+            if (ss != nullptr && ply + 1 >= 0 && ply + 1 < SEARCH_STACK_SIZE) {
+                ss[ply + 1].hasSingularMove = false;
+            }
+            int nullScore = -negamax(board, depth - 1 - R, -beta, -beta + 1, ply + 1, positionHistory, nullPv, ss);
 
             // Undo positionHistory change and null move
             if (!positionHistory.empty()) positionHistory.pop_back();
@@ -691,6 +713,9 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     });
     
     for (Move& move : possibleMoves) {
+        if (inSingularVerification && cur != nullptr && moves_equal(move, cur->singularMove)) {
+            continue;
+        }
 
         // Futility Pruning
         if (depth < 3 && !inCheck && move.promotion == 0 && is_quiet(move)) {
@@ -719,13 +744,43 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             continue;
         }
 
+        int extension = 0;
+        if (singularCandidateNode && moves_equal(move, ttMove)) {
+            const int marginDen = std::max(1, params.se_margin_den);
+            const int singularBeta = ttScore - (depth * params.se_margin_num) / marginDen;
+            const int singularDepth = std::max(1, (depth - 1) / 2);
+            std::vector<Move> dummyPv;
+
+            cur->singularMove = move;
+            cur->hasSingularMove = true;
+            const int singularScore = negamax(
+                board,
+                singularDepth,
+                singularBeta - 1,
+                singularBeta,
+                ply,
+                positionHistory,
+                dummyPv,
+                ss
+            );
+            cur->hasSingularMove = false;
+
+            if (singularScore < singularBeta) {
+                extension = 1;
+            }
+        }
+
         board.makeMove(move);
         movesSearched++;
         std::vector<Move> childPv;
+        const int childDepth = depth - 1 + extension;
         uint64_t newHash = position_key(board);
         positionHistory.push_back(newHash);
         if (firstMove){
-            eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, positionHistory, childPv);
+            if (ss != nullptr && ply + 1 >= 0 && ply + 1 < SEARCH_STACK_SIZE) {
+                ss[ply + 1].hasSingularMove = false;
+            }
+            eval = -negamax(board, childDepth, -beta, -alpha, ply + 1, positionHistory, childPv, ss);
             firstMove = false;
         }
         else {
@@ -738,21 +793,30 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
                 if (reduction < 0) reduction = 0;
-                if (reduction > depth - 1) reduction = depth - 1;
-                if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we dont search negative depth
+                if (reduction > childDepth - 1) reduction = childDepth - 1;
+                if (childDepth - reduction < 1) reduction = childDepth - 1; // Ensure we dont search negative depth
             }
-            int lmrDepth = std::max(0, depth - 1 - reduction);
+            int lmrDepth = std::max(0, childDepth - reduction);
 
-            eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, positionHistory, nullWindowPv);
+            if (ss != nullptr && ply + 1 >= 0 && ply + 1 < SEARCH_STACK_SIZE) {
+                ss[ply + 1].hasSingularMove = false;
+            }
+            eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, positionHistory, nullWindowPv, ss);
 
             if (reduction > 0 && eval > alpha) {
                 // Re-search at full depth if reduced search suggests a better move
-                eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, positionHistory, childPv);
+                if (ss != nullptr && ply + 1 >= 0 && ply + 1 < SEARCH_STACK_SIZE) {
+                    ss[ply + 1].hasSingularMove = false;
+                }
+                eval = -negamax(board, childDepth, -alpha - 1, -alpha, ply + 1, positionHistory, childPv, ss);
             }
 
             if (eval > alpha && eval < beta) {
                 childPv.clear();
-                eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, positionHistory, childPv);
+                if (ss != nullptr && ply + 1 >= 0 && ply + 1 < SEARCH_STACK_SIZE) {
+                    ss[ply + 1].hasSingularMove = false;
+                }
+                eval = -negamax(board, childDepth, -beta, -alpha, ply + 1, positionHistory, childPv, ss);
             } else {
                 childPv.clear();
             }
@@ -815,6 +879,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
     if (session.possibleMoves.empty()) return {};
     if (session.possibleMoves.size() == 1) return session.possibleMoves[0];
 
+    SearchStackEntry searchStack[SEARCH_STACK_SIZE] = {};
     int bestValue = std::numeric_limits<int>::min() / 2; // Best score found at the current depth
 
     for (int depth = 1; depth <= session.effectiveMaxDepth; depth++) {
@@ -830,7 +895,8 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             session.localPositionHistory,
             session.bestMoveSoFar,
             session.lastScore,
-            session.searchStart
+            session.searchStart,
+            searchStack
         );
         
         if (stop_search.load(std::memory_order_relaxed)) {

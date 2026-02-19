@@ -19,11 +19,21 @@ struct SearchParams {
 	bool use_lmp = true;          // Late Move Pruning
 	bool use_aspiration = true;   // Aspiration windows in iterative deepening
 	bool use_qsearch_see = true; // SEE-based pruning inside quiescence
+	bool use_singular_extensions = true; // Singular extension search
 
 	int lmp_min_depth = 4;        // Minimum depth to consider LMP
 	int lmp_max_depth = 8;        // Maximum depth to consider LMP
 
 	int aspiration_delta = 50;    // Initial aspiration half-window in centipawns
+	int se_depth = 8;             // Minimum depth to try singular extension
+	int se_tt_depth_subtractor = 2; // TT depth margin for singular candidate
+	int se_margin_num = 5;        // singularBeta numerator: depth * num / den
+	int se_margin_den = 8;        // singularBeta denominator
+};
+
+struct SearchStackEntry {
+	Move singularMove;
+	bool hasSingularMove = false;
 };
 
 const SearchParams& get_search_params();
@@ -37,7 +47,16 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
 
 // Search functions (PV enabled)
 int quiescence(Board& board, int alpha, int beta, int ply);
-int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& positionHistory, std::vector<Move>& pvLine);
+int negamax(
+	Board& board,
+	int depth,
+	int alpha,
+	int beta,
+	int ply,
+	std::vector<uint64_t>& positionHistory,
+	std::vector<Move>& pvLine,
+	SearchStackEntry* ss
+);
 
 // movetimeMs > 0: time-limited, effectively unlimited depth (search until time runs out).
 // movetimeMs <= 0: depth-limited, no time limit.
