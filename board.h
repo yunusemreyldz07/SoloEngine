@@ -204,7 +204,7 @@ inline bool is_quiet(Move m) {
 }
 
 inline bool is_quiet(const Board& board, Move m) {
-    return !is_capture(m) && !is_castling(m) && !is_promotion(board, m);
+    return !is_capture(m) && !is_promotion(board, m);
 }
 
 inline bool white_to_move(const Board& b) { return b.stm == WHITE; }
