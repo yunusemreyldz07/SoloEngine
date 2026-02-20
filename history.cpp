@@ -17,8 +17,8 @@ void update_history(int color, int fromSq, int toSq, int depth, const Move badQu
     bestScore += bonus - (bestScore * std::abs(bonus)) / HISTORY_MAX;
 
     for (int i = 0; i < badQuietCount; ++i) {
-        int badFrom = row_col_to_sq(badQuiets[i].fromRow, badQuiets[i].fromCol);
-        int badTo = row_col_to_sq(badQuiets[i].toRow, badQuiets[i].toCol);
+        int badFrom = from_sq(badQuiets[i]);
+        int badTo = to_sq(badQuiets[i]);
 
         if (badFrom == fromSq && badTo == toSq) {
             continue;

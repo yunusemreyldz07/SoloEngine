@@ -12,8 +12,6 @@ extern char columns[];
 
 // Piece constants
 // Convention: empty = 0, white pieces = 1-6, black pieces = 7-12
-// Piece type = ((piece - 1) % 6) + 1 for non-empty pieces
-// Color = (piece >= 7) ? BLACK : WHITE for non-empty pieces
 inline constexpr int EMPTY = 0;
 
 // Colors
@@ -47,8 +45,8 @@ inline constexpr int KING   = 6;
 // Search constants
 inline constexpr int MAX_PLY = 128;
 inline constexpr int MATE_SCORE = 100000;
-inline constexpr int VALUE_INF = 2000000000;   // Infinite score for alpha-beta bounds
-inline constexpr int VALUE_NONE = -200000;     // Initial value before any move is searched
+inline constexpr int VALUE_INF = 2000000000;
+inline constexpr int VALUE_NONE = -200000;
 
 // Move ordering scores
 inline constexpr int SCORE_TT_MOVE      = 1000000;
@@ -59,7 +57,6 @@ inline constexpr int SCORE_PROMO_ROOK   = 80000;
 inline constexpr int SCORE_PROMO_BISHOP = -70000;
 inline constexpr int SCORE_PROMO_KNIGHT = -60000;
 
-// Helper functions for new piece encoding
 inline constexpr int piece_type(int piece) {
     return (piece == 0) ? 0 : ((piece - 1) % 6) + 1;
 }
@@ -72,80 +69,98 @@ inline constexpr int make_piece(int type, int color) {
     return (color == WHITE) ? type : type + 6;
 }
 
-// Color helper
 inline constexpr int other_color(int c) { return c ^ 1; }
 
-extern int pieces_on_board[14]; // Simplified piece count for endgame detection (2 knights, 2 bishops, 2 rooks, 1 queen per side)
+extern int pieces_on_board[14];
 
-struct Move {
-    int fromRow, fromCol;
-    int toRow, toCol;
-    int capturedPiece;
-    int promotion;
-    int pieceType;  // Moving piece type (1-6: pawn-king)
+// Move representation: 16 bits total
+// Bits 0-5: from square (0-63)
+// Bits 6-11: to square (0-63)
+// Bits 12-13: Promoted piece type (0=none/knight, 1=bishop, 2=rook, 3=queen)
+// Bits 14-15: flags (00=normal, 01=en passant, 10=castling, 11=capture)
+using Move = uint16_t;
 
-    bool prevW_KingSide;
-    bool prevW_QueenSide;
-    bool prevB_KingSide;
-    bool prevB_QueenSide;
+inline constexpr uint8_t MOVE_FLAG_NORMAL     = 0;
+inline constexpr uint8_t MOVE_FLAG_EN_PASSANT = 1;
+inline constexpr uint8_t MOVE_FLAG_CASTLING   = 2;
+inline constexpr uint8_t MOVE_FLAG_CAPTURE    = 3;
 
-    int prevEnPassantCol;
-    int prevHalfMoveClock;  // For 50-move rule undo
+inline constexpr uint8_t CASTLE_WHITE_K = 1;
+inline constexpr uint8_t CASTLE_WHITE_Q = 2;
+inline constexpr uint8_t CASTLE_BLACK_K = 4;
+inline constexpr uint8_t CASTLE_BLACK_Q = 8;
 
-    bool isEnPassant;
-    bool isCastling;
+inline int from_sq(Move m) { return m & 0x3F; }
+inline int to_sq(Move m) { return (m >> 6) & 0x3F; }
+inline int promotion_code(Move m) { return (m >> 12) & 0x3; }
+inline int flags(Move m) { return (m >> 14) & 0x3; }
 
-    Move();
+inline int promo_code_from_piece_type(int pt) {
+    switch (pt) {
+        case KNIGHT: return 0;
+        case BISHOP: return 1;
+        case ROOK: return 2;
+        case QUEEN: return 3;
+        default: return 0;
+    }
+}
 
-    // Helper methods for square-based access
-    int from_sq() const { return (7 - fromRow) * 8 + fromCol; }
-    int to_sq() const { return (7 - toRow) * 8 + toCol; }
+inline int piece_type_from_promo_code(int code) {
+    switch (code & 0x3) {
+        case 0: return KNIGHT;
+        case 1: return BISHOP;
+        case 2: return ROOK;
+        case 3: return QUEEN;
+        default: return KNIGHT;
+    }
+}
+
+inline Move make_move(int from, int to, int promoPieceType = 0, int moveFlags = MOVE_FLAG_NORMAL) {
+    const int promo = promo_code_from_piece_type(promoPieceType);
+    return static_cast<Move>((from & 0x3F) | ((to & 0x3F) << 6) | ((promo & 0x3) << 12) | ((moveFlags & 0x3) << 14));
+}
+
+inline bool is_en_passant(Move m) { return flags(m) == MOVE_FLAG_EN_PASSANT; }
+inline bool is_castling(Move m) { return flags(m) == MOVE_FLAG_CASTLING; }
+inline bool is_capture(Move m) { return flags(m) == MOVE_FLAG_CAPTURE || flags(m) == MOVE_FLAG_EN_PASSANT; }
+inline bool moves_equal(Move a, Move b) { return a == b; }
+
+struct Board;
+
+struct UndoState {
+    Move move = 0;
+    int8_t movedPiece = 0;
+    int8_t capturedPiece = 0;
+    int8_t captureSquare = -1;
+    int8_t rookFrom = -1;
+    int8_t rookTo = -1;
+    bool wasEnPassant = false;
+    bool wasCastling = false;
+    uint8_t prevCastling = 0;
+    int8_t prevEnPassant = -1;
+    int8_t prevHalfMoveClock = 0;
+    uint64_t prevHash = 0;
 };
 
-// Compare two moves for equality (from/to squares and promotion)
-inline bool moves_equal(const Move& a, const Move& b) {
-    return a.fromRow == b.fromRow && a.fromCol == b.fromCol &&
-           a.toRow == b.toRow && a.toCol == b.toCol &&
-           a.promotion == b.promotion;
-}
-
-// Move type helpers
-inline bool is_quiet(const Move& m) {
-    return m.capturedPiece == 0 && !m.isEnPassant && m.promotion == 0;
-}
-
-inline bool is_capture(const Move& m) {
-    return m.capturedPiece != 0 || m.isEnPassant;
-}
-
-class Board {
-public:
-    int pieces_otb[14];
-    bool isWhiteTurn;
-
+struct Board {
     Bitboard piece[6];
     Bitboard color[2];
+    uint64_t hash;
 
-    int mailbox[64]; // Redundant mailbox for O(1) piece lookups
-    uint64_t currentHash; // Incremental Zobrist hash of the current position
-    
-    std::vector<Move> moveHistory; // History of moves for continuation history
+    uint8_t castling;
+    int8_t enPassant; // square index [0..63], -1 if none
+    uint8_t stm;      // side to move: 0 = white, 1 = black
 
-    bool whiteCanCastleKingSide;
-    bool whiteCanCastleQueenSide;
-    bool blackCanCastleKingSide;
-    bool blackCanCastleQueenSide;
+    int8_t mailbox[64];
+    int8_t halfMoveClock;
 
-    int whiteKingRow, whiteKingCol;
-    int blackKingRow, blackKingCol;
-    int enPassantCol;
-    int halfMoveClock;  // Moves since last pawn move or capture (50-move rule)
+    std::vector<UndoState> undoStack;
 
     Board();
-    void loadFromFEN(const std::string& fen);
-    void resetBoard();
-    void makeMove(Move& move);
-    void unmakeMove(Move& move);
+    void reset();
+    void loadFEN(const std::string& fen);
+    void makeMove(Move move);
+    void unmakeMove(Move move);
 };
 
 inline int row_col_to_sq(int row, int col) {
@@ -164,9 +179,38 @@ inline int piece_at_sq(const Board& board, int sq) {
     return board.mailbox[sq];
 }
 
-// Board state helpers
-inline int side_to_move(const Board& b) { return b.isWhiteTurn ? WHITE : BLACK; }
-inline int opponent(const Board& b) { return b.isWhiteTurn ? BLACK : WHITE; }
+inline int piece(const Board& board, Move m) {
+    return board.mailbox[from_sq(m)];
+}
+
+inline bool is_promotion(const Board& board, Move m) {
+    const int moving = piece(board, m);
+    if (piece_type(moving) != PAWN) return false;
+    const int to = to_sq(m);
+    const int toRank = to / 8;
+    return (piece_color(moving) == WHITE) ? (toRank == 7) : (toRank == 0);
+}
+
+inline int promotionPiece(Move m) {
+    return piece_type_from_promo_code(promotion_code(m));
+}
+
+inline int promotion_piece(const Board& board, Move m) {
+    return is_promotion(board, m) ? piece_type_from_promo_code(promotion_code(m)) : 0;
+}
+
+inline bool is_quiet(Move m) {
+    return flags(m) == MOVE_FLAG_NORMAL && promotion_code(m) == 0;
+}
+
+inline bool is_quiet(const Board& board, Move m) {
+    return !is_capture(m) && !is_castling(m) && !is_promotion(board, m);
+}
+
+inline bool white_to_move(const Board& b) { return b.stm == WHITE; }
+inline int side_to_move(const Board& b) { return b.stm; }
+inline int opponent(const Board& b) { return b.stm ^ 1; }
+inline bool can_castle(const Board& b, uint8_t right) { return (b.castling & right) != 0; }
 
 inline bool king_square(const Board& board, bool white, int& outRow, int& outCol) {
     Bitboard k = board.piece[KING - 1] & board.color[white ? WHITE : BLACK];
@@ -185,6 +229,7 @@ std::vector<Move> get_capture_moves(const Board& board);
 bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttacker);
 int see_exchange(const Board& board, const Move& move);
 int staticExchangeEvaluation(const Board& board, const Move& move, int threshold);
+
 // Utility functions
 void printBoard(const Board& board);
 Move uci_to_move(const std::string& uci);
@@ -205,21 +250,16 @@ int piece_to_zobrist_index(int piece);
 uint64_t position_key(const Board& board);
 bool is_threefold_repetition(const std::vector<uint64_t>& positionHistory);
 
-// Draw detection
 inline bool is_fifty_move_draw(const Board& board) {
-    return board.halfMoveClock >= 100;  // 100 half-moves = 50 full moves
+    return board.halfMoveClock >= 100;
 }
 
-// Insufficient material detection
-// Returns true only for positions where checkmate is IMPOSSIBLE
-// Conservative: K vs K, K+B vs K, K+N vs K
-// Does NOT include K+B+N vs K (can mate) or K+B vs K+B same color (can mate in corners with help)
 bool is_insufficient_material(const Board& board);
 
 enum TTFlag {
-    EXACT,      // Exact score
-    ALPHA,      // Upper bound (fail-low)
-    BETA        // Lower bound (fail-high)
+    EXACT,
+    ALPHA,
+    BETA
 };
 
 class TranspositionTable {
@@ -227,14 +267,10 @@ public:
     TranspositionTable() : table(nullptr), size(0) {}
     ~TranspositionTable() { delete[] table; }
 
-    // Resize the table to given size in MB (count = bytes / sizeof(entry)).
     void resize(int mbSize);
     void clear();
-
-    // Lockless + thread-safe: write data first, then publish key with release semantics.
     void store(uint64_t hash, int score, int depth, TTFlag flag, const Move& bestMove);
 
-    // Backward-compatible overload (older call sites passing an int)
     void store(uint64_t hash, int score, int depth, int flag, const Move& bestMove) {
         store(hash, score, depth, static_cast<TTFlag>(flag), bestMove);
     }
