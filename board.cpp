@@ -443,20 +443,21 @@ void printBoard(const Board& board) {
 }
 
 Move uci_to_move(const std::string& uci, const Board& board) {
+    // (a1=0, h8=63)
     int fromCol = uci[0] - 'a';
-    int fromRow = 8 - (uci[1] - '0'); // '1' -> 7, '8' -> 0
-    int fromSq = fromRow * 8 + fromCol;
+    int fromSq = (uci[1] - '1') * 8 + fromCol;
+    int fromRow = sq_to_row(fromSq);
 
     int toCol = uci[2] - 'a';
-    int toRow = 8 - (uci[3] - '0');
-    int toSq = toRow * 8 + toCol;
+    int toSq = (uci[3] - '1') * 8 + toCol;
+    int toRow = sq_to_row(toSq);
 
     int flags = 0;
     int movingPiece = board.mailbox[fromSq];
     int targetPiece = board.mailbox[toSq];
 
     if (uci.length() == 5) {
-        // Promotion — also check if it's a capture
+        // Promotion
         char promoChar = uci[4];
         int promoBase = 0;
         switch (promoChar) {
@@ -472,7 +473,6 @@ Move uci_to_move(const std::string& uci, const Board& board) {
         if (std::abs(fromRow - toRow) == 2) {
             flags = FLAG_DOUBLE_PAWN;
         } else if (fromCol != toCol && targetPiece == 0) {
-            // Diagonal pawn move to empty square = en passant
             flags = FLAG_EN_PASSANT;
         } else if (targetPiece != 0) {
             flags = FLAG_CAPTURE;
