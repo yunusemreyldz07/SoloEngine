@@ -811,8 +811,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         globalTT.store(currentHash, maxEval, depth, flag, bestMove);
     }
 
-    if (!inCheck && !is_capture(bestMove) && !(flag == ALPHA && eval > staticEval) && !(flag == BETA && eval < staticEval)) {
-        updatePawnCorrectionHistory(&board, depth, eval - staticEval);
+    if (!inCheck && !is_capture(bestMove) && !(flag == ALPHA && maxEval >= staticEval) && !(flag == BETA && maxEval <= staticEval)) {
+        updatePawnCorrectionHistory(&board, depth, maxEval - staticEval);
     } 
 
     return maxEval;
