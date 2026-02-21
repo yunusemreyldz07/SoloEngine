@@ -178,6 +178,7 @@ struct UndoState {
     uint8_t castling;     // Castling rights before the move (4 bits: KQkq)
     int8_t enPassant;     // EP column copy (-1 or 0-7)
     int8_t halfMoveClock; // 50 move rule counter before the move
+    uint64_t hash;         // Position hash before the move (for repetition detection)
 };
 
 struct Board {
