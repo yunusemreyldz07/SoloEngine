@@ -123,7 +123,7 @@ SearchSession init_search_session(
     };
 
     configure_time_limit(session.movetimeMs);
-    session.possibleMoves = get_all_moves(session.board, session.board.isWhiteTurn);
+    session.possibleMoves = get_all_moves(session.board, session.board.stm == WHITE);
     order_moves(session.board, session.possibleMoves);
     session.localPositionHistory = init_local_history(positionHistory);
     if (!session.possibleMoves.empty()) {
@@ -135,8 +135,8 @@ SearchSession init_search_session(
 
 void reorder_with_pv(const Board& board, std::vector<Move>& possibleMoves, const Move& bestMoveSoFar) {
     std::stable_sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
-        const bool aIsPV = (a.fromRow == bestMoveSoFar.fromRow && a.fromCol == bestMoveSoFar.fromCol && a.toRow == bestMoveSoFar.toRow && a.toCol == bestMoveSoFar.toCol && a.promotion == bestMoveSoFar.promotion);
-        const bool bIsPV = (b.fromRow == bestMoveSoFar.fromRow && b.fromCol == bestMoveSoFar.fromCol && b.toRow == bestMoveSoFar.toRow && b.toCol == bestMoveSoFar.toCol && b.promotion == bestMoveSoFar.promotion);
+        const bool aIsPV = (move_from(a) == move_from(bestMoveSoFar) && move_to(a) == move_to(bestMoveSoFar) && get_promotion_type(a) == get_promotion_type(bestMoveSoFar));
+        const bool bIsPV = (move_from(b) == move_from(bestMoveSoFar) && move_to(b) == move_to(bestMoveSoFar) && get_promotion_type(b) == get_promotion_type(bestMoveSoFar));
 
         // Strict-weak-ordering: comparator must be irreflexive (never a < a).
         if (aIsPV != bIsPV) return aIsPV;
@@ -146,11 +146,11 @@ void reorder_with_pv(const Board& board, std::vector<Move>& possibleMoves, const
         if (sa != sb) return sa > sb;
 
         // Deterministic tie-breaker.
-        if (a.fromRow != b.fromRow) return a.fromRow < b.fromRow;
-        if (a.fromCol != b.fromCol) return a.fromCol < b.fromCol;
-        if (a.toRow != b.toRow) return a.toRow < b.toRow;
-        if (a.toCol != b.toCol) return a.toCol < b.toCol;
-        return a.promotion < b.promotion;
+        if (sq_to_row(move_from(a)) != sq_to_row(move_from(b))) return sq_to_row(move_from(a)) < sq_to_row(move_from(b));
+        if (sq_to_col(move_from(a)) != sq_to_col(move_from(b))) return sq_to_col(move_from(a)) < sq_to_col(move_from(b));
+        if (sq_to_row(move_to(a)) != sq_to_row(move_to(b))) return sq_to_row(move_to(a)) < sq_to_row(move_to(b));
+        if (sq_to_col(move_to(a)) != sq_to_col(move_to(b))) return sq_to_col(move_to(a)) < sq_to_col(move_to(b));
+        return get_promotion_type(a) < get_promotion_type(b);
     });
 }
 
@@ -373,12 +373,12 @@ bool should_stop() {
 
 static std::string move_to_uci(const Move& m) {
     std::string s;
-    s += columns[m.fromCol];
-    s += static_cast<char>('0' + (8 - m.fromRow));
-    s += columns[m.toCol];
-    s += static_cast<char>('0' + (8 - m.toRow));
-    if (m.promotion != 0) {
-        switch (m.promotion) {
+    s += columns[sq_to_col(move_from(m))];
+    s += static_cast<char>('0' + (8 - sq_to_row(move_from(m))));
+    s += columns[sq_to_col(move_to(m))];
+    s += static_cast<char>('0' + (8 - sq_to_row(move_to(m))));
+    if (get_promotion_type(m) != -1) {
+        switch (get_promotion_type(m)) {
             case QUEEN: s += 'q'; break;
             case ROOK: s += 'r'; break;
             case BISHOP: s += 'b'; break;
@@ -393,10 +393,11 @@ const int SEE_MOVE_ORDERING_THRESHOLD = -82; // ~minus pawn
 
 int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove) {
     int moveScore = 0;
-    int from = move.from_sq();
-    int to = move.to_sq();
+    int flags = move_flags(move);
+    int from = move_from(move);
+    int to = move_to(move);
     if (is_capture(move)) {
-        int victimPiece = move.isEnPassant ? PAWN : piece_type(move.capturedPiece);
+        int victimPiece = flags == FLAG_EN_PASSANT ? PAWN : piece_type(board.mailbox[to]);
         int victimValue = PIECE_VALUES[victimPiece];
 
         int attackerPiece = piece_at_sq(board, from);
@@ -420,8 +421,8 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
         moveScore += SCORE_TT_MOVE; // TT move always has the highest priority
     }
 
-    if (move.promotion != 0) {
-        switch (move.promotion){
+    if (get_promotion_type(move) != -1) {
+        switch (get_promotion_type(move)){
             case QUEEN: moveScore += SCORE_PROMO_QUEEN; break;
             case ROOK: moveScore += SCORE_PROMO_ROOK; break;
             case BISHOP: moveScore += SCORE_PROMO_BISHOP; break;
@@ -430,14 +431,14 @@ int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove)
         }
     }
 
-    if (move.isCastling) {
+    if (move_flags(move) == FLAG_CASTLE_KING || move_flags(move) == FLAG_CASTLE_QUEEN) {
         // Castling is good for KING safety, but keep the bonus modest so we don't prefer it over
         // urgent defensive moves (like saving a hanging piece) at shallow depth
         moveScore += 500;
     }
 
-    if (get_history_score(board.isWhiteTurn ? 0 : 1, from, to) != 0) {
-        moveScore += get_history_score(board.isWhiteTurn ? 0 : 1, from, to);
+    if (get_history_score(board.stm == WHITE ? 0 : 1, from, to) != 0) {
+        moveScore += get_history_score(board.stm == WHITE ? 0 : 1, from, to);
     }
 
     return moveScore;
@@ -489,7 +490,7 @@ int quiescence(Board& board, int alpha, int beta, int ply){
 
         // Delta Pruning
         // If even the most optimistic evaluation (stand_pat + value of captured piece + margin) is worse than alpha, skip 
-        int capturedValue = PIECE_VALUES[piece_type(move.capturedPiece)];
+        int capturedValue = PIECE_VALUES[piece_type(move_flags(move) == FLAG_EN_PASSANT ? PAWN : board.mailbox[move_to(move)])];
         if (stand_pat + capturedValue + 200 < alpha) {
             continue; 
         }
@@ -497,13 +498,13 @@ int quiescence(Board& board, int alpha, int beta, int ply){
         board.makeMove(move);
         int kingRow = 0;
         int kingCol = 0;
-        bool checkBlackKing = board.isWhiteTurn;
+        bool checkBlackKing = board.stm == WHITE;
         if (!king_square(board, !checkBlackKing, kingRow, kingCol)) {
             board.unmakeMove(move);
             continue;
         }
         
-        if (is_square_attacked(board, kingRow, kingCol, board.isWhiteTurn)) {
+        if (is_square_attacked(board, kingRow, kingCol, board.stm == WHITE)) {
             board.unmakeMove(move);
             continue; // illegal move
         }
@@ -541,11 +542,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
     int kRow = 0;
     int kCol = 0;
-    if (!king_square(board, board.isWhiteTurn, kRow, kCol)) {
+    if (!king_square(board, board.stm == WHITE, kRow, kCol)) {
         pvLine.clear();
         return 0;
     }
-    bool inCheck = is_square_attacked(board, kRow, kCol, !board.isWhiteTurn);
+    bool inCheck = is_square_attacked(board, kRow, kCol, !(board.stm == WHITE));
 
     if (inCheck) {
         depth++; // Check extension
@@ -635,19 +636,19 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     {
         int kingRow = 0;
         int kingCol = 0;
-        if (!king_square(board, board.isWhiteTurn, kingRow, kingCol)) {
+        if (!king_square(board, board.stm == WHITE, kingRow, kingCol)) {
             pvLine.clear();
             return 0;
         }
         // Check if side to move is currently in check
-        bool inCheck = is_square_attacked(board, kingRow, kingCol, !board.isWhiteTurn);
+        bool inCheck = is_square_attacked(board, kingRow, kingCol, !(board.stm == WHITE));
 
         if (!inCheck && depth >= 3 && (beta - alpha == 1)) {
             // Make a "null move" by flipping side to move
-            const int prevEnPassantCol = board.enPassantCol;
+            const int prevEnPassantCol = board.enPassant;
 
-            board.enPassantCol = -1; // En passant rights vanish after a null move.
-            board.isWhiteTurn = !board.isWhiteTurn;
+            board.enPassant = -1; // En passant rights vanish after a null move.
+            board.stm = other_color(board.stm);
 
             // Push new position key to positionHistory so threefold repetition checks remain correct
             uint64_t nullHash = position_key(board);
@@ -660,8 +661,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
             // Undo positionHistory change and null move
             if (!positionHistory.empty()) positionHistory.pop_back();
-            board.isWhiteTurn = !board.isWhiteTurn;
-            board.enPassantCol = prevEnPassantCol;
+            board.stm = other_color(board.stm);
+            board.enPassant = prevEnPassantCol;
 
             if (nullScore >= beta) {
                 pvLine.clear();
@@ -670,16 +671,16 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         }
     }
 
-    std::vector<Move> possibleMoves = get_all_moves(board, board.isWhiteTurn);
+    std::vector<Move> possibleMoves = get_all_moves(board, board.stm == WHITE);
     Move bestMove = possibleMoves.empty() ? Move() : possibleMoves[0];
 
     if (possibleMoves.empty()) {
         int kingRow = 0;
         int kingCol = 0;
-        if (!king_square(board, board.isWhiteTurn, kingRow, kingCol)) {
+        if (!king_square(board, board.stm == WHITE, kingRow, kingCol)) {
             return 0;
         }
-        if (is_square_attacked(board, kingRow, kingCol, !board.isWhiteTurn)) 
+        if (is_square_attacked(board, kingRow, kingCol, !(board.stm == WHITE))) 
             return -MATE_SCORE + ply; // Mate
         return 0; // Stalemate
     }
@@ -693,7 +694,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
     for (Move& move : possibleMoves) {
 
         // Futility Pruning
-        if (depth < 3 && !inCheck && move.promotion == 0 && is_quiet(move)) {
+        if (depth < 3 && !inCheck && get_promotion_type(move) == -1 && is_quiet(move)) {
             int futilityMargin = 100 + 60 * depth; // Margin increases with depth
             if (staticEval + futilityMargin < alpha) {
                 continue; // Skip this move, it's unlikely to raise the evaluation enough
@@ -707,8 +708,8 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             depth >= params.lmp_min_depth &&
             depth <= params.lmp_max_depth &&
             movesSearched >= lmpCount &&
-            !inCheck && move.promotion == 0 && move.capturedPiece == 0) {
-            if (!move.isEnPassant) {
+            !inCheck && get_promotion_type(move) == -1 && piece_at_sq(board, move_to(move)) == EMPTY) {
+            if (!(move_flags(move) == FLAG_EN_PASSANT)) {
                 continue; // skip this move (late move pruning)
             }
         }
@@ -774,10 +775,10 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
         if (beta <= alpha) {
             // Update history
-            int from = move.from_sq();
-            int to = move.to_sq();
+            int from = move_from(move);
+            int to = move_to(move);
             if (from >= 0 && from < 64 && to >= 0 && to < 64) {
-                update_history(board.isWhiteTurn ? 0 : 1, from, to, depth, badQuiets, badQuietCount);
+                update_history(board.stm == WHITE ? 0 : 1, from, to, depth, badQuiets, badQuietCount);
             }
             
             break; // beta cutoff

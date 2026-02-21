@@ -89,51 +89,49 @@ inline bool is_pawn_attack_possible(const Board& board, bool attackerIsWhite, in
 }
 } // namespace
 
-Move::Move()
-    : fromRow(0), fromCol(0), toRow(0), toCol(0), capturedPiece(0), promotion(0), pieceType(0),
-      prevW_KingSide(false), prevW_QueenSide(false), prevB_KingSide(false), prevB_QueenSide(false),
-      prevEnPassantCol(-1), prevHalfMoveClock(0), isEnPassant(false), isCastling(false) {}
-
 Board::Board() {
-    resetBoard();
+    reset();
 }
 
-void Board::resetBoard() {
+void Board::reset() {
     set_start_position(*this);
 
-    whiteCanCastleKingSide = true;
-    whiteCanCastleQueenSide = true;
-    blackCanCastleKingSide = true;
-    blackCanCastleQueenSide = true;
-    isWhiteTurn = true;
-    enPassantCol = -1;
+    castling = CASTLE_WK | CASTLE_WQ | CASTLE_BK | CASTLE_BQ; // All castling rights available
+    stm = WHITE;
+    enPassant = -1;
     halfMoveClock = 0;
-    whiteKingRow = 7; whiteKingCol = 4;
-    blackKingRow = 0; blackKingCol = 4;
+    std::vector<UndoState> undoStack;
 
-    currentHash = position_key(*this);
+    hash = position_key(*this);
 }
 
 void Board::makeMove(Move& move) {
+    int from = move & 0x3F;               // First 6 bit
+    int to = (move >> 6) & 0x3F;          // Other 6 bit
+    int flags = (move >> 12) & 0xF;       // Last 4 bits
+    int promo = get_promotion_type(move); // KNIGHT/BISHOP/ROOK/QUEEN or -1 if no promotion
+
     const Zobrist& z = zobrist();
 
-    move.prevW_KingSide = whiteCanCastleKingSide;
-    move.prevW_QueenSide = whiteCanCastleQueenSide;
-    move.prevB_KingSide = blackCanCastleKingSide;
-    move.prevB_QueenSide = blackCanCastleQueenSide;
-    move.prevEnPassantCol = enPassantCol;
-    move.prevHalfMoveClock = halfMoveClock;
+    UndoState st;
+    st.castling = castling;   
+    st.enPassant = enPassant;
+    st.halfMoveClock = halfMoveClock;
 
-    move.isEnPassant = false;
-    move.isCastling = false;
+    if (flags == 5) { // En passant capture 
+        st.capturedPiece = (stm == 0) ? (PAWN + 6) : PAWN; 
+    } else {
+        st.capturedPiece = mailbox[to]; 
+    }
 
-    const int fromSq = move.from_sq();
-    const int toSq = move.to_sq();
-    const int movingPiece = mailbox[fromSq];
+    undoStack.push_back(st);
+
+    const int fromSq = move_from(move);
+    const int toSq = move_to(move);
+    const uint8_t movingPiece = mailbox[fromSq];
     int target_piece = mailbox[toSq];
 
-    move.capturedPiece = target_piece;
-    
+
     // Update 50-move clock: reset on pawn move or capture, otherwise increment
     if (piece_type(movingPiece) == PAWN || target_piece != 0) {
         halfMoveClock = 0;
@@ -141,150 +139,129 @@ void Board::makeMove(Move& move) {
         halfMoveClock++;
     }
     
-    // Set pieceType if not already set (from movegen)
-    if (move.pieceType == 0) {
-        move.pieceType = piece_type(movingPiece);
-    }
-    
     // Add to move history for continuation history
     moveHistory.push_back(move);
 
     // Hash: remove side-to-move, old ep and old castling
-    currentHash ^= z.side;
-    if (enPassantCol != -1) currentHash ^= z.epFile[enPassantCol];
+    hash ^= z.side;
+    if (enPassant != -1) hash ^= z.epFile[enPassant];
     int oldCastling = 0;
-    if (whiteCanCastleKingSide) oldCastling |= 1;
-    if (whiteCanCastleQueenSide) oldCastling |= 2;
-    if (blackCanCastleKingSide) oldCastling |= 4;
-    if (blackCanCastleQueenSide) oldCastling |= 8;
-    currentHash ^= z.castling[oldCastling];
+    if (castling & CASTLE_WK) oldCastling |= 1;
+    if (castling & CASTLE_WQ) oldCastling |= 2;
+    if (castling & CASTLE_BK) oldCastling |= 4;
+    if (castling & CASTLE_BQ) oldCastling |= 8;
+    hash ^= z.castling[oldCastling];
 
     // Remove moving piece from origin
-    currentHash ^= z.piece[piece_to_zobrist_index(movingPiece)][fromSq];
+    hash ^= z.piece[piece_to_zobrist_index(movingPiece)][fromSq];
 
     bb_clear(*this, movingPiece, fromSq);
     if (target_piece != 0) {
         bb_clear(*this, target_piece, toSq);
-        currentHash ^= z.piece[piece_to_zobrist_index(target_piece)][toSq];
+        hash ^= z.piece[piece_to_zobrist_index(target_piece)][toSq];
     }
     bb_set(*this, movingPiece, toSq);
 
     mailbox[fromSq] = 0;
     if (target_piece != 0) mailbox[toSq] = 0;
 
-    if (piece_type(movingPiece) == PAWN && move.fromCol != move.toCol && move.capturedPiece == 0) {
-        move.isEnPassant = true;
-        int captureRow = move.fromRow;
-        int captureSq = row_col_to_sq(captureRow, move.toCol);
+    if (piece_type(movingPiece) == PAWN && flags == 5) { // En passant capture
+        int captureSq = toSq + ((stm == WHITE) ? -8 : 8); // Captured pawn is one rank behind destination from mover's perspective
         int capturedPawn = (piece_color(movingPiece) == WHITE) ? B_PAWN : W_PAWN;
         bb_clear(*this, capturedPawn, captureSq);
         mailbox[captureSq] = 0;
-        currentHash ^= z.piece[piece_to_zobrist_index(capturedPawn)][captureSq];
-        move.capturedPiece = capturedPawn;
+        hash ^= z.piece[piece_to_zobrist_index(capturedPawn)][captureSq];
     }
 
-    if (piece_type(movingPiece) == KING && std::abs(move.fromCol - move.toCol) == 2) {
-        if (move.toCol > move.fromCol) {
-            int rookFromSq = row_col_to_sq(move.toRow, move.toCol + 1);
-            int rookToSq = row_col_to_sq(move.toRow, move.toCol - 1);
+    if (piece_type(movingPiece) == KING && std::abs(sq_to_col(fromSq) - sq_to_col(toSq)) == 2) {
+        if (sq_to_col(toSq) > sq_to_col(fromSq)) {
+            int rookFromSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) + 1);
+            int rookToSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) - 1);
             int rookPiece = make_piece(ROOK, piece_color(movingPiece));
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookToSq] = mailbox[rookFromSq];
             mailbox[rookFromSq] = 0;
-            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
-            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
+            hash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
+            hash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
         } else {
-            int rookFromSq = row_col_to_sq(move.toRow, move.toCol - 2);
-            int rookToSq = row_col_to_sq(move.toRow, move.toCol + 1);
+            int rookFromSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) - 2);
+            int rookToSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) + 1);
             int rookPiece = make_piece(ROOK, piece_color(movingPiece));
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookToSq] = mailbox[rookFromSq];
             mailbox[rookFromSq] = 0;
-            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
-            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
+            hash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
+            hash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
         }
-        move.isCastling = true;
     }
 
     int placedPiece = movingPiece;
     if (piece_type(movingPiece) == PAWN) {
-        int promotionRank = (piece_color(movingPiece) == WHITE) ? 0 : 7;
-        if (move.toRow == promotionRank && move.promotion != 0) {
-            placedPiece = make_piece(move.promotion, piece_color(movingPiece));
+        if (promo != -1) {
+            placedPiece = make_piece(promo, piece_color(movingPiece));
             bb_clear(*this, movingPiece, toSq);
             bb_set(*this, placedPiece, toSq);
         }
     }
 
     mailbox[toSq] = placedPiece;
-    currentHash ^= z.piece[piece_to_zobrist_index(placedPiece)][toSq];
+    hash ^= z.piece[piece_to_zobrist_index(placedPiece)][toSq];
 
-    if (piece_type(movingPiece) == PAWN && std::abs(move.fromRow - move.toRow) == 2) {
-        const bool opponentWhite = !isWhiteTurn;
+    if (piece_type(movingPiece) == PAWN && std::abs(sq_to_row(fromSq) - sq_to_row(toSq)) == 2) {
+        const bool opponentWhite = (stm == BLACK);
         const int epRow = opponentWhite ? 2 : 5;
-        const int epSq = row_col_to_sq(epRow, move.toCol);
+        const int epSq = row_col_to_sq(epRow, sq_to_col(toSq));
         if (is_pawn_attack_possible(*this, opponentWhite, epSq)) {
-            enPassantCol = move.toCol;
+            enPassant = sq_to_col(toSq);
         } else {
-            enPassantCol = -1;
+            enPassant = -1;
         }
     } else {
-        enPassantCol = -1;
+        enPassant = -1;
     }
 
-    isWhiteTurn = !isWhiteTurn;
-
-    if (movingPiece == W_ROOK && move.fromRow == 7 && move.fromCol == 7){
-        whiteCanCastleKingSide = false;
+    if (movingPiece == W_ROOK && sq_to_row(fromSq) == 7 && sq_to_col(fromSq) == 7){
+        castling &= ~CASTLE_WK;
     }
-    else if (movingPiece == W_ROOK && move.fromRow == 7 && move.fromCol == 0){
-        whiteCanCastleQueenSide = false;
+    else if (movingPiece == W_ROOK && sq_to_row(fromSq) == 7 && sq_to_col(fromSq) == 0){
+        castling &= ~CASTLE_WQ;
     }
-    else if (movingPiece == B_ROOK && move.fromRow == 0 && move.fromCol == 7){
-        blackCanCastleKingSide = false;
+    else if (movingPiece == B_ROOK && sq_to_row(fromSq) == 0 && sq_to_col(fromSq) == 7){
+        castling &= ~CASTLE_BK;
     }
-    else if (movingPiece == B_ROOK && move.fromRow == 0 && move.fromCol == 0){
-        blackCanCastleQueenSide = false;
+    else if (movingPiece == B_ROOK && sq_to_row(fromSq) == 0 && sq_to_col(fromSq) == 0){
+        castling &= ~CASTLE_BQ;
     }
 
     if (movingPiece == W_KING) {
-        whiteCanCastleKingSide = false;
-        whiteCanCastleQueenSide = false;
-        whiteKingRow = move.toRow;
-        whiteKingCol = move.toCol;
+        castling &= ~(CASTLE_WK | CASTLE_WQ);
     }
     if (movingPiece == B_KING) {
-        blackCanCastleKingSide = false;
-        blackCanCastleQueenSide = false;
-        blackKingRow = move.toRow;
-        blackKingCol = move.toCol;
+        castling &= ~(CASTLE_BK | CASTLE_BQ);
     }
 
-    if (move.capturedPiece == W_ROOK && move.toRow == 7 && move.toCol == 7) {
-        whiteCanCastleKingSide = false;
+    if (st.capturedPiece == W_ROOK && sq_to_row(toSq) == 7 && sq_to_col(toSq) == 7) {
+        castling &= ~CASTLE_WK;
     }
-    if (move.capturedPiece == W_ROOK && move.toRow == 7 && move.toCol == 0) {
-        whiteCanCastleQueenSide = false;
+    if (st.capturedPiece == W_ROOK && sq_to_row(toSq) == 7 && sq_to_col(toSq) == 0) {
+        castling &= ~CASTLE_WQ;
     }
-    if (move.capturedPiece == B_ROOK && move.toRow == 0 && move.toCol == 7) {
-        blackCanCastleKingSide = false;
+    if (st.capturedPiece == B_ROOK && sq_to_row(toSq) == 0 && sq_to_col(toSq) == 7) {
+        castling &= ~CASTLE_BK;
     }
-    if (move.capturedPiece == B_ROOK && move.toRow == 0 && move.toCol == 0) {
-        blackCanCastleQueenSide = false;
+    if (st.capturedPiece == B_ROOK && sq_to_row(toSq) == 0 && sq_to_col(toSq) == 0) {
+        castling &= ~CASTLE_BQ;
     }
 
-    int newCastling = 0;
-    if (whiteCanCastleKingSide) newCastling |= 1;
-    if (whiteCanCastleQueenSide) newCastling |= 2;
-    if (blackCanCastleKingSide) newCastling |= 4;
-    if (blackCanCastleQueenSide) newCastling |= 8;
-    currentHash ^= z.castling[newCastling];
+    hash ^= z.castling[castling];
 
-    if (enPassantCol != -1) {
-        currentHash ^= z.epFile[enPassantCol];
+    if (enPassant != -1) {
+        hash ^= z.epFile[enPassant];
     }
+
+    stm = other_color(stm);
 }
 
 void Board::unmakeMove(Move& move) {
@@ -295,106 +272,86 @@ void Board::unmakeMove(Move& move) {
         moveHistory.pop_back();
     }
 
-    isWhiteTurn = !isWhiteTurn;
+    UndoState st = this->undoStack.back();
+    this->undoStack.pop_back();
+    stm = other_color(stm);
 
     // Hash out side, current ep, current castling (state after move, before undo)
-    currentHash ^= z.side;
-    if (enPassantCol != -1) currentHash ^= z.epFile[enPassantCol];
-    int currCastling = 0;
-    if (whiteCanCastleKingSide) currCastling |= 1;
-    if (whiteCanCastleQueenSide) currCastling |= 2;
-    if (blackCanCastleKingSide) currCastling |= 4;
-    if (blackCanCastleQueenSide) currCastling |= 8;
-    currentHash ^= z.castling[currCastling];
+    hash ^= z.side;
+    if (enPassant != -1) hash ^= z.epFile[enPassant];
+    hash ^= z.castling[castling];
 
-    const int fromSq = move.from_sq();
-    const int toSq = move.to_sq();
+    const int fromSq = move_from(move);
+    const int toSq = move_to(move);
 
     int pieceOnTo = mailbox[toSq];
     int pieceBase = pieceOnTo;
-    if (move.promotion != 0) {
+    if (move_flags(move) >= 8) { // Promotion undo
         pieceBase = make_piece(PAWN, piece_color(pieceOnTo));
     }
 
     // Remove moved piece from destination
     bb_clear(*this, pieceOnTo, toSq);
     mailbox[toSq] = 0;
-    currentHash ^= z.piece[piece_to_zobrist_index(pieceOnTo)][toSq];
+    hash ^= z.piece[piece_to_zobrist_index(pieceOnTo)][toSq];
 
     // Undo castling ROOK move if needed
-    if (move.isCastling) {
-        if (move.toCol > move.fromCol) {
-            int rookFromSq = row_col_to_sq(move.toRow, move.toCol - 1);
-            int rookToSq = row_col_to_sq(move.toRow, move.toCol + 1);
-            int rookPiece = isWhiteTurn ? W_ROOK : B_ROOK;
+    if (move_flags(move) == 3 || move_flags(move) == 2) { // Castling move
+        if (sq_to_col(toSq) > sq_to_col(fromSq)) {
+            int rookFromSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) - 1);
+            int rookToSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) + 1);
+            int rookPiece = stm == WHITE ? W_ROOK : B_ROOK;
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookFromSq] = 0;
             mailbox[rookToSq] = rookPiece;
-            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
-            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
+            hash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
+            hash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
         } else {
-            int rookFromSq = row_col_to_sq(move.toRow, move.toCol + 1);
-            int rookToSq = row_col_to_sq(move.toRow, move.toCol - 2);
-            int rookPiece = isWhiteTurn ? W_ROOK : B_ROOK;
+            int rookFromSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) + 1);
+            int rookToSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) - 2);
+            int rookPiece = stm == WHITE ? W_ROOK : B_ROOK;
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookFromSq] = 0;
             mailbox[rookToSq] = rookPiece;
-            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
-            currentHash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
+            hash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
+            hash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
         }
     }
 
     // Restore moving piece to origin
     bb_set(*this, pieceBase, fromSq);
     mailbox[fromSq] = pieceBase;
-    currentHash ^= z.piece[piece_to_zobrist_index(pieceBase)][fromSq];
+    hash ^= z.piece[piece_to_zobrist_index(pieceBase)][fromSq];
 
     // Restore captured piece
-    if (move.isEnPassant) {
-        int capturedPawn = isWhiteTurn ? B_PAWN : W_PAWN;
-        int captureSq = row_col_to_sq(move.fromRow, move.toCol);
+    if (move_flags(move) == 5) { // En passant capture
+        int capturedPawn = stm == WHITE ? B_PAWN : W_PAWN;
+        int captureSq = row_col_to_sq(sq_to_row(fromSq), sq_to_col(toSq));
         bb_set(*this, capturedPawn, captureSq);
         mailbox[captureSq] = capturedPawn;
-        currentHash ^= z.piece[piece_to_zobrist_index(capturedPawn)][captureSq];
-    } else if (move.capturedPiece != 0) {
-        bb_set(*this, move.capturedPiece, toSq);
-        mailbox[toSq] = move.capturedPiece;
-        currentHash ^= z.piece[piece_to_zobrist_index(move.capturedPiece)][toSq];
+        hash ^= z.piece[piece_to_zobrist_index(capturedPawn)][captureSq];
+    } else if (st.capturedPiece != 0) {
+        bb_set(*this, st.capturedPiece, toSq);
+        mailbox[toSq] = st.capturedPiece;
+        hash ^= z.piece[piece_to_zobrist_index(st.capturedPiece)][toSq];
     }
 
-    whiteCanCastleKingSide = move.prevW_KingSide;
-    whiteCanCastleQueenSide = move.prevW_QueenSide;
-    blackCanCastleKingSide = move.prevB_KingSide;
-    blackCanCastleQueenSide = move.prevB_QueenSide;
-    enPassantCol = move.prevEnPassantCol;
-    halfMoveClock = move.prevHalfMoveClock;
+    castling = st.castling;
+    enPassant = st.enPassant;
+    halfMoveClock = st.halfMoveClock;
+    hash ^= z.castling[castling];
 
-    if (pieceBase == W_KING) {
-        whiteKingRow = move.fromRow;
-        whiteKingCol = move.fromCol;
-    }
-    if (pieceBase == B_KING) {
-        blackKingRow = move.fromRow;
-        blackKingCol = move.fromCol;
-    }
-
-    int prevCastling = 0;
-    if (whiteCanCastleKingSide) prevCastling |= 1;
-    if (whiteCanCastleQueenSide) prevCastling |= 2;
-    if (blackCanCastleKingSide) prevCastling |= 4;
-    if (blackCanCastleQueenSide) prevCastling |= 8;
-    currentHash ^= z.castling[prevCastling];
-
-    if (enPassantCol != -1) currentHash ^= z.epFile[enPassantCol];
+    if (enPassant != -1) hash ^= z.epFile[enPassant];
 }
 
-void Board::loadFromFEN(const std::string& fen) {
+void Board::loadFEN(const std::string& fen) {
     for (int i = 0; i < 6; i++) piece[i] = 0ULL;
     color[WHITE] = 0ULL;
     color[BLACK] = 0ULL;
     for (int i = 0; i < 64; i++) mailbox[i] = 0;
+    castling = 0;
 
     std::istringstream ss(fen);
     std::string position, turn, castling, enPassant;
@@ -422,35 +379,25 @@ void Board::loadFromFEN(const std::string& fen) {
             int sq = row_col_to_sq(row, col);
             bb_set(*this, pieceVal, sq);
             mailbox[sq] = pieceVal;
-
-            if (pt == KING) {
-                if (isWhite) {
-                    whiteKingRow = row;
-                    whiteKingCol = col;
-                } else {
-                    blackKingRow = row;
-                    blackKingCol = col;
-                }
-            }
             col++;
         }
     }
 
-    isWhiteTurn = (turn == "w");
-    whiteCanCastleKingSide = (castling.find('K') != std::string::npos);
-    whiteCanCastleQueenSide = (castling.find('Q') != std::string::npos);
-    blackCanCastleKingSide = (castling.find('k') != std::string::npos);
-    blackCanCastleQueenSide = (castling.find('q') != std::string::npos);
+    stm = (turn == "w") ? WHITE : BLACK;
+    this->castling = (castling.find('K') != std::string::npos) ? (this->castling | CASTLE_WK) : this->castling;
+    this->castling = (castling.find('Q') != std::string::npos) ? (this->castling | CASTLE_WQ) : this->castling;
+    this->castling = (castling.find('k') != std::string::npos) ? (this->castling | CASTLE_BK) : this->castling;
+    this->castling = (castling.find('q') != std::string::npos) ? (this->castling | CASTLE_BQ) : this->castling;
 
     if (enPassant != "-") {
-        enPassantCol = enPassant[0] - 'a';
-        int epRow = isWhiteTurn ? 2 : 5;
-        int epSq = row_col_to_sq(epRow, enPassantCol);
-        if (!is_pawn_attack_possible(*this, isWhiteTurn, epSq)) {
-            enPassantCol = -1;
+        this->enPassant = enPassant[0] - 'a';
+        int epRow = stm == 0 ? 2 : 5;
+        int epSq = row_col_to_sq(epRow, this->enPassant);
+        if (!is_pawn_attack_possible(*this, stm == 0 ? false : true, epSq)) {
+            this->enPassant = -1;
         }
     } else {
-        enPassantCol = -1;
+        this->enPassant = -1;
     }
 
     // Parse halfmove clock (50-move rule) if present
@@ -462,7 +409,7 @@ void Board::loadFromFEN(const std::string& fen) {
         halfMoveClock = 0;
     }
 
-    currentHash = position_key(*this);
+    hash = position_key(*this);
 }
 
 void printBoard(const Board& board) {
@@ -495,22 +442,46 @@ void printBoard(const Board& board) {
     std::cout << "    a b c d e f g h" << std::endl;
 }
 
-Move uci_to_move(const std::string& uci) {
-    Move move;
-    move.fromCol = uci[0] - 'a';
-    move.fromRow = 8 - (uci[1] - '0');
-    move.toCol = uci[2] - 'a';
-    move.toRow = 8 - (uci[3] - '0');
+Move uci_to_move(const std::string& uci, const Board& board) {
+    // (a1=0, h8=63)
+    int fromCol = uci[0] - 'a';
+    int fromSq = (uci[1] - '1') * 8 + fromCol;
+    int fromRow = sq_to_row(fromSq);
+
+    int toCol = uci[2] - 'a';
+    int toSq = (uci[3] - '1') * 8 + toCol;
+    int toRow = sq_to_row(toSq);
+
+    int flags = 0;
+    int movingPiece = board.mailbox[fromSq];
+    int targetPiece = board.mailbox[toSq];
+
     if (uci.length() == 5) {
+        // Promotion
         char promoChar = uci[4];
+        int promoBase = 0;
         switch (promoChar) {
-            case 'q': move.promotion = QUEEN; break;
-            case 'r': move.promotion = ROOK; break;
-            case 'b': move.promotion = BISHOP; break;
-            case 'n': move.promotion = KNIGHT; break;
+            case 'n': promoBase = 8; break;  // FLAG_PROMO_KNIGHT
+            case 'b': promoBase = 9; break;  // FLAG_PROMO_BISHOP
+            case 'r': promoBase = 10; break; // FLAG_PROMO_ROOK
+            case 'q': promoBase = 11; break; // FLAG_PROMO_QUEEN
         }
+        flags = (targetPiece != 0) ? promoBase + 4 : promoBase;
+    } else if (piece_type(movingPiece) == KING && std::abs(fromCol - toCol) == 2) {
+        flags = (toCol > fromCol) ? FLAG_CASTLE_KING : FLAG_CASTLE_QUEEN;
+    } else if (piece_type(movingPiece) == PAWN) {
+        if (std::abs(fromRow - toRow) == 2) {
+            flags = FLAG_DOUBLE_PAWN;
+        } else if (fromCol != toCol && targetPiece == 0) {
+            flags = FLAG_EN_PASSANT;
+        } else if (targetPiece != 0) {
+            flags = FLAG_CAPTURE;
+        }
+    } else if (targetPiece != 0) {
+        flags = FLAG_CAPTURE;
     }
-    return move;
+
+    return (flags << 12) | (toSq << 6) | fromSq;
 }
 
 Zobrist::Zobrist() {
@@ -560,17 +531,12 @@ uint64_t position_key(const Board& board) {
         }
     }
 
-    int castle = 0;
-    if (board.whiteCanCastleKingSide) castle |= 1;
-    if (board.whiteCanCastleQueenSide) castle |= 2;
-    if (board.blackCanCastleKingSide) castle |= 4;
-    if (board.blackCanCastleQueenSide) castle |= 8;
-    h ^= z.castling[castle];
+    h ^= z.castling[board.castling];
 
-    int ep = (board.enPassantCol >= 0 && board.enPassantCol < 8) ? board.enPassantCol : 8;
+    int ep = (board.enPassant >= 0 && board.enPassant < 8) ? board.enPassant : 8;
     h ^= z.epFile[ep];
 
-    if (board.isWhiteTurn) h ^= z.side;
+    if (board.stm == WHITE) h ^= z.side;
     return h;
 }
 
@@ -588,34 +554,6 @@ bool is_threefold_repetition(const std::vector<uint64_t>& positionHistory) {
 }
 
 TranspositionTable globalTT;
-
-uint16_t TranspositionTable::packMove(const Move& m) {
-    int from = row_col_to_sq(m.fromRow, m.fromCol);
-    int to = row_col_to_sq(m.toRow, m.toCol);
-
-    if (from < 0 || from >= 64) from = 0;
-    if (to < 0 || to >= 64) to = 0;
-
-    int promo = m.promotion;
-    if (promo < 0) promo = 0;
-    if (promo > 7) promo = 7;
-
-    return static_cast<uint16_t>((from & 63) | ((to & 63) << 6) | ((promo & 7) << 12));
-}
-
-Move TranspositionTable::unpackMove(uint16_t packed) {
-    Move m;
-    const int from = packed & 63;
-    const int to = (packed >> 6) & 63;
-    const int promo = (packed >> 12) & 7;
-
-    m.fromRow = sq_to_row(from);
-    m.fromCol = sq_to_col(from);
-    m.toRow = sq_to_row(to);
-    m.toCol = sq_to_col(to);
-    m.promotion = promo;
-    return m;
-}
 
 uint64_t TranspositionTable::packData(int score, int depth, TTFlag flag, uint16_t packedMove) {
     uint64_t data = static_cast<uint32_t>(score);
@@ -670,8 +608,7 @@ void TranspositionTable::store(uint64_t hash, int score, int depth, TTFlag flag,
     unpackData(existingData, existingScore, existingDepth, existingFlag, existingMove);
 
     if (existingKey == 0 || existingKey != hash || depth >= existingDepth) {
-        const uint16_t pm = packMove(bestMove);
-        const uint64_t newData = packData(score, depth, flag, pm);
+        const uint64_t newData = packData(score, depth, flag, bestMove);
         e.data.store(newData, std::memory_order_relaxed);
         e.key.store(hash, std::memory_order_release);
     }
@@ -687,9 +624,7 @@ bool TranspositionTable::probe(uint64_t key, int& outScore, int& outDepth, TTFla
     if (foundKey != key) return false;
 
     const uint64_t data = e.data.load(std::memory_order_relaxed);
-    uint16_t packedMove = 0;
-    unpackData(data, outScore, outDepth, outFlag, packedMove);
-    outMove = unpackMove(packedMove);
+    unpackData(data, outScore, outDepth, outFlag, outMove);
     return true;
 }
 
@@ -708,13 +643,15 @@ static Bitboard attackers_to_sq(Bitboard pieces[2][6], int sq, int side, Bitboar
     return attackers;
 }
 
-inline int moveEstimatedValue(const Move& move){
+inline int moveEstimatedValue(const Board& board, const Move& move){
+    int flags = move_flags(move);
+
     int value = 0;
     if (is_quiet(move)) return 0;
-    if (move.promotion != 0) {
-        value += see_piece_values[move.promotion] - see_piece_values[PAWN]; // A pawn goes, a promoted piece comes
+    if (flags >= 8) { // Promotion
+        value += see_piece_values[get_promotion_type(move)] - see_piece_values[PAWN]; // A pawn goes, a promoted piece comes
     }
-    value += see_piece_values[piece_type(move.capturedPiece)];
+    value += see_piece_values[move_flags(move) == FLAG_EN_PASSANT ? PAWN : piece_type(piece_at_sq(board, move_to(move)))];
     return value;
 }
 
@@ -738,21 +675,22 @@ static Bitboard all_attackers_to_sq(const Board& board, int sq, Bitboard occ) {
 }
 
 int staticExchangeEvaluation(const Board& board, const Move& move, int threshold) {
+    int flags = move_flags(move);
     // Ethereal-style threshold-based SEE
-    int from = move.from_sq();
-    int to = move.to_sq();
+    int from = move_from(move);
+    int to = move_to(move);
     
     int balance, nextVictim;
     Bitboard bishops, rooks, occupied, attackers, myAttackers;
 
     // Determine the piece that will be on 'to' after the move (for recapture value)
     // If promotion, it's the promoted piece; otherwise, it's the moving piece
-    nextVictim = (move.promotion != 0) 
-               ? move.promotion 
+    nextVictim = (get_promotion_type(move) != -1) 
+               ? get_promotion_type(move)
                : piece_type(board.mailbox[from]);
 
     // Balance is the value of the move minus threshold
-    balance = moveEstimatedValue(move) - threshold;
+    balance = moveEstimatedValue(board, move) - threshold;
 
     // Best case still fails to beat the threshold
     if (balance < 0) return 0;
@@ -773,9 +711,9 @@ int staticExchangeEvaluation(const Board& board, const Move& move, int threshold
     occupied = (occupied ^ (1ULL << from)) | (1ULL << to);
 
     // Handle en passant: remove the captured pawn
-    if (move.isEnPassant) {
-        int capRow = move.fromRow;
-        int capCol = move.toCol;
+    if (flags == 5) {
+        int capRow = sq_to_row(from);
+        int capCol = sq_to_col(to);
         int capSq = row_col_to_sq(capRow, capCol);
         occupied ^= (1ULL << capSq);
     }
@@ -784,7 +722,7 @@ int staticExchangeEvaluation(const Board& board, const Move& move, int threshold
     attackers = all_attackers_to_sq(board, to, occupied) & occupied;
 
     // Now opponent's turn to recapture
-    int colour = board.isWhiteTurn ? BLACK : WHITE;
+    int colour = board.stm ^ 1; // Opponent's turn
 
     while (true) {
         // If we have no more attackers left, we lose
@@ -836,7 +774,7 @@ int staticExchangeEvaluation(const Board& board, const Move& move, int threshold
     }
 
     // Side to move after the loop loses
-    return (board.isWhiteTurn ? WHITE : BLACK) != colour;
+    return (board.stm == WHITE ? WHITE : BLACK) != colour;
 }
 
 // Insufficient material detection

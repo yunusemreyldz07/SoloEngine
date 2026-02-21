@@ -52,14 +52,14 @@ void bench() {
     };
 
     auto move_to_uci = [](const Move& m) {
-        if (m.fromRow == 0 && m.fromCol == 0 && m.toRow == 0 && m.toCol == 0 && m.promotion == 0) return std::string("0000");
+        if (m == 0) return std::string("0000");
         std::string s;
-        s += columns[m.fromCol];
-        s += static_cast<char>('0' + (8 - m.fromRow));
-        s += columns[m.toCol];
-        s += static_cast<char>('0' + (8 - m.toRow));
-        if (m.promotion != 0) {
-            switch (m.promotion) {
+        s += columns[sq_to_col(move_from(m))];
+        s += static_cast<char>('0' + (8 - sq_to_row(move_from(m))));
+        s += columns[sq_to_col(move_to(m))];
+        s += static_cast<char>('0' + (8 - sq_to_row(move_to(m))));
+        if (get_promotion_type(m) != -1) {
+            switch (get_promotion_type(m)) {
                 case QUEEN: s += 'q'; break;
                 case ROOK: s += 'r'; break;
                 case BISHOP: s += 'b'; break;
@@ -78,7 +78,7 @@ void bench() {
     globalTT.clear();
 
     for (size_t i = 0; i < fens.size(); ++i) {
-        board.loadFromFEN(fens[i]);
+        board.loadFEN(fens[i]);
         std::vector<uint64_t> positionHistory;
         positionHistory.reserve(64);
         positionHistory.push_back(position_key(board));
@@ -116,22 +116,10 @@ static uint64_t perft(Board& board, int depth) {
     if (depth <= 0) return 1ULL;
 
     uint64_t nodes = 0;
-    std::vector<Move> moves = get_all_moves(board, board.isWhiteTurn);
+    std::vector<Move> moves = get_all_moves(board, board.stm == WHITE);
     for (Move& move : moves) {
         board.makeMove(move);
-
-        int kingRow = 0;
-        int kingCol = 0;
-        if (!king_square(board, !board.isWhiteTurn, kingRow, kingCol)) {
-            board.unmakeMove(move);
-            continue;
-        }
-        const bool illegal = is_square_attacked(board, kingRow, kingCol, board.isWhiteTurn);
-
-        if (!illegal) {
-            nodes += perft(board, depth - 1);
-        }
-
+        nodes += perft(board, depth - 1);
         board.unmakeMove(move);
     }
 
@@ -261,7 +249,7 @@ int handle_uci_commands(int argc, char* argv[]){
         else if (line == "ucinewgame") {
             stop_and_join_search();
             globalTT.clear();
-            board.resetBoard();
+            board.reset();
             gameHistory.clear();
             gameHistory.push_back(position_key(board));
             clear_search_heuristics();
@@ -270,7 +258,7 @@ int handle_uci_commands(int argc, char* argv[]){
         else if (line.substr(0, 8) == "position") {
             stop_and_join_search();
             if (line.find("startpos") != std::string::npos) {
-                board.resetBoard();
+                board.reset();
             }
             else if (line.find("fen") != std::string::npos) {
                 size_t fenStart = line.find("fen") + 4;
@@ -281,7 +269,7 @@ int handle_uci_commands(int argc, char* argv[]){
                 } else {
                     fenStr = line.substr(fenStart);
                 }
-                board.loadFromFEN(fenStr);
+                board.loadFEN(fenStr);
             }
             gameHistory.clear();
             gameHistory.push_back(position_key(board));
@@ -294,7 +282,7 @@ int handle_uci_commands(int argc, char* argv[]){
                 std::string moveToken;
                 
                 while (ss >> moveToken) {
-                    Move m = uci_to_move(moveToken);
+                    Move m = uci_to_move(moveToken, board);
                     board.makeMove(m);
                     gameHistory.push_back(position_key(board));
                 }
@@ -328,8 +316,8 @@ int handle_uci_commands(int argc, char* argv[]){
             if (limits.timeToThink != -1) {
                 limits.depthLimit = 128;
             } else if (params.wtime != -1 || params.btime != -1) { // if time controls are given, calculate time to think
-                const int myTime = board.isWhiteTurn ? params.wtime : params.btime;
-                const int myInc = board.isWhiteTurn ? params.winc : params.binc;
+                const int myTime = board.stm == WHITE ? params.wtime : params.btime;
+                const int myInc = board.stm == WHITE ? params.winc : params.binc;
             
                 // Time calculation
 
@@ -356,14 +344,14 @@ int handle_uci_commands(int argc, char* argv[]){
                 Move best = getBestMove(board, depthLimit, timeToThink, gameHistory);
 
                 // If no legal move was found (mate/stalemate), output UCI null move.
-                if (best.fromRow == 0 && best.fromCol == 0 && best.toRow == 0 && best.toCol == 0 && best.promotion == 0) {
+                if (best == 0) {
                     std::cout << "bestmove 0000" << std::endl;
                 } else {
                     std::cout << "bestmove "
-                              << columns[best.fromCol] << (8 - best.fromRow)
-                              << columns[best.toCol] << (8 - best.toRow);
-                    if (best.promotion != 0) {
-                        switch (abs(best.promotion)) {
+                              << columns[sq_to_col(move_from(best))] << (8 - sq_to_row(move_from(best)))
+                              << columns[sq_to_col(move_to(best))] << (8 - sq_to_row(move_to(best)));
+                    if (get_promotion_type(best) != -1) {
+                        switch (abs(get_promotion_type(best))) {
                             case QUEEN: std::cout << 'q'; break;
                             case ROOK: std::cout << 'r'; break;
                             case BISHOP: std::cout << 'b'; break;

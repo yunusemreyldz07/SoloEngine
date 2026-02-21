@@ -265,7 +265,7 @@ int evaluate_board(const Board& board) {
     int mg[2] = {0, 0};
     int eg[2] = {0, 0};
     int gamePhase = 0;
-    int side2move = board.isWhiteTurn ? WHITE : BLACK;
+    int side2move = board.stm == WHITE ? WHITE : BLACK;
 
     for (int color = 0; color < 2; color++) {
         for (int p = 0; p < 6; p++) {
@@ -320,8 +320,8 @@ int evaluate_board(const Board& board) {
     int mobilityScore = 0;
     Bitboard occupy = board.color[WHITE] | board.color[BLACK];
     for (int pieceType = KNIGHT; pieceType <= QUEEN; pieceType++) {
-        mobilityScore += evaluate_mobility(board, pieceType, board.isWhiteTurn, occupy);
-        mobilityScore -= evaluate_mobility(board, pieceType, !board.isWhiteTurn, occupy);
+        mobilityScore += evaluate_mobility(board, pieceType, board.stm == WHITE, occupy);
+        mobilityScore -= evaluate_mobility(board, pieceType, !(board.stm == WHITE), occupy);
     }
 
     return (staticEval + mobilityScore);
