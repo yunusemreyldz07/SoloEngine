@@ -2,6 +2,7 @@
 #include "bitboard.h"
 #include "search.h"
 #include "evaluation.h"
+#include "history.h"
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -253,6 +254,7 @@ int handle_uci_commands(int argc, char* argv[]){
             gameHistory.clear();
             gameHistory.push_back(position_key(board));
             clear_search_heuristics();
+            clearPawnCorrectionHistory();
         }
 
         else if (line.substr(0, 8) == "position") {

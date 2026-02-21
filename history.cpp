@@ -85,3 +85,7 @@ int adjustEvalWithCorrectionHistory(Board *board, const int rawEval) {
     int mateFound = MATE_SCORE - MAX_PLY; // Ensure we don't overflow mate scores
     return clamp(rawEval + entry / CORRHIST_GRAIN, -mateFound + 1, mateFound - 1);
 }
+
+void clearPawnCorrectionHistory() {
+    std::memset(pawnCorrectionHistory, 0, sizeof(pawnCorrectionHistory));
+}

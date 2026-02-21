@@ -19,5 +19,5 @@ int get_history_score(int color, int fromSq, int toSq);  // Get score for move o
 
 int adjustEvalWithCorrectionHistory(Board *board, const int rawEval);
 void updatePawnCorrectionHistory(Board *board, const int depth, const int diff);
-
+void clearPawnCorrectionHistory();
 #endif
