@@ -766,14 +766,15 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
         if (eval > maxEval) {
             maxEval = eval;
-            bestMove = move;
-            pvLine.clear();
-            pvLine.push_back(move);
-            pvLine.insert(pvLine.end(), childPv.begin(), childPv.end());
+            
         }
 
         if (eval > alpha) {
+            bestMove = move;
             alpha = eval;
+            pvLine.clear();
+            pvLine.push_back(move);
+            pvLine.insert(pvLine.end(), childPv.begin(), childPv.end());
         }
 
         if (beta <= alpha) {
