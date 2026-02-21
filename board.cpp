@@ -110,10 +110,10 @@ void Board::makeMove(Move& move) {
     int to = (move >> 6) & 0x3F;          // Other 6 bit
     int flags = (move >> 12) & 0xF;       // Last 4 bits
     int promo = get_promotion_type(move); // KNIGHT/BISHOP/ROOK/QUEEN or -1 if no promotion
-
     const Zobrist& z = zobrist();
 
     UndoState st;
+    st.hash = this->hash; // Store the current hash before making the move
     st.castling = castling;   
     st.enPassant = enPassant;
     st.halfMoveClock = halfMoveClock;
@@ -144,7 +144,9 @@ void Board::makeMove(Move& move) {
 
     // Hash: remove side-to-move, old ep and old castling
     hash ^= z.side;
-    if (enPassant != -1) hash ^= z.epFile[enPassant];
+    int oldEp = (enPassant != -1) ? (enPassant % 8) : 8;
+    hash ^= z.epFile[oldEp];
+
     int oldCastling = 0;
     if (castling & CASTLE_WK) oldCastling |= 1;
     if (castling & CASTLE_WQ) oldCastling |= 2;
@@ -257,16 +259,13 @@ void Board::makeMove(Move& move) {
 
     hash ^= z.castling[castling];
 
-    if (enPassant != -1) {
-        hash ^= z.epFile[enPassant];
-    }
+    int newEp = (enPassant != -1) ? (enPassant % 8) : 8;
+    hash ^= z.epFile[newEp];
 
     stm = other_color(stm);
 }
 
 void Board::unmakeMove(Move& move) {
-    const Zobrist& z = zobrist();
-    
     // Remove from move history
     if (!moveHistory.empty()) {
         moveHistory.pop_back();
@@ -275,11 +274,6 @@ void Board::unmakeMove(Move& move) {
     UndoState st = this->undoStack.back();
     this->undoStack.pop_back();
     stm = other_color(stm);
-
-    // Hash out side, current ep, current castling (state after move, before undo)
-    hash ^= z.side;
-    if (enPassant != -1) hash ^= z.epFile[enPassant];
-    hash ^= z.castling[castling];
 
     const int fromSq = move_from(move);
     const int toSq = move_to(move);
@@ -293,7 +287,6 @@ void Board::unmakeMove(Move& move) {
     // Remove moved piece from destination
     bb_clear(*this, pieceOnTo, toSq);
     mailbox[toSq] = 0;
-    hash ^= z.piece[piece_to_zobrist_index(pieceOnTo)][toSq];
 
     // Undo castling ROOK move if needed
     if (move_flags(move) == 3 || move_flags(move) == 2) { // Castling move
@@ -305,8 +298,6 @@ void Board::unmakeMove(Move& move) {
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookFromSq] = 0;
             mailbox[rookToSq] = rookPiece;
-            hash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
-            hash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
         } else {
             int rookFromSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) + 1);
             int rookToSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) - 2);
@@ -315,15 +306,12 @@ void Board::unmakeMove(Move& move) {
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookFromSq] = 0;
             mailbox[rookToSq] = rookPiece;
-            hash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookFromSq];
-            hash ^= z.piece[piece_to_zobrist_index(rookPiece)][rookToSq];
         }
     }
 
     // Restore moving piece to origin
     bb_set(*this, pieceBase, fromSq);
     mailbox[fromSq] = pieceBase;
-    hash ^= z.piece[piece_to_zobrist_index(pieceBase)][fromSq];
 
     // Restore captured piece
     if (move_flags(move) == 5) { // En passant capture
@@ -331,19 +319,15 @@ void Board::unmakeMove(Move& move) {
         int captureSq = row_col_to_sq(sq_to_row(fromSq), sq_to_col(toSq));
         bb_set(*this, capturedPawn, captureSq);
         mailbox[captureSq] = capturedPawn;
-        hash ^= z.piece[piece_to_zobrist_index(capturedPawn)][captureSq];
     } else if (st.capturedPiece != 0) {
         bb_set(*this, st.capturedPiece, toSq);
         mailbox[toSq] = st.capturedPiece;
-        hash ^= z.piece[piece_to_zobrist_index(st.capturedPiece)][toSq];
     }
 
     castling = st.castling;
     enPassant = st.enPassant;
     halfMoveClock = st.halfMoveClock;
-    hash ^= z.castling[castling];
-
-    if (enPassant != -1) hash ^= z.epFile[enPassant];
+    this->hash = st.hash;
 }
 
 void Board::loadFEN(const std::string& fen) {
@@ -533,7 +517,10 @@ uint64_t position_key(const Board& board) {
 
     h ^= z.castling[board.castling];
 
-    int ep = (board.enPassant >= 0 && board.enPassant < 8) ? board.enPassant : 8;
+    int ep = 8;
+    if (board.enPassant != -1) {
+        ep = board.enPassant % 8;
+    }
     h ^= z.epFile[ep];
 
     if (board.stm == WHITE) h ^= z.side;

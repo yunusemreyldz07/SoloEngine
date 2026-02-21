@@ -575,7 +575,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         return 0; // Draw
     }
 
-    uint64_t currentHash = position_key(board);
+    uint64_t currentHash = board.hash;
     int ttScore = 0;
     int ttDepth = 0;
     TTFlag ttFlag = TTFlag::EXACT;
@@ -646,13 +646,20 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         if (!inCheck && depth >= 3 && (beta - alpha == 1)) {
             // Make a "null move" by flipping side to move
             const int prevEnPassantCol = board.enPassant;
+            const uint64_t prevHash = board.hash; // backup hash before null move
 
             board.enPassant = -1; // En passant rights vanish after a null move.
             board.stm = other_color(board.stm);
 
-            // Push new position key to positionHistory so threefold repetition checks remain correct
-            uint64_t nullHash = position_key(board);
-            positionHistory.push_back(nullHash);
+            board.hash ^= zobrist().side; // stm changed
+            
+            // DÜZELTME: board.enPassant değil, yedeklediğimiz prevEnPassantCol kullanıyoruz!
+            // DÜZELTME: Hafıza taşmasını engellemek için % 8 ekliyoruz!
+            int oldEp = (prevEnPassantCol != -1) ? (prevEnPassantCol % 8) : 8;
+            board.hash ^= zobrist().epFile[oldEp];
+            board.hash ^= zobrist().epFile[8];
+
+            positionHistory.push_back(board.hash);
 
             // Reduction factor R (typical values 2..3). Ensure we don't search negative depth
             int R = std::min(3, std::max(1, depth - 2));
@@ -663,6 +670,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
             if (!positionHistory.empty()) positionHistory.pop_back();
             board.stm = other_color(board.stm);
             board.enPassant = prevEnPassantCol;
+            board.hash = prevHash; // restore hash to before null move
 
             if (nullScore >= beta) {
                 pvLine.clear();
