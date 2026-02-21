@@ -80,7 +80,7 @@ void updatePawnCorrectionHistory(Board *board, const int depth, const int diff) 
 }
 
 int adjustEvalWithCorrectionHistory(Board *board, const int rawEval) {
-    uint64_t pawnKey = generatePawnKey(board);
+    uint64_t pawnKey = board->pawnHash;
     int entry = pawnCorrectionHistory[board->stm][pawnKey % CORRHIST_SIZE];
     int mateFound = MATE_SCORE - MAX_PLY; // Ensure we don't overflow mate scores
     return clamp(rawEval + entry / CORRHIST_GRAIN, -mateFound + 1, mateFound - 1);

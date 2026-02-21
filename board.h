@@ -179,12 +179,15 @@ struct UndoState {
     int8_t enPassant;     // EP column copy (-1 or 0-7)
     int8_t halfMoveClock; // 50 move rule counter before the move
     uint64_t hash;         // Position hash before the move (for repetition detection)
+    uint64_t pawnHash;
 };
 
 struct Board {
     Bitboard piece[6];
     Bitboard color[2];
     uint64_t hash;
+    uint64_t pawnHash;
+
 
     uint8_t castling;
     int8_t enPassant;

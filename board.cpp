@@ -1,5 +1,6 @@
 #include "board.h"
 #include "bitboard.h"
+#include "history.h"
 #include <algorithm>
 #include <cctype>
 #include <iostream>
@@ -103,6 +104,7 @@ void Board::reset() {
     std::vector<UndoState> undoStack;
 
     hash = position_key(*this);
+    pawnHash = generatePawnKey(this);
 }
 
 void Board::makeMove(Move& move) {
@@ -114,6 +116,7 @@ void Board::makeMove(Move& move) {
 
     UndoState st;
     st.hash = this->hash; // Store the current hash before making the move
+    st.pawnHash = this->pawnHash;
     st.castling = castling;   
     st.enPassant = enPassant;
     st.halfMoveClock = halfMoveClock;
@@ -156,11 +159,17 @@ void Board::makeMove(Move& move) {
 
     // Remove moving piece from origin
     hash ^= z.piece[piece_to_zobrist_index(movingPiece)][fromSq];
+    if (piece_type(movingPiece) == PAWN) {
+        pawnHash ^= z.piece[piece_to_zobrist_index(movingPiece)][fromSq];
+    }
 
     bb_clear(*this, movingPiece, fromSq);
     if (target_piece != 0) {
         bb_clear(*this, target_piece, toSq);
         hash ^= z.piece[piece_to_zobrist_index(target_piece)][toSq];
+        if (piece_type(target_piece) == PAWN) {
+            pawnHash ^= z.piece[piece_to_zobrist_index(target_piece)][toSq];
+        }
     }
     bb_set(*this, movingPiece, toSq);
 
@@ -173,6 +182,7 @@ void Board::makeMove(Move& move) {
         bb_clear(*this, capturedPawn, captureSq);
         mailbox[captureSq] = 0;
         hash ^= z.piece[piece_to_zobrist_index(capturedPawn)][captureSq];
+        pawnHash ^= z.piece[piece_to_zobrist_index(capturedPawn)][captureSq];
     }
 
     if (piece_type(movingPiece) == KING && std::abs(sq_to_col(fromSq) - sq_to_col(toSq)) == 2) {
@@ -210,6 +220,9 @@ void Board::makeMove(Move& move) {
 
     mailbox[toSq] = placedPiece;
     hash ^= z.piece[piece_to_zobrist_index(placedPiece)][toSq];
+    if (piece_type(placedPiece) == PAWN) {
+        pawnHash ^= z.piece[piece_to_zobrist_index(placedPiece)][toSq]; 
+    }
 
     if (piece_type(movingPiece) == PAWN && std::abs(sq_to_row(fromSq) - sq_to_row(toSq)) == 2) {
         const bool opponentWhite = (stm == BLACK);
@@ -328,6 +341,7 @@ void Board::unmakeMove(Move& move) {
     enPassant = st.enPassant;
     halfMoveClock = st.halfMoveClock;
     this->hash = st.hash;
+    this->pawnHash = st.pawnHash;
 }
 
 void Board::loadFEN(const std::string& fen) {
