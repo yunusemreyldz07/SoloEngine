@@ -713,7 +713,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         int lmpCount = (3 * depth * depth) + 4;
         // Late Move Pruning (LMP) logic
         if (params.use_lmp && !pvNode &&
-            movesSearched >= lmpCount && get_promotion_type(move) == -1) {
+            movesSearched >= lmpCount && is_quiet(move)) {
             continue; // skip this move (late move pruning)
         }
 
