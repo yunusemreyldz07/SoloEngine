@@ -348,11 +348,10 @@ bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttack
     return is_square_attacked_bb(board, sq, isWhiteAttacker);
 }
 
-std::vector<Move> get_all_moves(Board& board, bool isWhiteTurn) {
+void get_all_moves(Board& board, Move moves[], int& moveCount) {
     std::vector<Move> pseudoMoves;
     std::vector<Move> legalMoves;
     pseudoMoves.reserve(256);
-    (void)isWhiteTurn;
     const bool sideToMove = board.stm == WHITE;
 
     generate_pawn_moves_bb(board, pseudoMoves);
@@ -375,12 +374,14 @@ std::vector<Move> get_all_moves(Board& board, bool isWhiteTurn) {
         }
         board.unmakeMove(m);
     }
-
-    return legalMoves;
+    int i = 0;
+    for (const auto& m : legalMoves) {
+        moves[i++] = m;
+    }
+    moveCount = i;
 }
 
-std::vector<Move> get_capture_moves(const Board& board) {
-    std::vector<Move> moves;
+void get_capture_moves(const Board& board, Move moves[], int& moveCount) {
     std::vector<Move> pseudoMoves;
     pseudoMoves.reserve(128);
 
@@ -391,11 +392,11 @@ std::vector<Move> get_capture_moves(const Board& board) {
     generate_queen_moves_bb(board, pseudoMoves);
     generate_king_moves_bb(board, pseudoMoves);
 
-    for (auto& m : pseudoMoves) {
+    int i = 0;
+    for (const auto& m : pseudoMoves) {
         if (is_capture(m)) {
-            moves.push_back(m);
+            moves[i++] = m;
         }
     }
-
-    return moves;
+    moveCount = i;
 }
