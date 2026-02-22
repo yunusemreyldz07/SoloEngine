@@ -133,74 +133,6 @@ SearchSession init_search_session(
     return session;
 }
 
-void reorder_with_pv(const Board& board, std::vector<Move>& possibleMoves, const Move& bestMoveSoFar) {
-    std::stable_sort(possibleMoves.begin(), possibleMoves.end(), [&](const Move& a, const Move& b) {
-        const bool aIsPV = (move_from(a) == move_from(bestMoveSoFar) && move_to(a) == move_to(bestMoveSoFar) && get_promotion_type(a) == get_promotion_type(bestMoveSoFar));
-        const bool bIsPV = (move_from(b) == move_from(bestMoveSoFar) && move_to(b) == move_to(bestMoveSoFar) && get_promotion_type(b) == get_promotion_type(bestMoveSoFar));
-
-        // Strict-weak-ordering: comparator must be irreflexive (never a < a).
-        if (aIsPV != bIsPV) return aIsPV;
-
-        const int sa = scoreMove(board, a, 0, nullptr);
-        const int sb = scoreMove(board, b, 0, nullptr);
-        if (sa != sb) return sa > sb;
-
-        // Deterministic tie-breaker.
-        if (sq_to_row(move_from(a)) != sq_to_row(move_from(b))) return sq_to_row(move_from(a)) < sq_to_row(move_from(b));
-        if (sq_to_col(move_from(a)) != sq_to_col(move_from(b))) return sq_to_col(move_from(a)) < sq_to_col(move_from(b));
-        if (sq_to_row(move_to(a)) != sq_to_row(move_to(b))) return sq_to_row(move_to(a)) < sq_to_row(move_to(b));
-        if (sq_to_col(move_to(a)) != sq_to_col(move_to(b))) return sq_to_col(move_to(a)) < sq_to_col(move_to(b));
-        return get_promotion_type(a) < get_promotion_type(b);
-    });
-}
-
-void search_moves_for_one_depth(
-    Board& board,
-    const std::vector<Move>& possibleMoves,
-    int depth,
-    int& alpha,
-    int beta,
-    int ply,
-    std::vector<uint64_t>& localPositionHistory,
-    int& bestValue,
-    Move& currentDepthBestMove,
-    std::vector<Move>& bestPvForDepth
-) {
-    for (Move move : possibleMoves) {
-        if (stop_search.load(std::memory_order_relaxed)) {
-            break;
-        }
-
-        board.makeMove(move);
-
-        std::vector<Move> childPv;
-        uint64_t newHash = position_key(board);
-        localPositionHistory.push_back(newHash);
-        int val = -negamax(board, depth - 1, -beta, -alpha, ply + 1, localPositionHistory, childPv);
-        localPositionHistory.pop_back();
-
-        board.unmakeMove(move);
-
-        if (stop_search.load(std::memory_order_relaxed)) {
-            break;
-        }
-
-        if (val > bestValue) {
-            bestValue = val;
-            currentDepthBestMove = move;
-            bestPvForDepth.clear();
-            bestPvForDepth.push_back(move);
-            bestPvForDepth.insert(bestPvForDepth.end(), childPv.begin(), childPv.end());
-
-            if (bestValue > alpha) {
-                alpha = bestValue;
-                if (alpha >= beta) {
-                    break;
-                }
-            }
-        }
-    }
-}
 void emit_info_line(
     int depth,
     int bestValue,
@@ -233,7 +165,6 @@ void emit_info_line(
 int search_one_depth_with_aspiration(
     Board& board,
     const SearchParams& params,
-    std::vector<Move>& possibleMoves,
     int depth,
     int ply,
     std::vector<uint64_t>& localPositionHistory,
@@ -244,7 +175,7 @@ int search_one_depth_with_aspiration(
     int delta = params.aspiration_delta; // Aspiration window margin
     int alpha = -VALUE_INF;
     int beta = VALUE_INF;
-    int bestValue = std::numeric_limits<int>::min() / 2;
+    int bestValue = lastScore;
 
     if (params.use_aspiration && depth >= 5) {
         alpha = std::max(-VALUE_INF, lastScore - delta);
@@ -254,26 +185,9 @@ int search_one_depth_with_aspiration(
     while (true) {
         const int alphaStart = alpha;
         const int betaStart = beta;
-        bestValue = std::numeric_limits<int>::min() / 2;
-        Move currentDepthBestMove; // Only the best move found at this depth
-
-        if (depth > 1) {
-            reorder_with_pv(board, possibleMoves, bestMoveSoFar);
-        }
 
         std::vector<Move> bestPvForDepth;
-        search_moves_for_one_depth(
-            board,
-            possibleMoves,
-            depth,
-            alpha,
-            beta,
-            ply,
-            localPositionHistory,
-            bestValue,
-            currentDepthBestMove,
-            bestPvForDepth
-        );
+        bestValue = negamax(board, depth, alpha, beta, ply, localPositionHistory, bestPvForDepth);
 
         if (stop_search.load(std::memory_order_relaxed)) {
             break;
@@ -286,8 +200,8 @@ int search_one_depth_with_aspiration(
             continue;
         }
 
-        if (bestValue > std::numeric_limits<int>::min() / 2) {
-            bestMoveSoFar = currentDepthBestMove;
+        if (!bestPvForDepth.empty()) {
+            bestMoveSoFar = bestPvForDepth[0];
             lastScore = bestValue;
             emit_info_line(depth, bestValue, bestPvForDepth, searchStart);
         }
@@ -828,7 +742,6 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
         bestValue = search_one_depth_with_aspiration(
             session.board,
             session.params,
-            session.possibleMoves,
             depth,
             session.ply,
             session.localPositionHistory,

@@ -289,11 +289,6 @@ public:
     // Lockless + thread-safe: write data first, then publish key with release semantics.
     void store(uint64_t hash, int score, int depth, TTFlag flag, const Move& bestMove);
 
-    // Backward-compatible overload (older call sites passing an int)
-    void store(uint64_t hash, int score, int depth, int flag, const Move& bestMove) {
-        store(hash, score, depth, static_cast<TTFlag>(flag), bestMove);
-    }
-
     bool probe(uint64_t key, int& outScore, int& outDepth, TTFlag& outFlag, Move& outMove) const;
     size_t entryCount() const { return size; }
 
