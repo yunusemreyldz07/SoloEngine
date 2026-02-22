@@ -465,12 +465,14 @@ int quiescence(Board& board, int alpha, int beta, int ply){
     // Do not stop until you reach a quiet position
     int stand_pat = evaluate_board(board);
 
+    int bestScore = stand_pat;
+
     // Alpha-Beta pruning
-    if (stand_pat >= beta) {
-        return beta;
+    if (bestScore >= beta) {
+        return bestScore;
     }
-    if (alpha < stand_pat) {
-        alpha = stand_pat;
+    if (alpha < bestScore) {
+        alpha = bestScore;
     }
 
     std::vector<Move> captureMoves = get_capture_moves(board);
@@ -511,15 +513,18 @@ int quiescence(Board& board, int alpha, int beta, int ply){
         int eval = -quiescence(board, -beta, -alpha, ply + 1);
         board.unmakeMove(move);
 
-        if (eval >= beta) {
-            return beta;
+        if (eval >= bestScore) {
+            bestScore = eval;
         }
         if (eval > alpha) {
             alpha = eval;
         }
+        if (bestScore >= beta) {
+            break; // Beta cutoff
+        }
     }
 
-    return alpha;
+    return bestScore;
 }
 
 // Negamax
@@ -608,11 +613,11 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
         if (!is_repetition_candidate && ttFlag == ALPHA && ttScore <= alpha) {
             pvLine.clear();
-            return alpha;
+            return ttScore;
         }
         if (!is_repetition_candidate && ttFlag == BETA && ttScore >= beta) {
             pvLine.clear();
-            return beta;
+            return ttScore;
         }
     }
 
@@ -628,7 +633,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         if (staticEval - margin >= beta) {
             // "I'm so far ahead that even if I reduce the margin, I still surpass the opponent's threshold, so I don't need to search further and lose time"
             pvLine.clear();
-            return beta; // Cutoff
+            return staticEval - margin;
         }
     }
 
@@ -674,7 +679,7 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
 
             if (nullScore >= beta) {
                 pvLine.clear();
-                return beta; // Null-move cutoff
+                return nullScore; // Null-move cutoff
             }
         }
     }
@@ -767,16 +772,16 @@ int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<u
         if (eval > maxEval) {
             maxEval = eval;
             bestMove = move;
+        }
+
+        if (eval > alpha) {
+            alpha = eval;
             pvLine.clear();
             pvLine.push_back(move);
             pvLine.insert(pvLine.end(), childPv.begin(), childPv.end());
         }
 
-        if (eval > alpha) {
-            alpha = eval;
-        }
-
-        if (beta <= alpha) {
+        if (beta <= maxEval) {
             // Update history
             int from = move_from(move);
             int to = move_to(move);
