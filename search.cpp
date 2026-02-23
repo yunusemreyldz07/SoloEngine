@@ -77,12 +77,56 @@ void orderMoves(Board& board, Move* moves, int moveCount) {
     });
 }
 
+int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
+    if (stop_search.load(std::memory_order_relaxed)) return 0;
+
+    int stand_pat = evaluate_board(board);
+
+    if (stand_pat >= beta) {
+        return stand_pat;
+    }
+
+    if (stand_pat > alpha) {
+        alpha = stand_pat;
+    }
+
+    Move captureMoves[MAX_MOVES];
+    int moveCount = 0;
+    get_capture_moves(board, captureMoves, moveCount);
+    orderMoves(board, captureMoves, moveCount);
+    int bestEval = stand_pat;
+
+    for (int i = 0; i < moveCount; ++i) {
+        Move captureMove = captureMoves[i];
+        
+        board.makeMove(captureMove);
+        
+        int eval = -qsearch(board, -beta, -alpha, ply + 1);
+        
+        board.unmakeMove(captureMove);
+
+        if (eval > bestEval) {
+            bestEval = eval;
+        }
+
+        if (bestEval > alpha) {
+            alpha = bestEval;
+        }
+
+        if (alpha >= beta) {
+            break; // Beta cutoff
+        }
+    }
+
+    return bestEval;
+}
+
 int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, std::vector<Move>& pvLine) {
     nodeCount.fetch_add(1, std::memory_order_relaxed);
     if (should_stop_search()) return 0;
 
     if (depth <= 0) {
-        return evaluate_board(board);
+        return qsearch(board, alpha, beta, ply);
     }
 
     int moveCount = 0;
