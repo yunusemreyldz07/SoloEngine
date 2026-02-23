@@ -66,14 +66,34 @@ int scoreMove(Board& board, const Move& move) {
         int attackerPiece = piece_at_sq(board, from);
         int attackerValue = PIECE_VALUES[piece_type(attackerPiece)];
         int mvvScore = victimValue * 10 - attackerValue;
-
-        if (staticExchangeEvaluation(board, move, SEE_THRESHOLD) >= SEE_THRESHOLD) {
-            mvvScore += SCORE_GOOD_CAPTURE; // Bonus for good captures
-        } else {
-            mvvScore -= SCORE_BAD_CAPTURE; // Penalty for bad captures
-        }
-
         score += mvvScore;
+    }
+
+    if (flags >= FLAG_PROMO_KNIGHT) {
+        int promoType = -1;
+        switch (flags) {
+            case FLAG_PROMO_KNIGHT:
+            case FLAG_PROMO_KNIGHT_CAPTURE:
+                promoType = KNIGHT; break;
+            case FLAG_PROMO_BISHOP:
+            case FLAG_PROMO_BISHOP_CAPTURE:
+                promoType = BISHOP; break;
+            case FLAG_PROMO_ROOK:
+            case FLAG_PROMO_ROOK_CAPTURE:
+                promoType = ROOK; break;
+            case FLAG_PROMO_QUEEN:
+            case FLAG_PROMO_QUEEN_CAPTURE:
+                promoType = QUEEN; break;
+        }
+        if (promoType != -1) {
+            switch (promoType) {
+                case KNIGHT: score += SCORE_PROMO_KNIGHT; break;
+                case BISHOP: score += SCORE_PROMO_BISHOP; break;
+                case ROOK: score += SCORE_PROMO_ROOK; break;
+                case QUEEN: score += SCORE_PROMO_QUEEN; break;
+            }
+
+        }
     }
     return score;
 }
