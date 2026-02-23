@@ -130,6 +130,21 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         return qsearch(board, alpha, beta, ply);
     }
 
+    int16_t originalAlpha = alpha;
+    uint64_t hashKey = board.hash; 
+    TTEntry& ttEntry = ttTable.getEntry(hashKey);
+    Move ttMove = 0;
+    bool ttHit = false;
+    if (ttEntry.hashKey == hashKey) {
+        ttMove = ttEntry.bestMove;
+        ttHit = true;
+        
+        if (ttEntry.depth >= depth - 2 && ply > 0) {
+            int16_t ttScore = ttEntry.score;
+            return ttScore;
+        }
+    }
+
     int moveCount = 0;
     Move moves[MAX_MOVES];
     get_all_moves(board, moves, moveCount);
@@ -146,6 +161,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
     int16_t bestEval = -VALUE_INF;
     
     orderMoves(board, moves, moveCount);
+    Move bestMove = 0;
 
     for (int i = 0; i < moveCount; ++i) {
         if (should_stop_search()) break;
@@ -166,7 +182,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 
         if (eval > alpha) { 
             alpha = eval;
-            
+            bestMove = chosenMove;
             pvLine.clear();
             pvLine.push_back(chosenMove);
             pvLine.insert(pvLine.end(), childPv.begin(), childPv.end());
@@ -176,6 +192,17 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
             break; // Beta cutoff
         }
     }
+
+    TTFlag flag = TT_EXACT;
+    if (bestEval <= originalAlpha) {
+        flag = TT_ALPHA; // (Fail-Low)
+    } else if (bestEval >= beta) {
+        flag = TT_BETA;  // (Fail-High)
+    }
+
+    int16_t saveScore = bestEval;
+
+    ttTable.writeEntry(hashKey, saveScore, static_cast<int8_t>(depth), flag, bestMove);
 
     return bestEval;
 }

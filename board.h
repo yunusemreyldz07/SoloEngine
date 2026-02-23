@@ -270,45 +270,4 @@ inline bool is_fifty_move_draw(const Board& board) {
 // Does NOT include K+B+N vs K (can mate) or K+B vs K+B same color (can mate in corners with help)
 bool is_insufficient_material(const Board& board);
 
-enum TTFlag {
-    EXACT,      // Exact score
-    ALPHA,      // Upper bound (fail-low)
-    BETA        // Lower bound (fail-high)
-};
-
-class TranspositionTable {
-public:
-    TranspositionTable() : table(nullptr), size(0) {}
-    ~TranspositionTable() { delete[] table; }
-
-    // Resize the table to given size in MB (count = bytes / sizeof(entry)).
-    void resize(int mbSize);
-    void clear();
-
-    // Lockless + thread-safe: write data first, then publish key with release semantics.
-    void store(uint64_t hash, int score, int depth, TTFlag flag, const Move& bestMove);
-
-    // Backward-compatible overload (older call sites passing an int)
-    void store(uint64_t hash, int score, int depth, int flag, const Move& bestMove) {
-        store(hash, score, depth, static_cast<TTFlag>(flag), bestMove);
-    }
-
-    bool probe(uint64_t key, int& outScore, int& outDepth, TTFlag& outFlag, Move& outMove) const;
-    size_t entryCount() const { return size; }
-
-private:
-    struct TTAtomicEntry {
-        std::atomic<uint64_t> key{0};
-        std::atomic<uint64_t> data{0};
-    };
-
-    TTAtomicEntry* table;
-    size_t size;
-
-    static uint64_t packData(int score, int depth, TTFlag flag, uint16_t packedMove);
-    static void unpackData(uint64_t data, int& score, int& depth, TTFlag& flag, uint16_t& packedMove);
-};
-
-extern TranspositionTable globalTT;
-
 #endif
