@@ -53,7 +53,7 @@ long long getNodeCounter() {
     return nodeCount.load(std::memory_order_relaxed);
 }
 
-int scoreMove(Board& board, const Move& move) {
+int scoreMove(Board& board, const Move& move, Move ttMove = 0) {
     int score = 0;
     int from = move_from(move);
     int to = move_to(move);
@@ -69,12 +69,16 @@ int scoreMove(Board& board, const Move& move) {
         int mvvScore = victimValue * 10 - attackerValue;
         score += mvvScore;
     }
+
+    if (ttMove != 0 && move == ttMove) {
+        score += SCORE_TT_MOVE;
+    }
     return score;
 }
 
-void orderMoves(Board& board, Move* moves, int moveCount) {
+void orderMoves(Board& board, Move* moves, int moveCount, Move ttMove = 0) {
     std::sort(moves, moves + moveCount, [&](const Move& a, const Move& b) {
-        return scoreMove(board, a) > scoreMove(board, b);
+        return scoreMove(board, a, ttMove) > scoreMove(board, b, ttMove);
     });
 }
 
@@ -94,7 +98,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
     Move captureMoves[MAX_MOVES];
     int moveCount = 0;
     get_capture_moves(board, captureMoves, moveCount);
-    orderMoves(board, captureMoves, moveCount);
+    orderMoves(board, captureMoves, moveCount, 0);
     int bestEval = stand_pat;
 
     for (int i = 0; i < moveCount; ++i) {
@@ -139,9 +143,10 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         ttMove = ttEntry.bestMove;
         ttHit = true;
         
-        if (ttEntry.depth >= depth - 2 && ply > 0) {
+        if (ttEntry.depth >= depth && ply > 0) {
             int16_t ttScore = ttEntry.score;
             return ttScore;
+        
         }
     }
 
@@ -160,7 +165,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 
     int16_t bestEval = -VALUE_INF;
     
-    orderMoves(board, moves, moveCount);
+    orderMoves(board, moves, moveCount, ttMove);
     Move bestMove = 0;
 
     for (int i = 0; i < moveCount; ++i) {
@@ -178,6 +183,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         // fail soft
         if (eval > bestEval) {
             bestEval = eval;
+            ttTable.writeEntry(hashKey, eval, static_cast<int8_t>(depth), TT_EXACT, chosenMove);
         }
 
         if (eval > alpha) { 
