@@ -80,7 +80,7 @@ void orderMoves(Board& board, Move* moves, int moveCount) {
 
 int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
     if (stop_search.load(std::memory_order_relaxed)) return 0;
-
+    nodeCount.fetch_add(1, std::memory_order_relaxed);
     int stand_pat = evaluate_board(board);
 
     if (stand_pat >= beta) {
@@ -110,8 +110,8 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
             bestEval = eval;
         }
 
-        if (bestEval > alpha) {
-            alpha = bestEval;
+        if (eval > alpha) {
+            alpha = eval;
         }
 
         if (alpha >= beta) {
@@ -164,8 +164,8 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
             bestEval = eval;
         }
 
-        if (bestEval > alpha) { 
-            alpha = bestEval;
+        if (eval > alpha) { 
+            alpha = eval;
             
             pvLine.clear();
             pvLine.push_back(chosenMove);
