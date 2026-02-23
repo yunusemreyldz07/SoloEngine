@@ -3,9 +3,6 @@
 
 #include "board.h"
 
-// Piece values
-extern const int PIECE_VALUES[7];
-
 extern int center_distance(int row, int col);
 extern int manhattan_distance(int r1, int c1, int r2, int c2);
 

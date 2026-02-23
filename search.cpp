@@ -8,8 +8,10 @@
 #include <iostream>
 #include <vector>
 #include <chrono>
+#include <algorithm>
 
 #define MAX_MOVES 256
+#define SEE_THRESHOLD -82
 
 namespace {
 std::atomic<bool> stop_search{false};
@@ -17,6 +19,8 @@ std::atomic<long long> nodeCount{0};
 std::atomic<long long> start_time_ms{0};
 std::atomic<long long> time_limit_ms{0};
 std::atomic<bool> time_limited{false};
+
+const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
 
 inline long long now_ms() {
     auto now = std::chrono::steady_clock::now();
@@ -48,6 +52,31 @@ long long getNodeCounter() {
     return nodeCount.load(std::memory_order_relaxed);
 }
 
+int scoreMove(Board& board, const Move& move) {
+    int score = 0;
+    int from = move_from(move);
+    int to = move_to(move);
+    int piece = piece_at_sq(board, from);
+    int flags = move_flags(move);
+
+    if (is_capture(move)) {
+        int victimPiece = flags == FLAG_EN_PASSANT ? PAWN : piece_type(board.mailbox[to]);
+        int victimValue = PIECE_VALUES[victimPiece];
+
+        int attackerPiece = piece_at_sq(board, from);
+        int attackerValue = PIECE_VALUES[piece_type(attackerPiece)];
+        int mvvScore = victimValue * 10 - attackerValue;
+        score += mvvScore;
+    }
+    return score;
+}
+
+void orderMoves(Board& board, Move* moves, int moveCount) {
+    std::sort(moves, moves + moveCount, [&](const Move& a, const Move& b) {
+        return scoreMove(board, a) > scoreMove(board, b);
+    });
+}
+
 int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, std::vector<Move>& pvLine) {
     nodeCount.fetch_add(1, std::memory_order_relaxed);
     if (should_stop_search()) return 0;
@@ -71,6 +100,8 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 
     int16_t bestEval = -VALUE_INF;
     
+    orderMoves(board, moves, moveCount);
+
     for (int i = 0; i < moveCount; ++i) {
         if (should_stop_search()) break;
 
