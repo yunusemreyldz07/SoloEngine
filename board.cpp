@@ -100,7 +100,8 @@ void Board::reset() {
     stm = WHITE;
     enPassant = -1;
     halfMoveClock = 0;
-    std::vector<UndoState> undoStack;
+    moveHistory.clear();
+    undoStack.clear();
 
     hash = position_key(*this);
 }
@@ -336,10 +337,12 @@ void Board::loadFEN(const std::string& fen) {
     color[BLACK] = 0ULL;
     for (int i = 0; i < 64; i++) mailbox[i] = 0;
     castling = 0;
+    moveHistory.clear();
+    undoStack.clear();
 
     std::istringstream ss(fen);
-    std::string position, turn, castling, enPassant;
-    ss >> position >> turn >> castling >> enPassant;
+    std::string position, turn, castlingField, enPassantField;
+    ss >> position >> turn >> castlingField >> enPassantField;
 
     int row = 0, col = 0;
     for (char c : position) {
@@ -368,13 +371,13 @@ void Board::loadFEN(const std::string& fen) {
     }
 
     stm = (turn == "w") ? WHITE : BLACK;
-    this->castling = (castling.find('K') != std::string::npos) ? (this->castling | CASTLE_WK) : this->castling;
-    this->castling = (castling.find('Q') != std::string::npos) ? (this->castling | CASTLE_WQ) : this->castling;
-    this->castling = (castling.find('k') != std::string::npos) ? (this->castling | CASTLE_BK) : this->castling;
-    this->castling = (castling.find('q') != std::string::npos) ? (this->castling | CASTLE_BQ) : this->castling;
+    this->castling = (castlingField.find('K') != std::string::npos) ? (this->castling | CASTLE_WK) : this->castling;
+    this->castling = (castlingField.find('Q') != std::string::npos) ? (this->castling | CASTLE_WQ) : this->castling;
+    this->castling = (castlingField.find('k') != std::string::npos) ? (this->castling | CASTLE_BK) : this->castling;
+    this->castling = (castlingField.find('q') != std::string::npos) ? (this->castling | CASTLE_BQ) : this->castling;
 
-    if (enPassant != "-") {
-        this->enPassant = enPassant[0] - 'a';
+    if (enPassantField != "-") {
+        this->enPassant = enPassantField[0] - 'a';
         int epRow = stm == 0 ? 2 : 5;
         int epSq = row_col_to_sq(epRow, this->enPassant);
         if (!is_pawn_attack_possible(*this, stm == 0 ? false : true, epSq)) {
