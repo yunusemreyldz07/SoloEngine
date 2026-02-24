@@ -85,41 +85,51 @@ void orderMoves(Board& board, Move* moves, int moveCount, Move ttMove = 0) {
 int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
     if (stop_search.load(std::memory_order_relaxed)) return 0;
     nodeCount.fetch_add(1, std::memory_order_relaxed);
-    int stand_pat = evaluate_board(board);
+    int kingRow = 0, kingCol = 0;
+    const bool sideIsWhite = (board.stm == WHITE);
+    const bool inCheck = king_square(board, sideIsWhite, kingRow, kingCol) &&
+                         is_square_attacked(board, kingRow, kingCol, !sideIsWhite);
 
-    if (stand_pat >= beta) {
-        return stand_pat;
-    }
-
-    if (stand_pat > alpha) {
-        alpha = stand_pat;
-    }
-
-    Move captureMoves[MAX_MOVES];
+    Move moves[MAX_MOVES];
     int moveCount = 0;
-    get_capture_moves(board, captureMoves, moveCount);
-    orderMoves(board, captureMoves, moveCount, 0);
-    int bestEval = stand_pat;
+    int16_t bestEval = -VALUE_INF;
 
+    if (inCheck) {
+        // In check, stand-pat is illegal so search all legal evasions
+        get_all_moves(board, moves, moveCount);
+        if (moveCount == 0) {
+            return static_cast<int16_t>(-MATE_SCORE + ply);
+        }
+    } else {
+        int standPat = evaluate_board(board);
+        if (standPat >= beta) {
+            return standPat;
+        }
+        if (standPat > alpha) {
+            alpha = standPat;
+        }
+        get_capture_moves(board, moves, moveCount);
+        if (moveCount == 0) {
+            return standPat;
+        }
+        bestEval = standPat;
+    }
+
+    orderMoves(board, moves, moveCount, 0);
     for (int i = 0; i < moveCount; ++i) {
-        Move captureMove = captureMoves[i];
-        
-        board.makeMove(captureMove);
-        
-        int eval = -qsearch(board, -beta, -alpha, ply + 1);
-        
-        board.unmakeMove(captureMove);
+        Move move = moves[i];
+        board.makeMove(move);
+        int16_t eval = -qsearch(board, -beta, -alpha, ply + 1);
+        board.unmakeMove(move);
 
         if (eval > bestEval) {
             bestEval = eval;
         }
-
         if (eval > alpha) {
             alpha = eval;
         }
-
         if (alpha >= beta) {
-            break; // Beta cutoff
+            break;
         }
     }
 
