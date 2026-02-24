@@ -12,6 +12,8 @@
 
 #define VERSION "1.4.0"
 
+TranspositionTable ttTable;
+
 struct UciTimeParams {
     int wtime = -1;
     int btime = -1;
@@ -75,8 +77,8 @@ void bench() {
     long long totalTimeMs = 0;
 
     Board board;
-    if (globalTT.entryCount() == 0) globalTT.resize(16);
-    globalTT.clear();
+    if (ttTable.count() == 0) ttTable.resize(128);
+    ttTable.clear();
 
     for (size_t i = 0; i < fens.size(); ++i) {
         board.loadFEN(fens[i]);
@@ -144,7 +146,7 @@ int handle_uci_commands(int argc, char* argv[]){
     
     Board board;
     // Default TT size matches the UCI 'Hash' option default.
-    if (globalTT.entryCount() == 0) globalTT.resize(128);
+    if (ttTable.count() == 0) ttTable.resize(128);
     std::vector<uint64_t> gameHistory;
     gameHistory.reserve(512);
     std::string line;
@@ -219,8 +221,8 @@ int handle_uci_commands(int argc, char* argv[]){
 
             if (name == "Hash") {
                 int mb = std::max(1, std::stoi(value));
-                globalTT.resize(mb);
-                globalTT.clear();
+                ttTable.resize(mb);
+                ttTable.clear();
 
 
             } else if (name == "UseTT") {
@@ -245,7 +247,7 @@ int handle_uci_commands(int argc, char* argv[]){
 
         else if (line == "ucinewgame") {
             stop_and_join_search();
-            globalTT.clear();
+            ttTable.clear();
             board.reset();
             gameHistory.clear();
             gameHistory.push_back(position_key(board));

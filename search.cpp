@@ -53,7 +53,7 @@ long long getNodeCounter() {
     return nodeCount.load(std::memory_order_relaxed);
 }
 
-int scoreMove(Board& board, const Move& move) {
+int scoreMove(Board& board, const Move& move, Move ttMove = 0) {
     int score = 0;
     int from = move_from(move);
     int to = move_to(move);
@@ -69,12 +69,16 @@ int scoreMove(Board& board, const Move& move) {
         int mvvScore = victimValue * 10 - attackerValue;
         score += mvvScore;
     }
+
+    if (ttMove != 0 && move == ttMove) {
+        score += SCORE_TT_MOVE;
+    }
     return score;
 }
 
-void orderMoves(Board& board, Move* moves, int moveCount) {
+void orderMoves(Board& board, Move* moves, int moveCount, Move ttMove = 0) {
     std::sort(moves, moves + moveCount, [&](const Move& a, const Move& b) {
-        return scoreMove(board, a) > scoreMove(board, b);
+        return scoreMove(board, a, ttMove) > scoreMove(board, b, ttMove);
     });
 }
 
@@ -94,7 +98,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
     Move captureMoves[MAX_MOVES];
     int moveCount = 0;
     get_capture_moves(board, captureMoves, moveCount);
-    orderMoves(board, captureMoves, moveCount);
+    orderMoves(board, captureMoves, moveCount, 0);
     int bestEval = stand_pat;
 
     for (int i = 0; i < moveCount; ++i) {
@@ -130,6 +134,29 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         return qsearch(board, alpha, beta, ply);
     }
 
+    int16_t originalAlpha = alpha;
+    uint64_t hashKey = board.hash; 
+    TTEntry& ttEntry = ttTable.getEntry(hashKey);
+    Move ttMove = 0;
+    bool ttHit = false;
+    if (ttEntry.hashKey == hashKey) {
+        ttMove = ttEntry.bestMove;
+        ttHit = true;
+        if (ttEntry.depth >= depth && ply > 0) {
+            int16_t ttScore = ttEntry.score;
+            if (ttEntry.flag == TT_EXACT) {
+                return ttScore;
+            }
+            if (ttEntry.flag == TT_ALPHA && ttScore <= alpha) {
+                return ttScore;
+            }
+            if (ttEntry.flag == TT_BETA && ttScore >= beta) {
+                return ttScore;
+            }
+        
+        }
+    }
+
     int moveCount = 0;
     Move moves[MAX_MOVES];
     get_all_moves(board, moves, moveCount);
@@ -145,7 +172,8 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 
     int16_t bestEval = -VALUE_INF;
     
-    orderMoves(board, moves, moveCount);
+    orderMoves(board, moves, moveCount, ttMove);
+    Move bestMove = 0;
 
     for (int i = 0; i < moveCount; ++i) {
         if (should_stop_search()) break;
@@ -166,7 +194,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 
         if (eval > alpha) { 
             alpha = eval;
-            
+            bestMove = chosenMove;
             pvLine.clear();
             pvLine.push_back(chosenMove);
             pvLine.insert(pvLine.end(), childPv.begin(), childPv.end());
@@ -177,12 +205,17 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
     }
 
-    return bestEval;
-}
+    TTFlag flag = TT_EXACT;
+    if (alpha <= originalAlpha) {
+        flag = TT_BETA;
+    } else if (alpha >= beta) {
+        flag = TT_ALPHA;
+    }
 
-int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply) {
-    std::vector<Move> unusedPv;
-    return negamax(board, depth, alpha, beta, ply, unusedPv);
+    ttTable.writeEntry(hashKey, bestEval, static_cast<int8_t>(depth), flag, bestMove);
+
+
+    return bestEval;
 }
 
 Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<uint64_t>& positionHistory, int ply) {
