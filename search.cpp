@@ -145,7 +145,15 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         
         if (ttEntry.depth >= depth && ply > 0) {
             int16_t ttScore = ttEntry.score;
-            return ttScore;
+            if (ttEntry.flag == TT_EXACT) {
+                return ttScore;
+            }
+            if (ttEntry.flag == TT_ALPHA && ttScore <= alpha) {
+                return ttScore;
+            }
+            if (ttEntry.flag == TT_BETA && ttScore >= beta) {
+                return ttScore;
+            }
         
         }
     }
@@ -183,7 +191,6 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         // fail soft
         if (eval > bestEval) {
             bestEval = eval;
-            ttTable.writeEntry(hashKey, eval, static_cast<int8_t>(depth), TT_EXACT, chosenMove);
         }
 
         if (eval > alpha) { 
@@ -197,18 +204,14 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         if (alpha >= beta) {
             break; // Beta cutoff
         }
+        TTFlag flag = TT_EXACT;
+        if (bestEval <= originalAlpha) {
+            flag = TT_ALPHA; // (Fail-Low)
+        } else if (bestEval >= beta) {
+            flag = TT_BETA;  // (Fail-High)
+        }
+        ttTable.writeEntry(hashKey, bestEval, static_cast<int8_t>(depth), flag, chosenMove);
     }
-
-    TTFlag flag = TT_EXACT;
-    if (bestEval <= originalAlpha) {
-        flag = TT_ALPHA; // (Fail-Low)
-    } else if (bestEval >= beta) {
-        flag = TT_BETA;  // (Fail-High)
-    }
-
-    int16_t saveScore = bestEval;
-
-    ttTable.writeEntry(hashKey, saveScore, static_cast<int8_t>(depth), flag, bestMove);
 
     return bestEval;
 }
