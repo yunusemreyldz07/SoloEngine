@@ -291,13 +291,13 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             }
 
             if (searchScore <= alpha) {
-                delta = std::min(4096, delta * 2);
+                delta = std::min(4096, delta + (delta / 4));
                 alpha = std::max<int16_t>(-VALUE_INF, static_cast<int16_t>(searchScore - delta));
                 continue;
             }
 
             if (searchScore >= beta) {
-                delta = std::min(4096, delta * 2);
+                delta = std::min(4096, delta + (delta / 4));
                 beta = std::min<int16_t>(VALUE_INF, static_cast<int16_t>(searchScore + delta));
                 continue;
             }
