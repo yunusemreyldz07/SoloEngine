@@ -233,7 +233,7 @@ inline bool king_square(const Board& board, bool white, int& outRow, int& outCol
 
 // Move generation functions
 void get_all_moves(Board& board, Move moves[], int& moveCount);
-void get_capture_moves(const Board& board, Move moves[], int& moveCount);
+void get_capture_moves(Board& board, Move moves[], int& moveCount);
 
 // Attack detection
 bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttacker);

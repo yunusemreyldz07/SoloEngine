@@ -381,19 +381,14 @@ void get_all_moves(Board& board, Move moves[], int& moveCount) {
     moveCount = i;
 }
 
-void get_capture_moves(const Board& board, Move moves[], int& moveCount) {
-    std::vector<Move> pseudoMoves;
-    pseudoMoves.reserve(128);
-
-    generate_pawn_moves_bb(board, pseudoMoves);
-    generate_knight_moves_bb(board, pseudoMoves);
-    generate_bishop_moves_bb(board, pseudoMoves);
-    generate_rook_moves_bb(board, pseudoMoves);
-    generate_queen_moves_bb(board, pseudoMoves);
-    generate_king_moves_bb(board, pseudoMoves);
+void get_capture_moves(Board& board, Move moves[], int& moveCount) {
+    Move allMoves[256];
+    int allMoveCount = 0;
+    get_all_moves(board, allMoves, allMoveCount);
 
     int i = 0;
-    for (const auto& m : pseudoMoves) {
+    for (int j = 0; j < allMoveCount; j++) {
+        Move m = allMoves[j];
         if (is_capture(m)) {
             moves[i++] = m;
         }
