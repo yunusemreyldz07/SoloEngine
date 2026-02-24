@@ -171,12 +171,17 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
     }
 
     int16_t bestEval = -VALUE_INF;
+    int searchedMoves = 0;
+    bool aborted = false;
     
     orderMoves(board, moves, moveCount, ttMove);
     Move bestMove = 0;
 
     for (int i = 0; i < moveCount; ++i) {
-        if (should_stop_search()) break;
+        if (should_stop_search()) {
+            aborted = true;
+            break;
+        }
 
         Move chosenMove = moves[i];
         
@@ -185,7 +190,11 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         board.makeMove(chosenMove);
         int16_t eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv);
         board.unmakeMove(chosenMove);
-        if (should_stop_search()) break;
+        if (should_stop_search()) {
+            aborted = true;
+            break;
+        }
+        ++searchedMoves;
 
         // fail soft
         if (eval > bestEval) {
@@ -203,6 +212,10 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         if (alpha >= beta) {
             break; // Beta cutoff
         }
+    }
+
+    if (aborted) {
+        return searchedMoves > 0 ? bestEval : alpha;
     }
 
     TTFlag flag = TT_EXACT;
