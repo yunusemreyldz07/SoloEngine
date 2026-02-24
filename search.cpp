@@ -147,10 +147,10 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
             if (ttEntry.flag == TT_EXACT) {
                 return ttScore;
             }
-            if (ttEntry.flag == TT_ALPHA && ttScore <= alpha) {
+            if (ttEntry.flag == TT_BETA && ttScore <= alpha) {
                 return ttScore;
             }
-            if (ttEntry.flag == TT_BETA && ttScore >= beta) {
+            if (ttEntry.flag == TT_ALPHA && ttScore >= beta) {
                 return ttScore;
             }
         

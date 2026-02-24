@@ -13,8 +13,8 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs = -1, const std::vec
 
 enum TTFlag : uint8_t {
     TT_EXACT, // Exact Score (PV Node)
-    TT_ALPHA, // Fail-Low
-    TT_BETA   // Fail-High 
+    TT_ALPHA, // Lower bound (Fail-High)
+    TT_BETA   // Upper bound (Fail-Low)
 };
 
 struct TTEntry { // 16 bytes total
