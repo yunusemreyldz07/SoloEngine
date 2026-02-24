@@ -134,6 +134,9 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         return qsearch(board, alpha, beta, ply);
     }
 
+    bool firstMove = true; // for PVS
+    int16_t eval = 0; 
+
     int16_t originalAlpha = alpha;
     uint64_t hashKey = board.hash; 
     TTEntry& ttEntry = ttTable.getEntry(hashKey);
@@ -187,7 +190,16 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         std::vector<Move> childPv; 
         
         board.makeMove(chosenMove);
-        int16_t eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv);
+        if (firstMove){
+            eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv);
+            firstMove = false;
+        } else {
+            eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, childPv); // PVS null window search
+            if (eval > alpha && eval < beta) {
+                childPv.clear();
+                eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv); // Re-search if we failed high
+            }
+        }
         board.unmakeMove(chosenMove);
         if (should_stop_search()) {
             aborted = true;
