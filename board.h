@@ -145,9 +145,7 @@ inline int get_promotion_type(Move m) {
 
 // Compare two moves for equality (from/to squares and promotion)
 inline bool moves_equal(const Move& a, const Move& b) {
-    return (a & 0x3F) == (b & 0x3F) && // from square
-           ((a >> 6) & 0x3F) == ((b >> 6) & 0x3F) && // to square
-              get_promotion_type(a) == get_promotion_type(b); // flags promotions only
+    return a == b;
 }
 
 // Move type helpers

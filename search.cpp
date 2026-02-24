@@ -208,10 +208,14 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
 
         if (alpha >= beta) {
-            update_history(board.stm, move_from(chosenMove), move_to(chosenMove), depth, badQuiets, badQuietCount);
+            if (is_quiet(chosenMove)) {
+                update_history(board.stm, move_from(chosenMove), move_to(chosenMove), depth, badQuiets, badQuietCount);
+            }
             break; // Beta cutoff
         } else {
-            badQuiets[badQuietCount++] = chosenMove;
+            if (is_quiet(chosenMove)) {
+                badQuiets[badQuietCount++] = chosenMove;
+            }
         }
     }
 
