@@ -9,6 +9,7 @@
 #include <vector>
 #include <chrono>
 #include <algorithm>
+#include <cmath>
 
 #define MAX_MOVES 256
 #define SEE_THRESHOLD -82
@@ -41,8 +42,20 @@ inline bool should_stop_search() {
 }
 }
 
-void initLMRtables() {
-    // No-op for now.
+int LMR_TABLE[256][256];
+float LMR_BASE = 0.77f;
+float LMR_DIVISION = 2.32f;
+
+void initLMRtables(){
+    for(int depth = 0; depth < 256; depth++){
+        for(int moveNum = 0; moveNum < 256; moveNum++){
+            if(depth < 2 || moveNum < 4 || depth == 0 || moveNum == 0){
+                LMR_TABLE[depth][moveNum] = 0;
+            } else {
+                LMR_TABLE[depth][moveNum] = (int)(LMR_BASE + std::log(depth) * std::log(moveNum) / LMR_DIVISION);
+            }
+        }
+    }
 }
 
 void resetNodeCounter() {
@@ -129,7 +142,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
 int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, std::vector<Move>& pvLine) {
     nodeCount.fetch_add(1, std::memory_order_relaxed);
     if (should_stop_search()) return 0;
-
+    
     if (depth <= 0) {
         return qsearch(board, alpha, beta, ply);
     }
@@ -225,13 +238,13 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
     }
 
-    for (int i = 0; i < moveCount; ++i) {
+    for (int movesSearched = 0; movesSearched < moveCount; ++movesSearched) {
         if (should_stop_search()) {
             aborted = true;
             break;
         }
 
-        Move chosenMove = moves[i];
+        Move chosenMove = moves[movesSearched];
         
         std::vector<Move> childPv; 
         
@@ -240,8 +253,30 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
             eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv);
             firstMove = false;
         } else {
-            eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, childPv); // PVS null window search
+
+            int reduction = 0;
+            std::vector<Move> nullWindowPv;
+            if (depth > 1 && is_quiet(chosenMove)) {
+                int lmrTableDepth = std::min(depth, 255);
+                int lmrTableMovesSearched = std::min(movesSearched, 255);
+                reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
+                if (reduction < 0) reduction = 0;
+                if (reduction > depth - 1) reduction = depth - 1;
+                if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we dont search negative depth
+            }
+
+            int lmrDepth = std::max(0, depth - 1 - reduction);
+
+
+            eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, childPv); // PVS null window search
+            
+            if (reduction > 0 && eval > alpha) {
+                // if the eval suggest a better move we research
+                childPv.clear();
+                eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, childPv); // Re-search with no reduction
+            }
             if (eval > alpha && eval < beta) {
+                // if we fail high search again with no reduction, and window
                 childPv.clear();
                 eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv); // Re-search if we failed high
             }
