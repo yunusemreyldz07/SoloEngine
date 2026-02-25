@@ -257,6 +257,12 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 
         }
         
+        // SEE PVS pruning
+        int seeThreshold = is_quiet(chosenMove) ? -67 * depth : -32 * depth * depth;
+        if (movesSearched > 0 && !staticExchangeEvaluation(board, chosenMove, seeThreshold)) {
+            continue;
+        }
+
         board.makeMove(chosenMove);
         if (firstMove){
             eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv);
