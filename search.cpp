@@ -140,6 +140,10 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
     const int16_t staticEval = evaluate_board(board);
     const bool pvNode = (beta - alpha > 1);
 
+    int kingSq = 0;
+    king_square(board, board.stm == WHITE, kingSq);
+    bool inCheck = is_square_attacked(board, kingSq, board.stm != WHITE);
+
     int16_t originalAlpha = alpha;
     uint64_t hashKey = board.hash; 
     TTEntry& ttEntry = ttTable.getEntry(hashKey);
@@ -168,9 +172,9 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
     get_all_moves(board, moves, moveCount);
 
     if (moveCount == 0) {
-        int kingRow = 0, kingCol = 0;
-        if (king_square(board, board.stm == WHITE, kingRow, kingCol) &&
-            is_square_attacked(board, kingRow, kingCol, board.stm != WHITE)) {
+        int kingSq = -1;
+        king_square(board, board.stm == WHITE, kingSq);
+        if ((kingSq != -1) && is_square_attacked(board, kingSq, board.stm != WHITE)) {
             return -MATE_SCORE + ply;
         }
         return 0; // Stalemate
@@ -190,6 +194,34 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         if (staticEval - margin >= beta) {
             // I am so far ahead that even if I reduce my score by the margin, I am still above beta. No need to search this node.
             return staticEval - margin;
+        }
+    }
+
+    // Null Move Pruning
+    if (!inCheck && depth >= 3 && !pvNode) {
+        const int prevEnPassant = board.enPassant;
+        const uint64_t prevHash = board.hash;
+
+        board.enPassant = -1; // Clear EP square to prevent illegal null move
+        board.stm = other_color(board.stm); // Switch side to move
+
+        board.hash ^= zobrist().side; // Update hash for side to move change
+
+        int oldEp = (prevEnPassant != -1) ? (prevEnPassant % 8) : 8;
+        board.hash ^= zobrist().epFile[oldEp];
+        board.hash ^= zobrist().epFile[8];
+
+        int R = std::min(3, std::max(1, depth - 2));
+        std::vector<Move> nullPv;
+        int16_t nullScore = -negamax(board, depth - R, -beta, -beta + 1, ply + 1, nullPv);
+        
+        board.stm = other_color(board.stm);
+        board.enPassant = prevEnPassant;
+        board.hash = prevHash;
+
+        if (nullScore >= beta) {
+            pvLine.clear();
+            return beta; // Null-move cutoff
         }
     }
 

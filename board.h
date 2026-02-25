@@ -222,13 +222,14 @@ inline int piece_at_sq(const Board& board, int sq) {
 inline int side_to_move(const Board& b) { return b.stm; }
 inline int opponent(const Board& b) { return other_color(b.stm); }
 
-inline bool king_square(const Board& board, bool white, int& outRow, int& outCol) {
+inline void king_square(const Board& board, bool white, int& outSq) {
     Bitboard k = board.piece[KING - 1] & board.color[white ? WHITE : BLACK];
-    if (!k) return false;
+    if (!k) {
+        outSq = -1;
+        return;
+    }
     int sq = lsb(k);
-    outRow = sq_to_row(sq);
-    outCol = sq_to_col(sq);
-    return true;
+    outSq = sq;
 }
 
 // Move generation functions
@@ -236,7 +237,7 @@ void get_all_moves(Board& board, Move moves[], int& moveCount);
 void get_capture_moves(Board& board, Move moves[], int& moveCount);
 
 // Attack detection
-bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttacker);
+bool is_square_attacked(const Board& board, int sq, bool isWhiteAttacker);
 int see_exchange(const Board& board, const Move& move);
 int staticExchangeEvaluation(const Board& board, const Move& move, int threshold);
 // Utility functions

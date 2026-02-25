@@ -343,8 +343,7 @@ void generate_king_moves_bb(const Board& board, std::vector<Move>& moves) {
     }
 }
 
-bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttacker) {
-    int sq = row_col_to_sq(row, col);
+bool is_square_attacked(const Board& board, int sq, bool isWhiteAttacker) {
     return is_square_attacked_bb(board, sq, isWhiteAttacker);
 }
 
@@ -363,13 +362,17 @@ void get_all_moves(Board& board, Move moves[], int& moveCount) {
 
     for (auto& m : pseudoMoves) {
         board.makeMove(m);
-        int kingRow = 0;
-        int kingCol = 0;
-        if (!king_square(board, sideToMove, kingRow, kingCol)) {
+        int kingSq = -1;
+        // After makeMove(), stm has already switched to the opponent.
+        // We must validate checks against the side that just moved.
+        king_square(board, sideToMove, kingSq);
+        if (kingSq == -1){
             board.unmakeMove(m);
             continue;
         }
-        if (!is_square_attacked(board, kingRow, kingCol, !sideToMove)) {
+
+        // The only illegal case is: our own king is attacked by the opponent.
+        if (!is_square_attacked(board, kingSq, board.stm == WHITE)) {
             legalMoves.push_back(m);
         }
         board.unmakeMove(m);
