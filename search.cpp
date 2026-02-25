@@ -18,7 +18,8 @@ namespace {
 std::atomic<bool> stop_search{false};
 std::atomic<long long> nodeCount{0};
 std::atomic<long long> start_time_ms{0};
-std::atomic<long long> time_limit_ms{0};
+std::atomic<long long> soft_time_limit_ms{0};
+std::atomic<long long> hard_time_limit_ms{0};
 std::atomic<bool> time_limited{false};
 
 const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
@@ -33,13 +34,30 @@ inline bool should_stop_search() {
     if (!time_limited.load(std::memory_order_relaxed)) return false;
     if ((nodeCount.load(std::memory_order_relaxed) & 2047) == 0) {
         long long elapsed = now_ms() - start_time_ms.load(std::memory_order_relaxed);
-        if (elapsed >= time_limit_ms.load(std::memory_order_relaxed)) {
+        if (elapsed >= hard_time_limit_ms.load(std::memory_order_relaxed)) {
             stop_search.store(true, std::memory_order_relaxed);
             return true;
         }
     }
     return false;
 }
+
+void configure_time_limit(const int& timeToThink) {
+    auto now = std::chrono::steady_clock::now();
+    start_time_ms.store(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count(), std::memory_order_relaxed);
+    if (timeToThink > 0) {
+        time_limited.store(true, std::memory_order_relaxed);
+        long long time_limit = timeToThink; // Do not use the entire time given by the GUI leave a small margin
+        if (time_limit > 50) time_limit -= 20; // 20ms safety margin
+        soft_time_limit_ms.store(time_limit * 0.7, std::memory_order_relaxed);
+        hard_time_limit_ms.store(time_limit, std::memory_order_relaxed);
+    } else {
+        time_limited.store(false, std::memory_order_relaxed);
+        soft_time_limit_ms.store(0, std::memory_order_relaxed);
+        hard_time_limit_ms.store(0, std::memory_order_relaxed);
+    }
+}
+
 }
 
 int LMR_TABLE[256][256];
@@ -341,16 +359,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
     (void)positionHistory;
     int16_t score = 0;
     stop_search.store(false, std::memory_order_relaxed);
-    if (movetimeMs > 0) {
-        int safeTime = movetimeMs;
-        if (safeTime > 50) safeTime -= 20;
-        start_time_ms.store(now_ms(), std::memory_order_relaxed);
-        time_limit_ms.store(safeTime, std::memory_order_relaxed);
-        time_limited.store(true, std::memory_order_relaxed);
-    } else {
-        time_limited.store(false, std::memory_order_relaxed);
-        time_limit_ms.store(0, std::memory_order_relaxed);
-    }
+    configure_time_limit(movetimeMs);
 
     int moveCount = 0;
     Move moves[MAX_MOVES];
@@ -415,6 +424,14 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             std::cout << move_to_uci(m) << " ";
         }
         std::cout << std::endl;
+
+        if (time_limited.load(std::memory_order_relaxed)){
+            long long elapsed = now_ms() - start_time_ms.load(std::memory_order_relaxed);
+            if (elapsed >= soft_time_limit_ms.load(std::memory_order_relaxed)) {
+                stop_search.store(true, std::memory_order_relaxed);
+                break;
+            }
+        }
     }
 
     return bestMoveSoFar;
