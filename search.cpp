@@ -248,6 +248,15 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         
         std::vector<Move> childPv; 
         
+        // Futility Pruning
+        if (depth < 3 && !inCheck && get_promotion_type(chosenMove) == -1 && is_quiet(chosenMove)) {
+            int futilityMargin = 100 + 60 * depth; // Margin increases with depth
+            if (staticEval + futilityMargin < alpha) {
+                continue; // Skip this move, it's unlikely to raise the evaluation enough
+            }
+
+        }
+        
         board.makeMove(chosenMove);
         if (firstMove){
             eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv);
