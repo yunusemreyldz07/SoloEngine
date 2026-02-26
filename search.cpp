@@ -139,12 +139,17 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
     return bestEval;
 }
 
-int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, std::vector<Move>& pvLine) {
+int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, std::vector<Move>& pvLine, std::vector<uint64_t>& positionHistory) {
     nodeCount.fetch_add(1, std::memory_order_relaxed);
     if (should_stop_search()) return 0;
     
     if (depth <= 0) {
         return qsearch(board, alpha, beta, ply);
+    }
+
+    // Check for repetition
+    if (ply > 0 && is_repetition(positionHistory, board.halfMoveClock)){
+        return 0; // DRAW
     }
 
     bool firstMove = true; // for PVS
@@ -224,10 +229,14 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         board.hash ^= zobrist().epFile[oldEp];
         board.hash ^= zobrist().epFile[8];
 
+        positionHistory.push_back(board.hash);
+
         int R = std::min(3, std::max(1, depth - 2));
         std::vector<Move> nullPv;
-        int16_t nullScore = -negamax(board, depth - R, -beta, -beta + 1, ply + 1, nullPv);
+        int16_t nullScore = -negamax(board, depth - R, -beta, -beta + 1, ply + 1, nullPv, positionHistory);
         
+        positionHistory.pop_back();
+
         board.stm = other_color(board.stm);
         board.enPassant = prevEnPassant;
         board.hash = prevHash;
@@ -264,8 +273,10 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
 
         board.makeMove(chosenMove);
+
+        positionHistory.push_back(board.hash); // Add new position to history for repetition detection
         if (firstMove){
-            eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv);
+            eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv, positionHistory);
             firstMove = false;
         } else {
 
@@ -283,19 +294,20 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
             int lmrDepth = std::max(0, depth - 1 - reduction);
 
 
-            eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, childPv); // PVS null window search
+            eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, childPv, positionHistory); // PVS null window search
             
             if (reduction > 0 && eval > alpha) {
                 // if the eval suggest a better move we research
                 childPv.clear();
-                eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, childPv); // Re-search with no reduction
+                eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, childPv, positionHistory); // Re-search with no reduction
             }
             if (eval > alpha && eval < beta) {
                 // if we fail high search again with no reduction, and window
                 childPv.clear();
-                eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv); // Re-search if we failed high
+                eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv, positionHistory); // Re-search if we failed high
             }
         }
+        if (!positionHistory.empty()) positionHistory.pop_back();
         board.unmakeMove(chosenMove);
         if (should_stop_search()) {
             aborted = true;
@@ -338,8 +350,10 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 }
 
 Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<uint64_t>& positionHistory, int ply) {
-    (void)positionHistory;
     int16_t score = 0;
+
+    std::vector<uint64_t> searchHistory = positionHistory;
+
     stop_search.store(false, std::memory_order_relaxed);
     if (movetimeMs > 0) {
         int safeTime = movetimeMs;
@@ -374,7 +388,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
         while (true) {
             pvLine.clear();
-            int16_t searchScore = negamax(board, iterativeDepth, alpha, beta, ply, pvLine);
+            int16_t searchScore = negamax(board, iterativeDepth, alpha, beta, ply, pvLine, searchHistory);
 
             if (should_stop_search()) {
                 score = searchScore;

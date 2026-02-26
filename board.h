@@ -258,7 +258,7 @@ struct Zobrist {
 const Zobrist& zobrist();
 int piece_to_zobrist_index(int piece);
 uint64_t position_key(const Board& board);
-bool is_threefold_repetition(const std::vector<uint64_t>& positionHistory);
+bool is_repetition(const std::vector<uint64_t>& positionHistory, int halfMoveClock);
 
 // Draw detection
 inline bool is_fifty_move_draw(const Board& board) {

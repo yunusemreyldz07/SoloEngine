@@ -530,14 +530,17 @@ uint64_t position_key(const Board& board) {
     return h;
 }
 
-bool is_threefold_repetition(const std::vector<uint64_t>& positionHistory) {
-    if (positionHistory.empty()) return false;
-    uint64_t current = positionHistory.back();
-    int count = 0;
-    for (int i = static_cast<int>(positionHistory.size()) - 1; i >= 0; i--) {
-        if (positionHistory[i] == current) {
-            count++;
-            if (count >= 3) return true;
+bool is_repetition(const std::vector<uint64_t>& positionHistory, int halfMoveClock) {
+    int size = static_cast<int>(positionHistory.size());
+    if (size < 3) return false;
+
+    uint64_t currentHash = positionHistory.back();
+
+    int limit = std::max(0, size - 1 - halfMoveClock);
+
+    for (int i = size - 3; i >= limit; i -= 2) {
+        if (positionHistory[i] == currentHash) {
+            return true; 
         }
     }
     return false;
