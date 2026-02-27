@@ -18,7 +18,8 @@ namespace {
 std::atomic<bool> stop_search{false};
 std::atomic<long long> nodeCount{0};
 std::atomic<long long> start_time_ms{0};
-std::atomic<long long> time_limit_ms{0};
+std::atomic<long long> soft_time_limit_ms{0};
+std::atomic<long long> hard_time_limit_ms{0};
 std::atomic<bool> time_limited{false};
 
 const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
@@ -33,12 +34,18 @@ inline bool should_stop_search() {
     if (!time_limited.load(std::memory_order_relaxed)) return false;
     if ((nodeCount.load(std::memory_order_relaxed) & 2047) == 0) {
         long long elapsed = now_ms() - start_time_ms.load(std::memory_order_relaxed);
-        if (elapsed >= time_limit_ms.load(std::memory_order_relaxed)) {
+        if (elapsed >= hard_time_limit_ms.load(std::memory_order_relaxed)) {
             stop_search.store(true, std::memory_order_relaxed);
             return true;
         }
     }
     return false;
+}
+
+inline bool soft_limit_reached() {
+    if (!time_limited.load(std::memory_order_relaxed)) return false;
+    long long elapsed = now_ms() - start_time_ms.load(std::memory_order_relaxed);
+    return elapsed >= soft_time_limit_ms.load(std::memory_order_relaxed);
 }
 }
 
@@ -148,7 +155,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
     }
 
     // Check for repetition
-    if (ply > 0 && is_repetition(positionHistory, board.halfMoveClock)){
+    if (ply > 0 && (board.halfMoveClock >= 100 || is_repetition(positionHistory, board.halfMoveClock))){
         return 0; // DRAW
     }
 
@@ -356,14 +363,18 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
     stop_search.store(false, std::memory_order_relaxed);
     if (movetimeMs > 0) {
-        int safeTime = movetimeMs;
+        long long safeTime = movetimeMs;
         if (safeTime > 50) safeTime -= 20;
+        long long softTime = (safeTime * 7) / 10;
+        if (softTime < 1) softTime = 1;
         start_time_ms.store(now_ms(), std::memory_order_relaxed);
-        time_limit_ms.store(safeTime, std::memory_order_relaxed);
+        soft_time_limit_ms.store(softTime, std::memory_order_relaxed);
+        hard_time_limit_ms.store(safeTime, std::memory_order_relaxed);
         time_limited.store(true, std::memory_order_relaxed);
     } else {
         time_limited.store(false, std::memory_order_relaxed);
-        time_limit_ms.store(0, std::memory_order_relaxed);
+        soft_time_limit_ms.store(0, std::memory_order_relaxed);
+        hard_time_limit_ms.store(0, std::memory_order_relaxed);
     }
 
     int moveCount = 0;
@@ -374,6 +385,10 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
     // Iterative Deepening
     for(int iterativeDepth = 1; iterativeDepth <= maxDepth; ++iterativeDepth) {
+        if (iterativeDepth > 1 && soft_limit_reached()) {
+            stop_search.store(true, std::memory_order_relaxed);
+            break;
+        }
         if (should_stop_search()) break;
         
         int16_t alpha = -VALUE_INF;
@@ -429,6 +444,11 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             std::cout << move_to_uci(m) << " ";
         }
         std::cout << std::endl;
+
+        if (soft_limit_reached()) {
+            stop_search.store(true, std::memory_order_relaxed);
+            break;
+        }
     }
 
     return bestMoveSoFar;
