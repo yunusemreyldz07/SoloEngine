@@ -3,6 +3,7 @@
 #include "bitboard.h"
 #include "search.h"
 #include "evaluation.h"
+#include "history.h"
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -46,7 +47,7 @@ std::string move_to_uci(const Move m) {
     };
 
 void bench() {
-    const int benchDepth = 5;
+    const int benchDepth = 8;
     
     // Diverse set of positions covering opening, middlegame, endgame, and tactical themes
     const std::vector<std::string> fens = {
@@ -81,6 +82,7 @@ void bench() {
     ttTable.clear();
 
     for (size_t i = 0; i < fens.size(); ++i) {
+        clear_history();
         board.loadFEN(fens[i]);
         std::vector<uint64_t> positionHistory;
         positionHistory.reserve(64);
@@ -249,6 +251,7 @@ int handle_uci_commands(int argc, char* argv[]){
             stop_and_join_search();
             ttTable.clear();
             board.reset();
+            clear_history();
             gameHistory.clear();
             gameHistory.push_back(position_key(board));
         }
@@ -257,6 +260,7 @@ int handle_uci_commands(int argc, char* argv[]){
             stop_and_join_search();
             if (line.find("startpos") != std::string::npos) {
                 board.reset();
+                clear_history();
             }
             else if (line.find("fen") != std::string::npos) {
                 size_t fenStart = line.find("fen") + 4;
@@ -271,6 +275,7 @@ int handle_uci_commands(int argc, char* argv[]){
             }
             gameHistory.clear();
             gameHistory.push_back(position_key(board));
+            clear_history();
             
             size_t movesPos = line.find("moves");
             if (movesPos != std::string::npos) {

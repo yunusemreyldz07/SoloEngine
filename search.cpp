@@ -3,6 +3,7 @@
 #include "bitboard.h"
 #include "evaluation.h"
 #include "board.h"
+#include "history.h"
 
 #include <atomic>
 #include <iostream>
@@ -93,6 +94,11 @@ int scoreMove(Board& board, const Move& move, Move ttMove = 0) {
     if (ttMove != 0 && move == ttMove) {
         score += SCORE_TT_MOVE;
     }
+
+    if (is_quiet(move)) {
+        score += get_history_score(board.stm, from, to);
+    }
+
     return score;
 }
 
@@ -254,6 +260,8 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
     }
 
+    Move badQuiets[MAX_MOVES];
+    int badQuietCount = 0;
     for (int movesSearched = 0; movesSearched < moveCount; ++movesSearched) {
         if (should_stop_search()) {
             aborted = true;
@@ -335,7 +343,14 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
 
         if (alpha >= beta) {
+            if (is_quiet(chosenMove)){
+                update_history(board.stm, move_from(chosenMove), move_to(chosenMove), depth, badQuiets, badQuietCount);
+            }
             break; // Beta cutoff
+        }
+
+        if (is_quiet(chosenMove)){
+            badQuiets[badQuietCount++] = chosenMove;
         }
     }
 
