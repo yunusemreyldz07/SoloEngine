@@ -177,6 +177,10 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
     king_square(board, board.stm == WHITE, kingSq);
     bool inCheck = is_square_attacked(board, kingSq, board.stm != WHITE);
 
+    if (inCheck) {
+        depth++; // Check extension
+    }
+
     int16_t originalAlpha = alpha;
     uint64_t hashKey = board.hash; 
     TTEntry& ttEntry = ttTable.getEntry(hashKey);
