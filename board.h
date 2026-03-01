@@ -55,8 +55,8 @@ inline constexpr int SCORE_GOOD_CAPTURE = 1000000;
 inline constexpr int SCORE_BAD_CAPTURE  = -100000;
 inline constexpr int SCORE_PROMO_QUEEN  = 90000;
 inline constexpr int SCORE_PROMO_ROOK   = 80000;
-inline constexpr int SCORE_PROMO_BISHOP = -70000;
-inline constexpr int SCORE_PROMO_KNIGHT = -60000;
+inline constexpr int SCORE_PROMO_BISHOP = 70000;
+inline constexpr int SCORE_PROMO_KNIGHT = 60000;
 
 inline constexpr uint8_t CASTLE_WK = 1; // White Kingside (0001)
 inline constexpr uint8_t CASTLE_WQ = 2; // White Queenside (0010)
