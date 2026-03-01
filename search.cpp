@@ -95,6 +95,16 @@ int scoreMove(Board& board, const Move& move, Move ttMove = 0) {
         score += SCORE_TT_MOVE;
     }
 
+    if (get_promotion_type(move) != -1) {
+        switch (get_promotion_type(move)){
+            case QUEEN: score += SCORE_PROMO_QUEEN; break;
+            case ROOK: score += SCORE_PROMO_ROOK; break;
+            case BISHOP: score += SCORE_PROMO_BISHOP; break;
+            case KNIGHT: score += SCORE_PROMO_KNIGHT; break;
+            default: break;
+        }
+    }
+
     if (is_quiet(move)) {
         score += get_history_score(board.stm, from, to);
     }
