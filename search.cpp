@@ -204,6 +204,11 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
     }
 
+    if ((!ttHit || ttMove == 0 || ttEntry.depth < depth - 3) && depth >= 5) {
+        depth--;
+    }
+
+
     int moveCount = 0;
     Move moves[MAX_MOVES];
     get_all_moves(board, moves, moveCount);
