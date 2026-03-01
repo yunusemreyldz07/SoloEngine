@@ -2,52 +2,81 @@
 #define SEARCH_H
 
 #include "board.h"
-#include <vector>
-#include <cstdint>
-#include <atomic>
-#include <cstring>
-
-extern char columns[];
-extern std::atomic<long long> nodeCount; // visited node counter
-extern int LMR_TABLE[256][256];     // Late Move Reduction table
 
 extern void initLMRtables();
-
-// Tunable search knobs for quick A/B testing.
-struct SearchParams {
-	bool use_lmr = true;          // Late Move Reductions
-	bool use_lmp = true;          // Late Move Pruning
-	bool use_aspiration = true;   // Aspiration windows in iterative deepening
-	bool use_qsearch_see = true; // SEE-based pruning inside quiescence
-
-	int lmp_min_depth = 4;        // Minimum depth to consider LMP
-	int lmp_max_depth = 8;        // Maximum depth to consider LMP
-
-	int aspiration_delta = 50;    // Initial aspiration half-window in centipawns
-};
-
-const SearchParams& get_search_params();
-void set_search_params(const SearchParams& params);
-
 void resetNodeCounter();
 long long getNodeCounter();
 
-// Move ordering
-int scoreMove(const Board& board, const Move& move, int ply, const Move* ttMove);
+int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, std::vector<Move>& pvLine);
 
-// Search functions (PV enabled)
-int quiescence(Board& board, int alpha, int beta, int ply);
-int negamax(Board& board, int depth, int alpha, int beta, int ply, std::vector<uint64_t>& positionHistory, std::vector<Move>& pvLine);
-
-// movetimeMs > 0: time-limited, effectively unlimited depth (search until time runs out).
-// movetimeMs <= 0: depth-limited, no time limit.
 Move getBestMove(Board& board, int maxDepth, int movetimeMs = -1, const std::vector<uint64_t>& positionHistory = {}, int ply = 0);
 
-// Request the current search to stop as soon as possible.
-// Safe to call even if no search is running.
-void request_stop_search();
-void set_use_tt(bool enabled);
-void clear_search_heuristics();
+enum TTFlag : uint8_t {
+    TT_EXACT, // Exact Score (PV Node)
+    TT_ALPHA, // Lower bound (Fail-High)
+    TT_BETA   // Upper bound (Fail-Low)
+};
 
+struct TTEntry { // 16 bytes total
+    uint64_t hashKey;
+    int16_t score;
+    int8_t depth;
+    TTFlag flag;
+    Move bestMove;
+};
+
+class TranspositionTable {
+private:
+    std::vector<TTEntry> table;
+
+public:
+    TranspositionTable() {
+        resize(128); // 128 MB default size
+    }
+
+    void resize(int mbSize) {
+        // 1 MB = 1024 * 1024 byte
+        size_t numEntries = (mbSize * 1024ULL * 1024ULL) / sizeof(TTEntry);
+        
+        table.clear();
+        table.resize(numEntries);
+    }
+
+    void clear() {
+        // reset all entries to default values
+        for (auto& entry : table) {
+            entry = TTEntry{};
+        }
+    }
+
+    int count() const {
+        return static_cast<int>(table.size());
+    }
+
+    // TT get entry by hash key
+    TTEntry& getEntry(uint64_t hashKey) {
+        return table[hashKey % table.size()];
+    }
+
+    void writeEntry(uint64_t hashKey, int16_t score, int8_t depth, TTFlag flag, Move bestMove) {
+        TTEntry& entry = getEntry(hashKey);
+        
+        bool isNewPosition = (entry.hashKey != hashKey);
+
+        if (isNewPosition || depth > entry.depth || (depth == entry.depth && flag == TT_EXACT)) {
+            entry.hashKey = hashKey;
+            entry.score = score;
+            entry.depth = depth;
+            entry.flag = flag;
+            
+            if (bestMove != 0 || isNewPosition) {
+                entry.bestMove = bestMove;
+            }
+        }
+    }
+};
+
+// Global TT
+extern TranspositionTable ttTable;
 
 #endif

@@ -1,7 +1,9 @@
+#include "uci.h"
 #include "board.h"
 #include "bitboard.h"
 #include "search.h"
 #include "evaluation.h"
+#include "history.h"
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -10,6 +12,8 @@
 #include <algorithm>
 
 #define VERSION "1.4.0"
+
+TranspositionTable ttTable;
 
 struct UciTimeParams {
     int wtime = -1;
@@ -22,6 +26,25 @@ struct SearchLimit {
     int timeToThink = -1;
     int depthLimit = -1;
 };
+
+std::string move_to_uci(const Move m) {
+        if (m == 0) return std::string("0000");
+        std::string s;
+        s += columns[sq_to_col(move_from(m))];
+        s += static_cast<char>('0' + (8 - sq_to_row(move_from(m))));
+        s += columns[sq_to_col(move_to(m))];
+        s += static_cast<char>('0' + (8 - sq_to_row(move_to(m))));
+        if (get_promotion_type(m) != -1) {
+            switch (get_promotion_type(m)) {
+                case QUEEN: s += 'q'; break;
+                case ROOK: s += 'r'; break;
+                case BISHOP: s += 'b'; break;
+                case KNIGHT: s += 'n'; break;
+                default: break;
+            }
+        }
+        return s;
+    };
 
 void bench() {
     const int benchDepth = 8;
@@ -51,33 +74,15 @@ void bench() {
         "r1bq1rk1/pp2ppbp/2np1np1/8/3NP3/2N1B3/PPP1BPPP/R2Q1RK1 w - - 0 9",
     };
 
-    auto move_to_uci = [](const Move& m) {
-        if (m == 0) return std::string("0000");
-        std::string s;
-        s += columns[sq_to_col(move_from(m))];
-        s += static_cast<char>('0' + (8 - sq_to_row(move_from(m))));
-        s += columns[sq_to_col(move_to(m))];
-        s += static_cast<char>('0' + (8 - sq_to_row(move_to(m))));
-        if (get_promotion_type(m) != -1) {
-            switch (get_promotion_type(m)) {
-                case QUEEN: s += 'q'; break;
-                case ROOK: s += 'r'; break;
-                case BISHOP: s += 'b'; break;
-                case KNIGHT: s += 'n'; break;
-                default: break;
-            }
-        }
-        return s;
-    };
-
     uint64_t totalNodes = 0;
     long long totalTimeMs = 0;
 
     Board board;
-    if (globalTT.entryCount() == 0) globalTT.resize(16);
-    globalTT.clear();
+    if (ttTable.count() == 0) ttTable.resize(128);
+    ttTable.clear();
 
     for (size_t i = 0; i < fens.size(); ++i) {
+        clear_history();
         board.loadFEN(fens[i]);
         std::vector<uint64_t> positionHistory;
         positionHistory.reserve(64);
@@ -85,7 +90,7 @@ void bench() {
 
         resetNodeCounter();
         auto startTime = std::chrono::steady_clock::now();
-        Move best = getBestMove(board, benchDepth, -1, positionHistory);
+        Move best = getBestMove(board, benchDepth);
         auto endTime = std::chrono::steady_clock::now();
 
         long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
@@ -116,11 +121,13 @@ static uint64_t perft(Board& board, int depth) {
     if (depth <= 0) return 1ULL;
 
     uint64_t nodes = 0;
-    std::vector<Move> moves = get_all_moves(board, board.stm == WHITE);
-    for (Move& move : moves) {
-        board.makeMove(move);
+    int moveCount = 0;
+    Move moves[256];
+    get_all_moves(board, moves, moveCount);
+    for (int i = 0; i < moveCount; i++) {
+        board.makeMove(moves[i]);
         nodes += perft(board, depth - 1);
-        board.unmakeMove(move);
+        board.unmakeMove(moves[i]);
     }
 
     return nodes;
@@ -141,7 +148,7 @@ int handle_uci_commands(int argc, char* argv[]){
     
     Board board;
     // Default TT size matches the UCI 'Hash' option default.
-    if (globalTT.entryCount() == 0) globalTT.resize(128);
+    if (ttTable.count() == 0) ttTable.resize(128);
     std::vector<uint64_t> gameHistory;
     gameHistory.reserve(512);
     std::string line;
@@ -156,9 +163,6 @@ int handle_uci_commands(int argc, char* argv[]){
     };
 
     auto stop_and_join_search = [&]() {
-        if (searchRunning.load(std::memory_order_relaxed)) {
-            request_stop_search();
-        }
         if (searchThread.joinable()) {
             searchThread.join();
         }
@@ -175,8 +179,7 @@ int handle_uci_commands(int argc, char* argv[]){
         join_search_if_done();
 
         if (line == "stop") {
-            // GUI/OpenBench may send this when time is up.
-            request_stop_search();
+            // Stop command is ignored in this simplified search mode.
             continue;
         }
         
@@ -220,14 +223,12 @@ int handle_uci_commands(int argc, char* argv[]){
 
             if (name == "Hash") {
                 int mb = std::max(1, std::stoi(value));
-                globalTT.resize(mb);
-                globalTT.clear();
+                ttTable.resize(mb);
+                ttTable.clear();
 
 
             } else if (name == "UseTT") {
-                std::string v = value;
-                std::transform(v.begin(), v.end(), v.begin(), ::tolower);
-                set_use_tt(v == "true" || v == "1" || v == "on");
+                // Ignored in simplified search mode.
             }
 
         }
@@ -248,17 +249,18 @@ int handle_uci_commands(int argc, char* argv[]){
 
         else if (line == "ucinewgame") {
             stop_and_join_search();
-            globalTT.clear();
+            ttTable.clear();
             board.reset();
+            clear_history();
             gameHistory.clear();
             gameHistory.push_back(position_key(board));
-            clear_search_heuristics();
         }
 
         else if (line.substr(0, 8) == "position") {
             stop_and_join_search();
             if (line.find("startpos") != std::string::npos) {
                 board.reset();
+                clear_history();
             }
             else if (line.find("fen") != std::string::npos) {
                 size_t fenStart = line.find("fen") + 4;
@@ -273,6 +275,7 @@ int handle_uci_commands(int argc, char* argv[]){
             }
             gameHistory.clear();
             gameHistory.push_back(position_key(board));
+            clear_history();
             
             size_t movesPos = line.find("moves");
             if (movesPos != std::string::npos) {
@@ -365,14 +368,12 @@ int handle_uci_commands(int argc, char* argv[]){
             });
         }
         else if (line == "quit") {
-            request_stop_search();
             stop_and_join_search();
             break;
         }
     }
 
     // Clean shutdown if stdin closes.
-    request_stop_search();
     stop_and_join_search();
     return 0;
 

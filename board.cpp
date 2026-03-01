@@ -100,7 +100,8 @@ void Board::reset() {
     stm = WHITE;
     enPassant = -1;
     halfMoveClock = 0;
-    std::vector<UndoState> undoStack;
+    moveHistory.clear();
+    undoStack.clear();
 
     hash = position_key(*this);
 }
@@ -336,10 +337,12 @@ void Board::loadFEN(const std::string& fen) {
     color[BLACK] = 0ULL;
     for (int i = 0; i < 64; i++) mailbox[i] = 0;
     castling = 0;
+    moveHistory.clear();
+    undoStack.clear();
 
     std::istringstream ss(fen);
-    std::string position, turn, castling, enPassant;
-    ss >> position >> turn >> castling >> enPassant;
+    std::string position, turn, castlingField, enPassantField;
+    ss >> position >> turn >> castlingField >> enPassantField;
 
     int row = 0, col = 0;
     for (char c : position) {
@@ -368,13 +371,13 @@ void Board::loadFEN(const std::string& fen) {
     }
 
     stm = (turn == "w") ? WHITE : BLACK;
-    this->castling = (castling.find('K') != std::string::npos) ? (this->castling | CASTLE_WK) : this->castling;
-    this->castling = (castling.find('Q') != std::string::npos) ? (this->castling | CASTLE_WQ) : this->castling;
-    this->castling = (castling.find('k') != std::string::npos) ? (this->castling | CASTLE_BK) : this->castling;
-    this->castling = (castling.find('q') != std::string::npos) ? (this->castling | CASTLE_BQ) : this->castling;
+    this->castling = (castlingField.find('K') != std::string::npos) ? (this->castling | CASTLE_WK) : this->castling;
+    this->castling = (castlingField.find('Q') != std::string::npos) ? (this->castling | CASTLE_WQ) : this->castling;
+    this->castling = (castlingField.find('k') != std::string::npos) ? (this->castling | CASTLE_BK) : this->castling;
+    this->castling = (castlingField.find('q') != std::string::npos) ? (this->castling | CASTLE_BQ) : this->castling;
 
-    if (enPassant != "-") {
-        this->enPassant = enPassant[0] - 'a';
+    if (enPassantField != "-") {
+        this->enPassant = enPassantField[0] - 'a';
         int epRow = stm == 0 ? 2 : 5;
         int epSq = row_col_to_sq(epRow, this->enPassant);
         if (!is_pawn_attack_possible(*this, stm == 0 ? false : true, epSq)) {
@@ -527,93 +530,22 @@ uint64_t position_key(const Board& board) {
     return h;
 }
 
-bool is_threefold_repetition(const std::vector<uint64_t>& positionHistory) {
-    if (positionHistory.empty()) return false;
-    uint64_t current = positionHistory.back();
-    int count = 0;
-    for (int i = static_cast<int>(positionHistory.size()) - 1; i >= 0; i--) {
-        if (positionHistory[i] == current) {
-            count++;
-            if (count >= 3) return true;
+bool is_repetition(const std::vector<uint64_t>& positionHistory, int halfMoveClock) {
+    int size = static_cast<int>(positionHistory.size());
+    if (size < 3) return false;
+
+    uint64_t currentHash = positionHistory.back();
+
+    int limit = std::max(0, size - 1 - halfMoveClock);
+
+    for (int i = size - 3; i >= limit; i -= 2) {
+        if (positionHistory[i] == currentHash) {
+            return true; 
         }
     }
     return false;
 }
 
-TranspositionTable globalTT;
-
-uint64_t TranspositionTable::packData(int score, int depth, TTFlag flag, uint16_t packedMove) {
-    uint64_t data = static_cast<uint32_t>(score);
-    data |= (static_cast<uint64_t>(depth) & 0xFFULL) << 32;
-    data |= (static_cast<uint64_t>(static_cast<int>(flag)) & 0x3ULL) << 40;
-    data |= (static_cast<uint64_t>(packedMove) & 0xFFFFULL) << 42;
-    return data;
-}
-
-void TranspositionTable::unpackData(uint64_t data, int& score, int& depth, TTFlag& flag, uint16_t& packedMove) {
-    score = static_cast<int32_t>(static_cast<uint32_t>(data & 0xFFFFFFFFULL));
-    depth = static_cast<int>((data >> 32) & 0xFFULL);
-    flag = static_cast<TTFlag>((data >> 40) & 0x3ULL);
-    packedMove = static_cast<uint16_t>((data >> 42) & 0xFFFFULL);
-}
-
-void TranspositionTable::resize(int mbSize) {
-    delete[] table;
-    table = nullptr;
-    size = 0;
-
-    if (mbSize <= 0) return;
-    const size_t bytes = static_cast<size_t>(mbSize) * 1024ULL * 1024ULL;
-    size_t count = bytes / sizeof(TTAtomicEntry);
-    if (count == 0) count = 1;
-
-    table = new TTAtomicEntry[count];
-    size = count;
-    clear();
-}
-
-void TranspositionTable::clear() {
-    if (!table || size == 0) return;
-    for (size_t i = 0; i < size; i++) {
-        table[i].data.store(0, std::memory_order_relaxed);
-        table[i].key.store(0, std::memory_order_relaxed);
-    }
-}
-
-void TranspositionTable::store(uint64_t hash, int score, int depth, TTFlag flag, const Move& bestMove) {
-    if (!table || size == 0) return;
-
-    const size_t index = static_cast<size_t>(hash % size);
-    TTAtomicEntry& e = table[index];
-
-    const uint64_t existingKey = e.key.load(std::memory_order_relaxed);
-    const uint64_t existingData = e.data.load(std::memory_order_relaxed);
-    int existingScore = 0;
-    int existingDepth = 0;
-    TTFlag existingFlag = TTFlag::EXACT;
-    uint16_t existingMove = 0;
-    unpackData(existingData, existingScore, existingDepth, existingFlag, existingMove);
-
-    if (existingKey == 0 || existingKey != hash || depth >= existingDepth) {
-        const uint64_t newData = packData(score, depth, flag, bestMove);
-        e.data.store(newData, std::memory_order_relaxed);
-        e.key.store(hash, std::memory_order_release);
-    }
-}
-
-bool TranspositionTable::probe(uint64_t key, int& outScore, int& outDepth, TTFlag& outFlag, Move& outMove) const {
-    if (!table || size == 0) return false;
-
-    const size_t index = static_cast<size_t>(key % size);
-    const TTAtomicEntry& e = table[index];
-
-    const uint64_t foundKey = e.key.load(std::memory_order_acquire);
-    if (foundKey != key) return false;
-
-    const uint64_t data = e.data.load(std::memory_order_relaxed);
-    unpackData(data, outScore, outDepth, outFlag, outMove);
-    return true;
-}
 
 // SEE piece values; keep close to MVV/LVA ordering, not evaluation values
 const int see_piece_values[] = {0, 100, 320, 330, 500, 900, 20000};

@@ -46,9 +46,8 @@ inline constexpr int KING   = 6;
 
 // Search constants
 inline constexpr int MAX_PLY = 128;
-inline constexpr int MATE_SCORE = 100000;
-inline constexpr int VALUE_INF = 2000000000;   // Infinite score for alpha-beta bounds
-inline constexpr int VALUE_NONE = -200000;     // Initial value before any move is searched
+inline constexpr int16_t MATE_SCORE = 30000; // Score for checkmate positions, used in evaluation and search
+inline constexpr int16_t VALUE_INF = 32000;   // Infinite score for alpha-beta bounds
 
 // Move ordering scores
 inline constexpr int SCORE_TT_MOVE      = 1000000;
@@ -223,21 +222,22 @@ inline int piece_at_sq(const Board& board, int sq) {
 inline int side_to_move(const Board& b) { return b.stm; }
 inline int opponent(const Board& b) { return other_color(b.stm); }
 
-inline bool king_square(const Board& board, bool white, int& outRow, int& outCol) {
+inline void king_square(const Board& board, bool white, int& outSq) {
     Bitboard k = board.piece[KING - 1] & board.color[white ? WHITE : BLACK];
-    if (!k) return false;
+    if (!k) {
+        outSq = -1;
+        return;
+    }
     int sq = lsb(k);
-    outRow = sq_to_row(sq);
-    outCol = sq_to_col(sq);
-    return true;
+    outSq = sq;
 }
 
 // Move generation functions
-std::vector<Move> get_all_moves(Board& board, bool isWhiteTurn = true);
-std::vector<Move> get_capture_moves(const Board& board);
+void get_all_moves(Board& board, Move moves[], int& moveCount);
+void get_capture_moves(Board& board, Move moves[], int& moveCount);
 
 // Attack detection
-bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttacker);
+bool is_square_attacked(const Board& board, int sq, bool isWhiteAttacker);
 int see_exchange(const Board& board, const Move& move);
 int staticExchangeEvaluation(const Board& board, const Move& move, int threshold);
 // Utility functions
@@ -258,7 +258,7 @@ struct Zobrist {
 const Zobrist& zobrist();
 int piece_to_zobrist_index(int piece);
 uint64_t position_key(const Board& board);
-bool is_threefold_repetition(const std::vector<uint64_t>& positionHistory);
+bool is_repetition(const std::vector<uint64_t>& positionHistory, int halfMoveClock);
 
 // Draw detection
 inline bool is_fifty_move_draw(const Board& board) {
@@ -270,46 +270,5 @@ inline bool is_fifty_move_draw(const Board& board) {
 // Conservative: K vs K, K+B vs K, K+N vs K
 // Does NOT include K+B+N vs K (can mate) or K+B vs K+B same color (can mate in corners with help)
 bool is_insufficient_material(const Board& board);
-
-enum TTFlag {
-    EXACT,      // Exact score
-    ALPHA,      // Upper bound (fail-low)
-    BETA        // Lower bound (fail-high)
-};
-
-class TranspositionTable {
-public:
-    TranspositionTable() : table(nullptr), size(0) {}
-    ~TranspositionTable() { delete[] table; }
-
-    // Resize the table to given size in MB (count = bytes / sizeof(entry)).
-    void resize(int mbSize);
-    void clear();
-
-    // Lockless + thread-safe: write data first, then publish key with release semantics.
-    void store(uint64_t hash, int score, int depth, TTFlag flag, const Move& bestMove);
-
-    // Backward-compatible overload (older call sites passing an int)
-    void store(uint64_t hash, int score, int depth, int flag, const Move& bestMove) {
-        store(hash, score, depth, static_cast<TTFlag>(flag), bestMove);
-    }
-
-    bool probe(uint64_t key, int& outScore, int& outDepth, TTFlag& outFlag, Move& outMove) const;
-    size_t entryCount() const { return size; }
-
-private:
-    struct TTAtomicEntry {
-        std::atomic<uint64_t> key{0};
-        std::atomic<uint64_t> data{0};
-    };
-
-    TTAtomicEntry* table;
-    size_t size;
-
-    static uint64_t packData(int score, int depth, TTFlag flag, uint16_t packedMove);
-    static void unpackData(uint64_t data, int& score, int& depth, TTFlag& flag, uint16_t& packedMove);
-};
-
-extern TranspositionTable globalTT;
 
 #endif

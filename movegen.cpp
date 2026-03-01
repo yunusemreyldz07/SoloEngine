@@ -343,16 +343,14 @@ void generate_king_moves_bb(const Board& board, std::vector<Move>& moves) {
     }
 }
 
-bool is_square_attacked(const Board& board, int row, int col, bool isWhiteAttacker) {
-    int sq = row_col_to_sq(row, col);
+bool is_square_attacked(const Board& board, int sq, bool isWhiteAttacker) {
     return is_square_attacked_bb(board, sq, isWhiteAttacker);
 }
 
-std::vector<Move> get_all_moves(Board& board, bool isWhiteTurn) {
+void get_all_moves(Board& board, Move moves[], int& moveCount) {
     std::vector<Move> pseudoMoves;
     std::vector<Move> legalMoves;
     pseudoMoves.reserve(256);
-    (void)isWhiteTurn;
     const bool sideToMove = board.stm == WHITE;
 
     generate_pawn_moves_bb(board, pseudoMoves);
@@ -364,38 +362,39 @@ std::vector<Move> get_all_moves(Board& board, bool isWhiteTurn) {
 
     for (auto& m : pseudoMoves) {
         board.makeMove(m);
-        int kingRow = 0;
-        int kingCol = 0;
-        if (!king_square(board, sideToMove, kingRow, kingCol)) {
+        int kingSq = -1;
+        // After makeMove(), stm has already switched to the opponent.
+        // We must validate checks against the side that just moved.
+        king_square(board, sideToMove, kingSq);
+        if (kingSq == -1){
             board.unmakeMove(m);
             continue;
         }
-        if (!is_square_attacked(board, kingRow, kingCol, !sideToMove)) {
+
+        // The only illegal case is: our own king is attacked by the opponent.
+        if (!is_square_attacked(board, kingSq, board.stm == WHITE)) {
             legalMoves.push_back(m);
         }
         board.unmakeMove(m);
     }
-
-    return legalMoves;
+    int i = 0;
+    for (const auto& m : legalMoves) {
+        moves[i++] = m;
+    }
+    moveCount = i;
 }
 
-std::vector<Move> get_capture_moves(const Board& board) {
-    std::vector<Move> moves;
-    std::vector<Move> pseudoMoves;
-    pseudoMoves.reserve(128);
+void get_capture_moves(Board& board, Move moves[], int& moveCount) {
+    Move allMoves[256];
+    int allMoveCount = 0;
+    get_all_moves(board, allMoves, allMoveCount);
 
-    generate_pawn_moves_bb(board, pseudoMoves);
-    generate_knight_moves_bb(board, pseudoMoves);
-    generate_bishop_moves_bb(board, pseudoMoves);
-    generate_rook_moves_bb(board, pseudoMoves);
-    generate_queen_moves_bb(board, pseudoMoves);
-    generate_king_moves_bb(board, pseudoMoves);
-
-    for (auto& m : pseudoMoves) {
+    int i = 0;
+    for (int j = 0; j < allMoveCount; j++) {
+        Move m = allMoves[j];
         if (is_capture(m)) {
-            moves.push_back(m);
+            moves[i++] = m;
         }
     }
-
-    return moves;
+    moveCount = i;
 }

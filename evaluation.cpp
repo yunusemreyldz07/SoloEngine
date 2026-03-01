@@ -327,10 +327,3 @@ int evaluate_board(const Board& board) {
     return (staticEval + mobilityScore);
 }
 
-int evaluate_board_pesto(const Board& board) {
-    return evaluate_board(board);
-}
-
-int repetition_draw_score(const Board& board) {
-    return 0;
-}
