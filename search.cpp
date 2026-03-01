@@ -161,7 +161,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
     return bestEval;
 }
 
-int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, std::vector<Move>& pvLine, std::vector<uint64_t>& positionHistory) {
+int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, std::vector<Move>& pvLine, std::vector<uint64_t>& positionHistory, Move excludedMove = 0) {
     nodeCount.fetch_add(1, std::memory_order_relaxed);
     if (should_stop_search()) return 0;
     
@@ -196,7 +196,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
     if (ttEntry.hashKey == hashKey) {
         ttMove = ttEntry.bestMove;
         ttHit = true;
-        if (ttEntry.depth >= depth && ply > 0) {
+        if (excludedMove == 0 && ttEntry.depth >= depth && ply > 0) {
             int16_t ttScore = ttEntry.score;
             if (ttEntry.flag == TT_EXACT) {
                 return ttScore;
@@ -278,6 +278,19 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
     }
 
+    bool isSingular = false;
+    if (!pvNode && !inCheck && excludedMove == 0 && depth >= 6 && ttHit && ttMove != 0 && ttEntry.depth >= depth - 3 && ttEntry.flag != TT_BETA && std::abs(ttEntry.score) < MATE_SCORE - 100) {
+        int singularMargin = depth;
+        int16_t singularBeta = ttEntry.score - singularMargin;
+
+        std::vector<Move> dummyPv;
+        int16_t singularScore = negamax(board, depth / 2, singularBeta - 1, singularBeta, ply, dummyPv, positionHistory, ttMove);
+        
+        if (singularScore < singularBeta) {
+            isSingular = true;
+        }
+    }
+
     Move badQuiets[MAX_MOVES];
     int badQuietCount = 0;
     for (int movesSearched = 0; movesSearched < moveCount; ++movesSearched) {
@@ -287,11 +300,18 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
 
         Move chosenMove = moves[movesSearched];
-        
+
+        if (chosenMove == excludedMove) continue;
+
         std::vector<Move> childPv; 
+
+        int extension = 0;
+        if (isSingular && chosenMove == ttMove) {
+            extension = 1;
+        }
         
         // Futility Pruning
-        if (depth < 3 && !inCheck && get_promotion_type(chosenMove) == -1 && is_quiet(chosenMove)) {
+        if (depth < 3 && !inCheck && get_promotion_type(chosenMove) == -1 && is_quiet(chosenMove) && extension == 0) {
             int futilityMargin = 100 + 60 * depth; // Margin increases with depth
             if (staticEval + futilityMargin < alpha) {
                 continue; // Skip this move, it's unlikely to raise the evaluation enough
@@ -302,13 +322,13 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         int lmpCount = (3 * depth * depth) + 4;
         // Late Move Pruning (LMP) logic
         if (!pvNode &&
-            movesSearched >= lmpCount && is_quiet(chosenMove)) {
+            movesSearched >= lmpCount && is_quiet(chosenMove) && extension == 0) {
             continue; // skip this move (late move pruning)
         }
         
         // SEE PVS pruning
         int seeThreshold = is_quiet(chosenMove) ? -67 * depth : -32 * depth * depth;
-        if (movesSearched > 0 && !staticExchangeEvaluation(board, chosenMove, seeThreshold)) {
+        if (movesSearched > 0 && !staticExchangeEvaluation(board, chosenMove, seeThreshold) && extension == 0) {
             continue;
         }
 
@@ -316,13 +336,13 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 
         positionHistory.push_back(board.hash); // Add new position to history for repetition detection
         if (firstMove){
-            eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv, positionHistory);
+            eval = -negamax(board, depth - 1 + extension, -beta, -alpha, ply + 1, childPv, positionHistory);
             firstMove = false;
         } else {
 
             int reduction = 0;
             std::vector<Move> nullWindowPv;
-            if (depth > 1 && is_quiet(chosenMove)) {
+            if (depth > 1 && is_quiet(chosenMove) && extension == 0) {
                 int lmrTableDepth = std::min(depth, 255);
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
@@ -331,7 +351,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we dont search negative depth
             }
 
-            int lmrDepth = std::max(0, depth - 1 - reduction);
+            int lmrDepth = std::max(0, depth - 1 - reduction + extension);
 
 
             eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, childPv, positionHistory); // PVS null window search
@@ -339,12 +359,12 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
             if (reduction > 0 && eval > alpha) {
                 // if the eval suggest a better move we research
                 childPv.clear();
-                eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, childPv, positionHistory); // Re-search with no reduction
+                eval = -negamax(board, depth - 1 + extension, -alpha - 1, -alpha, ply + 1, childPv, positionHistory); // Re-search with no reduction
             }
             if (eval > alpha && eval < beta) {
                 // if we fail high search again with no reduction, and window
                 childPv.clear();
-                eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv, positionHistory); // Re-search if we failed high
+                eval = -negamax(board, depth - 1 + extension, -beta, -alpha, ply + 1, childPv, positionHistory); // Re-search if we failed high
             }
         }
         if (!positionHistory.empty()) positionHistory.pop_back();
@@ -382,15 +402,16 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
     if (aborted) {
         return bestEval; // Don't write to TT if search was aborted.
     }
-
-    TTFlag flag = TT_EXACT;
-    if (alpha <= originalAlpha) {
-        flag = TT_BETA;
-    } else if (alpha >= beta) {
-        flag = TT_ALPHA;
+    if (excludedMove == 0){
+        TTFlag flag = TT_EXACT;
+        if (alpha <= originalAlpha) {
+            flag = TT_BETA;
+        } else if (alpha >= beta) {
+            flag = TT_ALPHA;
+        }
+        ttTable.writeEntry(hashKey, bestEval, static_cast<int8_t>(depth), flag, bestMove);
     }
 
-    ttTable.writeEntry(hashKey, bestEval, static_cast<int8_t>(depth), flag, bestMove);
 
 
     return bestEval;
