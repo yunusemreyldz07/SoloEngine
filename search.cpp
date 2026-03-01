@@ -113,6 +113,10 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
     nodeCount.fetch_add(1, std::memory_order_relaxed);
     int stand_pat = evaluate_board(board);
 
+    if (board.halfMoveClock >= 100) {
+        return 0; // DRAW
+    }
+
     if (stand_pat >= beta) {
         return stand_pat;
     }
@@ -132,6 +136,12 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
         if (!staticExchangeEvaluation(board, captureMove, 0)) {
             continue; // Bad capture, skip it
         }
+
+        int capturedValue = PIECE_VALUES[piece_type(move_flags(captureMove) == FLAG_EN_PASSANT ? PAWN : board.mailbox[move_to(captureMove)])];
+        if (stand_pat + capturedValue + 200 < alpha) {
+            continue; 
+        }
+
         board.makeMove(captureMove);
         
         int eval = -qsearch(board, -beta, -alpha, ply + 1);
