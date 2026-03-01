@@ -88,6 +88,13 @@ int scoreMove(Board& board, const Move& move, Move ttMove = 0) {
         int attackerPiece = piece_at_sq(board, from);
         int attackerValue = PIECE_VALUES[piece_type(attackerPiece)];
         int mvvScore = victimValue * 10 - attackerValue;
+
+        if (staticExchangeEvaluation(board, move, SEE_THRESHOLD)) {
+            mvvScore += SCORE_GOOD_CAPTURE;
+        } else {
+            mvvScore -= SCORE_BAD_CAPTURE;
+        }
+
         score += mvvScore;
     }
 
