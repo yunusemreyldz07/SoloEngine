@@ -92,7 +92,7 @@ int scoreMove(Board& board, const Move& move, Move ttMove = 0) {
         if (staticExchangeEvaluation(board, move, SEE_THRESHOLD)) {
             mvvScore += SCORE_GOOD_CAPTURE;
         } else {
-            mvvScore -= SCORE_BAD_CAPTURE;
+            mvvScore += SCORE_BAD_CAPTURE;
         }
 
         score += mvvScore;
