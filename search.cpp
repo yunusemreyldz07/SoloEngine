@@ -278,10 +278,31 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
     }
 
-    if (!pvNode && !inCheck && depth <= 3 && staticEval + 200 * depth < alpha && alpha < MATE_SCORE - 1000) {
-        int razoring_score = qsearch(board, alpha, beta, ply);
-        if (razoring_score <= alpha) {            
-            return razoring_score; // Razor cutoff
+    // Razoring
+    if (!pvNode && !inCheck && depth <= 3) {
+        const int razor_margin[4] = { 0, 100, 200, 300 };
+        int margin = razor_margin[depth];
+
+        if (staticEval + margin <= alpha) {
+            bool allow_full_razor = (depth <= 1) || 
+                                    (depth <= 2 && staticEval + margin + 200 <= alpha);
+
+            if (allow_full_razor) {
+                return qsearch(board, alpha, beta, ply);
+            }
+
+            int razor_alpha = std::max<int>(alpha - margin, -MATE_SCORE + 1);
+            int razor_beta = razor_alpha + 1;
+            
+            int razor_score = qsearch(board, razor_alpha, razor_beta, ply);
+
+            if (razor_score <= razor_alpha) {                       
+                return razor_score;
+            }
+
+            if (razor_score >= razor_beta + 120 && depth <= 3) {                    
+                depth -= 1;
+            }
         }
     }
 
