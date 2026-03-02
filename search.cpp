@@ -162,7 +162,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
             continue; // Bad capture, skip it
         }
 
-        if (futilityValue <= alpha && !staticExchangeEvaluation(board, captureMove, 100)) {
+        if (futilityValue <= alpha && !staticExchangeEvaluation(board, captureMove, 1)) {
             bestEval = std::max(bestEval, futilityValue);
             continue;
         }
