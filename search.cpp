@@ -278,7 +278,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
     }
 
-    if (!pvNode && !inCheck && depth <= 2 && staticEval + 200 * depth < alpha && alpha < MATE_SCORE - 1000) {
+    if (!pvNode && !inCheck && depth <= 3 && staticEval + 200 * depth < alpha && alpha < MATE_SCORE - 1000) {
         int razoring_score = qsearch(board, alpha, beta, ply);
         if (razoring_score <= alpha) {            
             return razoring_score; // Razor cutoff
