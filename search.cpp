@@ -118,6 +118,24 @@ void orderMoves(Board& board, Move* moves, int moveCount, Move ttMove = 0) {
 int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
     if (stop_search.load(std::memory_order_relaxed)) return 0;
     nodeCount.fetch_add(1, std::memory_order_relaxed);
+
+    if (ply >= 128) {
+        return evaluate_board(board);
+    }
+
+    int16_t originalAlpha = alpha;
+    uint64_t hashKey = board.hash;
+    TTEntry& ttEntry = ttTable.getEntry(hashKey);
+    bool ttHit = (ttEntry.hashKey == hashKey);
+    int16_t ttScore = 0;
+
+    if (ttHit) {
+        ttScore = ttEntry.score;
+        if (ttEntry.flag == TT_EXACT) return ttScore;
+        if (ttEntry.flag == TT_BETA && ttScore <= alpha) return ttScore;
+        if (ttEntry.flag == TT_ALPHA && ttScore >= beta) return ttScore;
+    }
+
     int stand_pat = evaluate_board(board);
 
     if (stand_pat >= beta) {
@@ -131,8 +149,9 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
     Move captureMoves[MAX_MOVES];
     int moveCount = 0;
     get_capture_moves(board, captureMoves, moveCount);
-    orderMoves(board, captureMoves, moveCount, 0);
+    orderMoves(board, captureMoves, moveCount, ttHit ? ttEntry.bestMove : 0);
     int bestEval = stand_pat;
+    Move bestMove = 0;
 
     for (int i = 0; i < moveCount; ++i) {
         Move captureMove = captureMoves[i];
@@ -151,12 +170,22 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
 
         if (eval > alpha) {
             alpha = eval;
+            bestMove = captureMove;
         }
 
         if (alpha >= beta) {
             break; // Beta cutoff
         }
     }
+
+    TTFlag flag = TT_EXACT;
+    if (bestEval <= originalAlpha) {
+        flag = TT_BETA;
+    } else if (bestEval >= beta) {
+        flag = TT_ALPHA;
+    }
+    
+    ttTable.writeEntry(hashKey, bestEval, 0, flag, bestMove);
 
     return bestEval;
 }
