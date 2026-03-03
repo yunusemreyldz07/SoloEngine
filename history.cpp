@@ -24,10 +24,8 @@ void update_history(int color, int fromSq, int toSq, int depth, const Move badQu
             continue;
         }
 
-        int malus = bonus + (i * 30);
         int& badScore = historyTable[color][badFrom][badTo];
-        
-        badScore -= malus + (badScore * std::abs(malus)) / HISTORY_MAX;
+        badScore += -bonus - (badScore * std::abs(bonus)) / HISTORY_MAX;
     }
 }
 
