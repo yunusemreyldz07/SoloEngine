@@ -5,7 +5,7 @@
 int historyTable[2][64][64]; // color x fromSquare x toSquare
 constexpr int HISTORY_MAX = 16384;
 
-int continuationHistoryTable[12][64][12][64];
+int continuationHistoryTable[7][64][7][64];
 
 void updateContinuationHistory(int oldPiece, int oldToSq, int toPiece, int toSq, int bonus) {
     int& entry = continuationHistoryTable[oldPiece][oldToSq][toPiece][toSq];

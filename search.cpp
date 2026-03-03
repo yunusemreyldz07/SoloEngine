@@ -295,11 +295,13 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         board.hash ^= zobrist().epFile[8];
 
         positionHistory.push_back(board.hash);
+        board.moveHistory.push_back(0); // Null move sentinel for continuation history
 
         int R = std::min(3, std::max(1, depth - 2));
         std::vector<Move> nullPv;
         int16_t nullScore = -negamax(board, depth - R, -beta, -beta + 1, ply + 1, nullPv, positionHistory);
         
+        board.moveHistory.pop_back(); // Remove null move sentinel
         positionHistory.pop_back();
 
         board.stm = other_color(board.stm);
@@ -360,6 +362,16 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
                 int lmrTableDepth = std::min(depth, 255);
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
+
+                // Adjust LMR with continuation history
+                Move prevMove = board.moveHistory.size() >= 2 ? board.moveHistory[board.moveHistory.size() - 2] : 0;
+                if (prevMove != 0) {
+                    int prevPiece = piece_type(board.mailbox[move_to(prevMove)]);
+                    int curPiece = piece_type(board.mailbox[move_to(chosenMove)]);
+                    int chScore = getContinuationHistoryScore(prevPiece, move_to(prevMove), curPiece, move_to(chosenMove));
+                    reduction -= chScore / 5000;
+                }
+
                 if (reduction < 0) reduction = 0;
                 if (reduction > depth - 1) reduction = depth - 1;
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we dont search negative depth

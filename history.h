@@ -7,9 +7,9 @@
 // Each square is from 0-63, total 64x64 = 4096 entries
 extern int historyTable[2][64][64];
 
-// oldPiece oldToSq toPiece toSq
-// For continuation history heuristic
-extern int continuationHistoryTable[12][64][12][64];
+// prevPieceType prevToSq curPieceType curToSq
+// For continuation history heuristic (indexed by piece_type: 0-6)
+extern int continuationHistoryTable[7][64][7][64];
 
 // History functions
 void clear_history();                          // Reset history table
