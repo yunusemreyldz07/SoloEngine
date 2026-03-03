@@ -278,6 +278,14 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
     orderMoves(board, moves, moveCount, ttMove);
     Move bestMove = 0;
 
+    // Razoring
+    if (!pvNode && !inCheck && depth <= 2) {
+        int razorMargin = 150 + 100 * depth;
+        if (staticEval + razorMargin < alpha) {
+            return qsearch(board, alpha, beta, ply);
+        }
+    }
+
     // Reverse Futility Pruning
     if (!pvNode && depth < 9 && beta < MATE_SCORE - 100){
 
