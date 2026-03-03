@@ -110,9 +110,23 @@ int scoreMove(Board& board, const Move& move, Move ttMove = 0) {
 }
 
 void orderMoves(Board& board, Move* moves, int moveCount, Move ttMove = 0) {
-    std::sort(moves, moves + moveCount, [&](const Move& a, const Move& b) {
-        return scoreMove(board, a, ttMove) > scoreMove(board, b, ttMove);
-    });
+    int scores[MAX_MOVES];
+    for (int i = 0; i < moveCount; i++) {
+        scores[i] = scoreMove(board, moves[i], ttMove);
+    }
+    // Insertion sort with pre-computed scores
+    for (int i = 1; i < moveCount; i++) {
+        int tmpScore = scores[i];
+        Move tmpMove = moves[i];
+        int j = i - 1;
+        while (j >= 0 && scores[j] < tmpScore) {
+            scores[j + 1] = scores[j];
+            moves[j + 1] = moves[j];
+            j--;
+        }
+        scores[j + 1] = tmpScore;
+        moves[j + 1] = tmpMove;
+    }
 }
 
 int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
