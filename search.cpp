@@ -305,7 +305,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 
         positionHistory.push_back(board.hash);
 
-        int R = std::min(3, std::max(1, depth - 2));
+        int R = 3 + (depth / 3);
         std::vector<Move> nullPv;
         int16_t nullScore = -negamax(board, depth - R, -beta, -beta + 1, ply + 1, nullPv, positionHistory);
         
