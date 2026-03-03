@@ -105,7 +105,10 @@ int scoreMove(Board& board, const Move& move, Move ttMove = 0) {
     if (is_quiet(move)) {
         Move oldMove = board.moveHistory.empty() ? 0 : board.moveHistory.back();
         score += get_history_score(board.stm, from, to);
-        score += getContinuationHistoryScore(piece_type(oldMove), move_to(oldMove), piece_type(piece), to);
+        if (oldMove != 0) {
+            int oldPiece = piece_type(board.mailbox[move_to(oldMove)]);
+            score += getContinuationHistoryScore(oldPiece, move_to(oldMove), piece_type(piece), to);
+        }
     }
 
     return score;
@@ -402,7 +405,11 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
             if (is_quiet(chosenMove)){
                 Move oldMove = board.moveHistory.empty() ? 0 : board.moveHistory.back();
                 update_history(board.stm, move_from(chosenMove), move_to(chosenMove), depth, badQuiets, badQuietCount);
-                updateContinuationHistory(piece_type(oldMove), move_to(oldMove), piece_type(chosenMove), move_to(chosenMove), depth);
+                if (oldMove != 0) {
+                    int oldPiece = piece_type(board.mailbox[move_to(oldMove)]);
+                    int curPiece = piece_type(board.mailbox[move_from(chosenMove)]);
+                    updateContinuationHistory(oldPiece, move_to(oldMove), curPiece, move_to(chosenMove), depth);
+                }
             }
             break; // Beta cutoff
         }
