@@ -107,7 +107,7 @@ int scoreMove(Board& board, const Move& move, Move ttMove = 0) {
         score += get_history_score(board.stm, from, to);
         if (oldMove != 0) {
             int oldPiece = piece_type(board.mailbox[move_to(oldMove)]);
-            score += getContinuationHistoryScore(oldPiece, move_to(oldMove), piece_type(piece), to);
+            score += getContinuationHistoryScore(oldPiece, move_to(oldMove), piece_type(piece), to) / 2;
         }
     }
 
@@ -115,9 +115,23 @@ int scoreMove(Board& board, const Move& move, Move ttMove = 0) {
 }
 
 void orderMoves(Board& board, Move* moves, int moveCount, Move ttMove = 0) {
-    std::sort(moves, moves + moveCount, [&](const Move& a, const Move& b) {
-        return scoreMove(board, a, ttMove) > scoreMove(board, b, ttMove);
-    });
+    int scores[MAX_MOVES];
+    for (int i = 0; i < moveCount; i++) {
+        scores[i] = scoreMove(board, moves[i], ttMove);
+    }
+    // Insertion sort with pre-computed scores
+    for (int i = 1; i < moveCount; i++) {
+        int tmpScore = scores[i];
+        Move tmpMove = moves[i];
+        int j = i - 1;
+        while (j >= 0 && scores[j] < tmpScore) {
+            scores[j + 1] = scores[j];
+            moves[j + 1] = moves[j];
+            j--;
+        }
+        scores[j + 1] = tmpScore;
+        moves[j + 1] = tmpMove;
+    }
 }
 
 int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
@@ -362,16 +376,6 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
                 int lmrTableDepth = std::min(depth, 255);
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
-
-                // Adjust LMR with continuation history
-                Move prevMove = board.moveHistory.size() >= 2 ? board.moveHistory[board.moveHistory.size() - 2] : 0;
-                if (prevMove != 0) {
-                    int prevPiece = piece_type(board.mailbox[move_to(prevMove)]);
-                    int curPiece = piece_type(board.mailbox[move_to(chosenMove)]);
-                    int chScore = getContinuationHistoryScore(prevPiece, move_to(prevMove), curPiece, move_to(chosenMove));
-                    reduction -= chScore / 5000;
-                }
-
                 if (reduction < 0) reduction = 0;
                 if (reduction > depth - 1) reduction = depth - 1;
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we dont search negative depth
