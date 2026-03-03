@@ -369,6 +369,13 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
                 int lmrTableDepth = std::min(depth, 255);
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
+
+                // History-based LMR: good history -> less reduction, bad history -> more reduction
+                // Not super effective but i think it might gain us some elo.
+                // If you are reading this, then it did gain us some elo lol.
+                int histScore = get_history_score(board.stm, move_from(chosenMove), move_to(chosenMove));
+                reduction -= histScore / 4096;
+
                 if (reduction < 0) reduction = 0;
                 if (reduction > depth - 1) reduction = depth - 1;
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we dont search negative depth
