@@ -103,12 +103,7 @@ int scoreMove(Board& board, const Move& move, Move ttMove = 0) {
     }
 
     if (is_quiet(move)) {
-        Move oldMove = board.moveHistory.empty() ? 0 : board.moveHistory.back();
         score += get_history_score(board.stm, from, to);
-        if (oldMove != 0) {
-            int oldPiece = piece_type(board.mailbox[move_to(oldMove)]);
-            score += getContinuationHistoryScore(oldPiece, move_to(oldMove), piece_type(piece), to) / 2;
-        }
     }
 
     return score;
@@ -309,13 +304,11 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         board.hash ^= zobrist().epFile[8];
 
         positionHistory.push_back(board.hash);
-        board.moveHistory.push_back(0); // Null move sentinel for continuation history
 
         int R = std::min(3, std::max(1, depth - 2));
         std::vector<Move> nullPv;
         int16_t nullScore = -negamax(board, depth - R, -beta, -beta + 1, ply + 1, nullPv, positionHistory);
         
-        board.moveHistory.pop_back(); // Remove null move sentinel
         positionHistory.pop_back();
 
         board.stm = other_color(board.stm);
@@ -419,21 +412,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 
         if (alpha >= beta) {
             if (is_quiet(chosenMove)){
-                Move oldMove = board.moveHistory.empty() ? 0 : board.moveHistory.back();
                 update_history(board.stm, move_from(chosenMove), move_to(chosenMove), depth, badQuiets, badQuietCount);
-                if (oldMove != 0) {
-                    int bonus = std::min(10 + 200 * depth, 4096);
-                    int oldPiece = piece_type(board.mailbox[move_to(oldMove)]);
-                    int oldToSq = move_to(oldMove);
-                    int curPiece = piece_type(board.mailbox[move_from(chosenMove)]);
-                    updateContinuationHistory(oldPiece, oldToSq, curPiece, move_to(chosenMove), bonus);
-
-                    // Malus for bad quiets in continuation history
-                    for (int i = 0; i < badQuietCount; ++i) {
-                        int badPiece = piece_type(board.mailbox[move_from(badQuiets[i])]);
-                        updateContinuationHistory(oldPiece, oldToSq, badPiece, move_to(badQuiets[i]), -bonus);
-                    }
-                }
             }
             break; // Beta cutoff
         }
