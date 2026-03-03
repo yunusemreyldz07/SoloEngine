@@ -11,7 +11,7 @@
 #include <thread>
 #include <algorithm>
 
-#define VERSION "1.4.0"
+#define VERSION "1.5.0"
 
 TranspositionTable ttTable;
 
@@ -185,10 +185,9 @@ int handle_uci_commands(int argc, char* argv[]){
         
         if (line == "uci") {
             std::cout << "id name SoloEngine " << VERSION << std::endl;
-            std::cout << "id author Yunus Emre Yıldız" << std::endl;
+            std::cout << "id author Yunus Emre" << std::endl;
             std::cout << "option name Hash type spin default 128 min 1 max 2048" << std::endl;
             std::cout << "option name Threads type spin default 1 min 1 max 8" << std::endl;
-            std::cout << "option name UseTT type check default true" << std::endl;
             std::cout << "uciok" << std::endl;
         }
         
@@ -225,10 +224,6 @@ int handle_uci_commands(int argc, char* argv[]){
                 int mb = std::max(1, std::stoi(value));
                 ttTable.resize(mb);
                 ttTable.clear();
-
-
-            } else if (name == "UseTT") {
-                // Ignored in simplified search mode.
             }
 
         }
