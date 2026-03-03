@@ -1,5 +1,5 @@
 # SoloEngine - UCI Chess Engine
-**Version 1.1.0**
+**Version 1.5.0**
 
 A bitboard-based chess engine with advanced search techniques and evaluation.
 
@@ -11,29 +11,32 @@ A bitboard-based chess engine with advanced search techniques and evaluation.
   - Negamax with alpha-beta pruning
   - Iterative deepening
   - Aspiration windows
-  - Null move pruning (NMP)
-  - Late move reductions (LMR)
-  - Late move pruning (LMP)
-  - Quiescence search with delta pruning
-  - Principal Variation Search (PVS) with null-window re-search
-  - Futility Pruning (FP)
+  - Principal Variation Search (PVS)
+  - Null Move Pruning (NMP) with adaptive reduction
+  - Late Move Reductions (LMR)
+  - Late Move Pruning (LMP)
   - Reverse Futility Pruning (RFP)
-  - Static Exchange Evaluation (SEE) with pruning
-  - Transposition Table with lockless thread-safe design
+  - Futility Pruning (FP)
+  - Static Exchange Evaluation (SEE) pruning
+  - Internal Iterative Reductions (IIR)
+  - Check extensions
+  - Quiescence search with SEE filtering
+  - Transposition Table
 
 - **Move Ordering**:
-  - Transposition Table (TT) move first
-  - MVV-LVA with SEE pruning for bad captures
-  - History heuristic with depth-squared bonus
-  - PV move from previous iteration prioritized
+  - TT move first
+  - Good captures (SEE ≥ threshold) with MVV-LVA scoring
+  - History heuristic for quiet moves (Bad quiets are penalized)
+  - Bad captures ordered last
 
 - **Evaluation**:
-  - PeSTO's Piece-Square Tables
+  - PeSTO Piece-Square Tables
   - Tapered evaluation (midgame/endgame interpolation)
+  - Piece mobility (Knight, Bishop, Rook, Queen)
+  - Double pawn penalty
   - Incremental Zobrist hashing
   - Threefold repetition detection
-  - Mobility Bonus
-  - 50-moves & insufficient material draw detection
+  - 50-move rule & insufficient material draw detection
 
 ## Building
 
@@ -92,31 +95,30 @@ Runs a built-in benchmark on 12 positions at depth 8.
 |--------|------|---------|-------|-------------|
 | `Hash` | spin | 128 | 1-2048 | Transposition table size in MB |
 | `Threads` | spin | 1 | 1-8 | Number of search threads *(not implemented yet)* |
-| `UseTT` | check | true | - | Enable/disable transposition table |
 
 ## Strength
 
-- **Estimated ELO**: ~2136 (based on benchmark tests)
-- **Lichess ELO**: [~2100](https://lichess.org/@/SoloBot)
-- **Perft Verified**: Passes standard perft test suites
+- **Estimated ELO**: ~2300+ (based on SPRT testing)
+- **Lichess ELO**: [~2200](https://lichess.org/@/SoloBot)
 
 ## Roadmap
 
-- [ ] Multi-threading support (lazy SMP)
-- [ ] Syzygy endgame tablebase support
-- [ ] Improved time management (soft/hard bounds)
-- [ ] NNUE evaluation (future consideration)
+- [ ] Multi-threading support (Lazy SMP)
+- [ ] NNUE evaluation
+- [ ] Continuation history
+- [ ] Singular extensions
 
 ## Project Structure
 ```
 ├── bitboard.cpp/h      # Magic bitboards & attack generation
 ├── board.cpp/h         # Board representation & move make/unmake
-├── evaluation.cpp/h    # PeSTO evaluation
+├── evaluation.cpp/h    # PeSTO evaluation & mobility
+├── history.cpp/h       # History heuristic for move ordering
 ├── movegen.cpp         # Legal move generation
-├── search.cpp/h        # Negamax search with pruning
-├── history.cpp/h       # History heuristic
-├── types.h             # Basic types (Bitboard, etc.)
-├── main.cpp            # UCI protocol handler
+├── search.cpp/h        # Negamax search, pruning & reductions
+├── uci.cpp/h           # UCI protocol handler
+├── types.h             # Basic types & constants
+├── main.cpp            # Entry point
 └── Makefile            # Build system
 ```
 
