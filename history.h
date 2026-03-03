@@ -7,9 +7,15 @@
 // Each square is from 0-63, total 64x64 = 4096 entries
 extern int historyTable[2][64][64];
 
+// oldPiece oldToSq toPiece toSq
+// For continuation history heuristic
+extern int continuationHistoryTable[12][64][12][64];
+
 // History functions
 void clear_history();                          // Reset history table
 void update_history(int color, int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount); // Update on beta cutoff
 int get_history_score(int color, int fromSq, int toSq);  // Get score for move ordering
+void updateContinuationHistory(int oldPiece, int oldToSq, int toPiece, int toSq, int depth);
+int getContinuationHistoryScore(int oldPiece, int oldToSq, int toPiece, int toSq);
 
 #endif
