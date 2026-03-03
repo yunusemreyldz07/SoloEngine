@@ -279,7 +279,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
     Move bestMove = 0;
 
     // Reverse Futility Pruning
-    if (!pvNode && depth < 9 && beta < MATE_SCORE - 100){
+    if (!inCheck && !pvNode && depth < 9 && beta < MATE_SCORE - 100){
 
         int margin = 80 * depth;
 
