@@ -52,6 +52,8 @@ inline constexpr int16_t VALUE_INF = 32000;   // Infinite score for alpha-beta b
 // Move ordering scores
 inline constexpr int SCORE_TT_MOVE      = 1000000;
 inline constexpr int SCORE_GOOD_CAPTURE = 1000000;
+inline constexpr int SCORE_KILLER_1     = 900000;
+inline constexpr int SCORE_KILLER_2     = 800000;
 inline constexpr int SCORE_BAD_CAPTURE  = -100000;
 inline constexpr int SCORE_PROMO_QUEEN  = 90000;
 inline constexpr int SCORE_PROMO_ROOK   = 80000;
