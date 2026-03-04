@@ -83,6 +83,24 @@ int LMR_TABLE[256][256];
 float LMR_BASE = 0.77f;
 float LMR_DIVISION = 2.32f;
 
+// Killer moves table: [ply][slot]
+Move killerMoves[MAX_PLY][2];
+
+void clearKillers() {
+    for (int i = 0; i < MAX_PLY; i++) {
+        killerMoves[i][0] = 0;
+        killerMoves[i][1] = 0;
+    }
+}
+
+void updateKillers(int ply, Move move) {
+    if (ply >= MAX_PLY) return;
+    // Don't store duplicates
+    if (killerMoves[ply][0] == move) return;
+    killerMoves[ply][1] = killerMoves[ply][0];
+    killerMoves[ply][0] = move;
+}
+
 void initLMRtables(){
     for(int depth = 0; depth < 256; depth++){
         for(int moveNum = 0; moveNum < 256; moveNum++){
@@ -103,7 +121,7 @@ long long getNodeCounter() {
     return nodeCount.load(std::memory_order_relaxed);
 }
 
-int scoreMove(Board& board, const Move& move, Move ttMove = 0) {
+int scoreMove(Board& board, const Move& move, Move ttMove = 0, int ply = 0) {
     int score = 0;
     int from = move_from(move);
     int to = move_to(move);
@@ -132,16 +150,23 @@ int scoreMove(Board& board, const Move& move, Move ttMove = 0) {
     }
 
     if (is_quiet(move)) {
-        score += get_history_score(board.stm, from, to);
+        // Killer move bonus (only for quiet moves)
+        if (ply < MAX_PLY && move == killerMoves[ply][0]) {
+            score += SCORE_KILLER_1;
+        } else if (ply < MAX_PLY && move == killerMoves[ply][1]) {
+            score += SCORE_KILLER_2;
+        } else {
+            score += get_history_score(board.stm, from, to);
+        }
     }
 
     return score;
 }
 
-void orderMoves(Board& board, Move* moves, int moveCount, Move ttMove = 0) {
+void orderMoves(Board& board, Move* moves, int moveCount, Move ttMove = 0, int ply = 0) {
     int scores[MAX_MOVES];
     for (int i = 0; i < moveCount; i++) {
-        scores[i] = scoreMove(board, moves[i], ttMove);
+        scores[i] = scoreMove(board, moves[i], ttMove, ply);
     }
     // Insertion sort with pre-computed scores
     for (int i = 1; i < moveCount; i++) {
@@ -193,7 +218,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
     Move captureMoves[MAX_MOVES];
     int moveCount = 0;
     get_capture_moves(board, captureMoves, moveCount);
-    orderMoves(board, captureMoves, moveCount, ttHit ? ttEntry.bestMove : 0);
+    orderMoves(board, captureMoves, moveCount, ttHit ? ttEntry.bestMove : 0, 0);
     int bestEval = stand_pat;
     Move bestMove = 0;
 
@@ -308,7 +333,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
     int16_t bestEval = -VALUE_INF;
     bool aborted = false;
     
-    orderMoves(board, moves, moveCount, ttMove);
+    orderMoves(board, moves, moveCount, ttMove, ply);
     Move bestMove = 0;
 
     // Reverse Futility Pruning
@@ -363,11 +388,13 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
 
         Move chosenMove = moves[movesSearched];
+        bool isKiller = (ply < MAX_PLY && is_quiet(chosenMove) && 
+                        (chosenMove == killerMoves[ply][0] || chosenMove == killerMoves[ply][1]));
         
         std::vector<Move> childPv; 
         
-        // Futility Pruning
-        if (depth < 3 && !inCheck && get_promotion_type(chosenMove) == -1 && is_quiet(chosenMove)) {
+        // Futility Pruning (skip for killer moves)
+        if (!isKiller && depth < 3 && !inCheck && get_promotion_type(chosenMove) == -1 && is_quiet(chosenMove)) {
             int futilityMargin = 100 + 60 * depth; // Margin increases with depth
             if (staticEval + futilityMargin < alpha) {
                 continue; // Skip this move, it's unlikely to raise the evaluation enough
@@ -376,15 +403,15 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
 
         int lmpCount = (3 * depth * depth) + 4;
-        // Late Move Pruning (LMP) logic
-        if (!pvNode &&
+        // Late Move Pruning (LMP) logic (skip for killer moves)
+        if (!pvNode && !isKiller &&
             movesSearched >= lmpCount && is_quiet(chosenMove)) {
             continue; // skip this move (late move pruning)
         }
         
-        // SEE PVS pruning
+        // SEE PVS pruning (skip for killer moves)
         int seeThreshold = is_quiet(chosenMove) ? -67 * depth : -32 * depth * depth;
-        if (movesSearched > 0 && !staticExchangeEvaluation(board, chosenMove, seeThreshold)) {
+        if (movesSearched > 0 && !isKiller && !staticExchangeEvaluation(board, chosenMove, seeThreshold)) {
             continue;
         }
 
@@ -402,6 +429,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
                 int lmrTableDepth = std::min(depth, 255);
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
+                if (isKiller) reduction--; // Reduce killer moves less
                 if (reduction < 0) reduction = 0;
                 if (reduction > depth - 1) reduction = depth - 1;
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we dont search negative depth
@@ -446,6 +474,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         if (alpha >= beta) {
             if (is_quiet(chosenMove)){
                 update_history(board.stm, move_from(chosenMove), move_to(chosenMove), depth, badQuiets, badQuietCount);
+                updateKillers(ply, chosenMove);
             }
             break; // Beta cutoff
         }
@@ -479,6 +508,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
     stop_search.store(false, std::memory_order_relaxed);
     resetNodeCounter();
+    clearKillers();
     const long long searchStartMs = now_ms();
     start_time_ms.store(searchStartMs, std::memory_order_relaxed);
     if (movetimeMs > 0) {
