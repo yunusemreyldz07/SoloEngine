@@ -141,7 +141,7 @@ int handle_uci_commands(int argc, char* argv[]){
         return 0;
     }
     else if (argc > 1 && std::string(argv[1]) == "--version") {
-        std::cout << "SoloEngine version " << VERSION << std::endl;
+        std::cout << "Solo version " << VERSION << std::endl;
         return 0;
     }
 
@@ -184,7 +184,7 @@ int handle_uci_commands(int argc, char* argv[]){
         }
         
         if (line == "uci") {
-            std::cout << "id name SoloEngine " << VERSION << std::endl;
+            std::cout << "id name Solo " << VERSION << std::endl;
             std::cout << "id author Yunus Emre" << std::endl;
             std::cout << "option name Hash type spin default 128 min 1 max 2048" << std::endl;
             std::cout << "option name Threads type spin default 1 min 1 max 8" << std::endl;
