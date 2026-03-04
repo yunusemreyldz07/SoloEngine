@@ -1,4 +1,4 @@
-# SoloEngine - UCI Chess Engine
+# Solo - UCI Chess Engine
 **Version 1.5.0**
 
 A bitboard-based chess engine with advanced search techniques and evaluation.
@@ -54,26 +54,26 @@ make mac
 make clean
 ```
 
-**Output**: Executable will be created as `SoloEngine.exe` (Windows) or `SoloEngine` (Linux/Mac)
+**Output**: Executable will be created as `Solo.exe` (Windows) or `Solo` (Linux/Mac)
 
 ### Manual Compilation
 
 If you don't have Make:
 
 # Windows (MinGW/MSYS2)
-```g++ -O3 -mavx2 -std=c++23 -ffast-math -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp -o SoloEngine.exe -static -static-libgcc -static-libstdc++```
+```g++ -O3 -mavx2 -std=c++23 -ffast-math -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp -o Solo.exe -static -static-libgcc -static-libstdc++```
 
 # Linux
-```g++ -O3 -std=c++23 -ffast-math -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp -o SoloEngine -lm```
+```g++ -O3 -std=c++23 -ffast-math -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp -o Solo -lm```
 
 # macOS (Apple Silicon)
-```clang++ -O3 -std=c++23 -ffast-math -march=armv8-a -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp -o SoloEngine -lm```
+```clang++ -O3 -std=c++23 -ffast-math -march=armv8-a -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp -o Solo -lm```
 
 ## Usage
 
 ### UCI Mode
 ```bash
-./SoloEngine
+./Solo
 
 # Example UCI commands:
 uci
@@ -84,7 +84,7 @@ go depth 10
 
 ### Benchmark
 ```bash
-./SoloEngine bench
+./Solo bench
 ```
 
 Runs a built-in benchmark on 12 positions at depth 8.

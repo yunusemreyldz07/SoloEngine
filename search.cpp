@@ -22,6 +22,35 @@ std::atomic<long long> start_time_ms{0};
 std::atomic<long long> soft_time_limit_ms{0};
 std::atomic<long long> hard_time_limit_ms{0};
 std::atomic<bool> time_limited{false};
+std::atomic<int> seldepth{0};
+
+inline void updateSeldepth(int ply){
+    int cur = seldepth.load(std::memory_order_relaxed);
+    while (ply > cur && !seldepth.compare_exchange_weak(cur, ply, std::memory_order_relaxed)) {
+        // loop until we successfully update seldepth to the new value if ply is greater
+    }
+}
+
+void resetSeldepth() {
+    seldepth.store(0, std::memory_order_relaxed);
+}
+
+int getSeldepth() {
+    return seldepth.load(std::memory_order_relaxed);
+}
+
+int hash_full(void) {
+  int used = 0;
+  int samples = 1000;
+
+  for (int i = 0; i < samples; ++i) {
+    if (ttTable.getEntry(i).hashKey != 0) {
+      used++;
+    }
+  }
+
+  return used;
+}
 
 const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
 
@@ -132,6 +161,7 @@ void orderMoves(Board& board, Move* moves, int moveCount, Move ttMove = 0) {
 int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
     if (stop_search.load(std::memory_order_relaxed)) return 0;
     nodeCount.fetch_add(1, std::memory_order_relaxed);
+    updateSeldepth(ply);
 
     if (ply >= 128) {
         return evaluate_board(board);
@@ -206,6 +236,9 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
 
 int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, std::vector<Move>& pvLine, std::vector<uint64_t>& positionHistory) {
     nodeCount.fetch_add(1, std::memory_order_relaxed);
+
+    updateSeldepth(ply);
+
     if (should_stop_search()) return 0;
     
     if (depth <= 0) {
@@ -445,12 +478,14 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
     std::vector<uint64_t> searchHistory = positionHistory;
 
     stop_search.store(false, std::memory_order_relaxed);
+    resetNodeCounter();
+    const long long searchStartMs = now_ms();
+    start_time_ms.store(searchStartMs, std::memory_order_relaxed);
     if (movetimeMs > 0) {
         long long safeTime = movetimeMs;
         if (safeTime > 50) safeTime -= 20;
         long long softTime = (safeTime * 7) / 10;
         if (softTime < 1) softTime = 1;
-        start_time_ms.store(now_ms(), std::memory_order_relaxed);
         soft_time_limit_ms.store(softTime, std::memory_order_relaxed);
         hard_time_limit_ms.store(safeTime, std::memory_order_relaxed);
         time_limited.store(true, std::memory_order_relaxed);
@@ -468,6 +503,8 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
     // Iterative Deepening
     for(int iterativeDepth = 1; iterativeDepth <= maxDepth; ++iterativeDepth) {
+        resetSeldepth();
+
         if (iterativeDepth > 1 && soft_limit_reached()) {
             stop_search.store(true, std::memory_order_relaxed);
             break;
@@ -522,7 +559,18 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             bestMoveSoFar = pvLine[0];
         }
 
-        std::cout << "info depth " << iterativeDepth << " score cp " << score << " pv ";
+        long long elapsedMs = now_ms() - searchStartMs;
+        if (elapsedMs < 0) elapsedMs = 0;
+        long long nodes = getNodeCounter();
+        long long nps = (elapsedMs > 0) ? (nodes * 1000 / elapsedMs) : (nodes * 1000);
+
+        std::cout << "info depth " << iterativeDepth
+                  << " seldepth " << getSeldepth()
+                  << " hashfull " << hash_full()
+                  << " time " << elapsedMs
+                  << " nps " << nps
+                  << " score cp " << score
+                  << " pv ";
         for (Move m : pvLine) {
             std::cout << move_to_uci(m) << " ";
         }
@@ -536,3 +584,4 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
     return bestMoveSoFar;
 }
+

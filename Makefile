@@ -1,6 +1,6 @@
 .PHONY: build default windows linux mac android all clean mac-clean linux-clean windows-clean android-clean objs distclean list debug debug-windows debug-linux debug-mac debug-android
 
-EXE := SoloEngine
+EXE := Solo
 
 SOURCES := main.cpp \
            uci.cpp \
