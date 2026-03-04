@@ -388,11 +388,13 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
 
         Move chosenMove = moves[movesSearched];
+        bool isKiller = (ply < MAX_PLY && is_quiet(chosenMove) && 
+                        (chosenMove == killerMoves[ply][0] || chosenMove == killerMoves[ply][1]));
         
         std::vector<Move> childPv; 
         
-        // Futility Pruning
-        if (depth < 3 && !inCheck && get_promotion_type(chosenMove) == -1 && is_quiet(chosenMove)) {
+        // Futility Pruning (skip for killer moves)
+        if (!isKiller && depth < 3 && !inCheck && get_promotion_type(chosenMove) == -1 && is_quiet(chosenMove)) {
             int futilityMargin = 100 + 60 * depth; // Margin increases with depth
             if (staticEval + futilityMargin < alpha) {
                 continue; // Skip this move, it's unlikely to raise the evaluation enough
@@ -401,15 +403,15 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
 
         int lmpCount = (3 * depth * depth) + 4;
-        // Late Move Pruning (LMP) logic
-        if (!pvNode &&
+        // Late Move Pruning (LMP) logic (skip for killer moves)
+        if (!pvNode && !isKiller &&
             movesSearched >= lmpCount && is_quiet(chosenMove)) {
             continue; // skip this move (late move pruning)
         }
         
-        // SEE PVS pruning
+        // SEE PVS pruning (skip for killer moves)
         int seeThreshold = is_quiet(chosenMove) ? -67 * depth : -32 * depth * depth;
-        if (movesSearched > 0 && !staticExchangeEvaluation(board, chosenMove, seeThreshold)) {
+        if (movesSearched > 0 && !isKiller && !staticExchangeEvaluation(board, chosenMove, seeThreshold)) {
             continue;
         }
 
@@ -427,6 +429,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
                 int lmrTableDepth = std::min(depth, 255);
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
+                if (isKiller) reduction--; // Reduce killer moves less
                 if (reduction < 0) reduction = 0;
                 if (reduction > depth - 1) reduction = depth - 1;
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we dont search negative depth
