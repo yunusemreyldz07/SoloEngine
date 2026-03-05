@@ -274,9 +274,9 @@ int evaluate_board(const Board& board) {
             while (bb) {
                 int sq = lsb(bb);
                 bb &= bb - 1;
-            mg[color] += mg_table[tableIdx][sq];
-            eg[color] += eg_table[tableIdx][sq];
-            gamePhase += gamephaseInc[p];
+                mg[color] += mg_table[tableIdx][sq];
+                eg[color] += eg_table[tableIdx][sq];
+                gamePhase += gamephaseInc[p];
             }
         }
     }

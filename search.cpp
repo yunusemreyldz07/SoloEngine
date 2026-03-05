@@ -104,7 +104,7 @@ void updateKillers(int ply, Move move) {
 void initLMRtables(){
     for(int depth = 0; depth < 256; depth++){
         for(int moveNum = 0; moveNum < 256; moveNum++){
-            if(depth < 2 || moveNum < 4 || depth == 0 || moveNum == 0){
+            if (depth < 2 || moveNum < 4){
                 LMR_TABLE[depth][moveNum] = 0;
             } else {
                 LMR_TABLE[depth][moveNum] = (int)(LMR_BASE + std::log(depth) * std::log(moveNum) / LMR_DIVISION);
@@ -119,6 +119,10 @@ void resetNodeCounter() {
 
 long long getNodeCounter() {
     return nodeCount.load(std::memory_order_relaxed);
+}
+
+void requestSearchStop() {
+    stop_search.store(true, std::memory_order_relaxed);
 }
 
 int scoreMove(Board& board, const Move& move, Move ttMove = 0, int ply = 0) {
@@ -424,7 +428,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         } else {
 
             int reduction = 0;
-            std::vector<Move> nullWindowPv;
+
             if (depth > 1 && is_quiet(chosenMove)) {
                 int lmrTableDepth = std::min(depth, 255);
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
@@ -480,7 +484,9 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
 
         if (is_quiet(chosenMove)){
-            badQuiets[badQuietCount++] = chosenMove;
+            if (badQuietCount < MAX_MOVES) {
+                badQuiets[badQuietCount++] = chosenMove;
+            }
         }
     }
 
@@ -566,13 +572,13 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             }
 
             if (searchScore <= alpha) {
-                delta = std::min<uint16_t>(4096, delta + (delta * 1.8));
+                delta = std::min(4096, delta + delta * 9 / 5);
                 alpha = std::max<int16_t>(-VALUE_INF, static_cast<int16_t>(searchScore - delta));
                 continue;
             }
 
             if (searchScore >= beta) {
-                delta = std::min<uint16_t>(4096, delta + (delta * 1.8));
+                delta = std::min(4096, delta + delta * 9 / 5);
                 beta = std::min<int16_t>(VALUE_INF, static_cast<int16_t>(searchScore + delta));
                 continue;
             }

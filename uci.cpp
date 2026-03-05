@@ -163,6 +163,7 @@ int handle_uci_commands(int argc, char* argv[]){
     };
 
     auto stop_and_join_search = [&]() {
+        requestSearchStop();
         if (searchThread.joinable()) {
             searchThread.join();
         }
@@ -179,7 +180,7 @@ int handle_uci_commands(int argc, char* argv[]){
         join_search_if_done();
 
         if (line == "stop") {
-            // Stop command is ignored in this simplified search mode.
+            stop_and_join_search();
             continue;
         }
         

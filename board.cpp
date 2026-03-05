@@ -106,7 +106,7 @@ void Board::reset() {
     hash = position_key(*this);
 }
 
-void Board::makeMove(Move& move) {
+void Board::makeMove(Move move) {
     int from = move & 0x3F;               // First 6 bit
     int to = (move >> 6) & 0x3F;          // Other 6 bit
     int flags = (move >> 12) & 0xF;       // Last 4 bits
@@ -129,7 +129,7 @@ void Board::makeMove(Move& move) {
 
     const int fromSq = move_from(move);
     const int toSq = move_to(move);
-    const uint8_t movingPiece = mailbox[fromSq];
+    const int8_t movingPiece = mailbox[fromSq];
     int target_piece = mailbox[toSq];
 
 
@@ -225,16 +225,16 @@ void Board::makeMove(Move& move) {
         enPassant = -1;
     }
 
-    if (movingPiece == W_ROOK && sq_to_row(fromSq) == 7 && sq_to_col(fromSq) == 7){
+    if (movingPiece == W_ROOK && fromSq == 7){
         castling &= ~CASTLE_WK;
     }
-    else if (movingPiece == W_ROOK && sq_to_row(fromSq) == 7 && sq_to_col(fromSq) == 0){
+    else if (movingPiece == W_ROOK && fromSq == 0){
         castling &= ~CASTLE_WQ;
     }
-    else if (movingPiece == B_ROOK && sq_to_row(fromSq) == 0 && sq_to_col(fromSq) == 7){
+    else if (movingPiece == B_ROOK && fromSq == 63){
         castling &= ~CASTLE_BK;
     }
-    else if (movingPiece == B_ROOK && sq_to_row(fromSq) == 0 && sq_to_col(fromSq) == 0){
+    else if (movingPiece == B_ROOK && fromSq == 56){
         castling &= ~CASTLE_BQ;
     }
 
@@ -245,16 +245,16 @@ void Board::makeMove(Move& move) {
         castling &= ~(CASTLE_BK | CASTLE_BQ);
     }
 
-    if (st.capturedPiece == W_ROOK && sq_to_row(toSq) == 7 && sq_to_col(toSq) == 7) {
+    if (st.capturedPiece == W_ROOK && toSq == 7) {
         castling &= ~CASTLE_WK;
     }
-    if (st.capturedPiece == W_ROOK && sq_to_row(toSq) == 7 && sq_to_col(toSq) == 0) {
+    if (st.capturedPiece == W_ROOK && toSq == 0) {
         castling &= ~CASTLE_WQ;
     }
-    if (st.capturedPiece == B_ROOK && sq_to_row(toSq) == 0 && sq_to_col(toSq) == 7) {
+    if (st.capturedPiece == B_ROOK && toSq == 56) {
         castling &= ~CASTLE_BK;
     }
-    if (st.capturedPiece == B_ROOK && sq_to_row(toSq) == 0 && sq_to_col(toSq) == 0) {
+    if (st.capturedPiece == B_ROOK && toSq == 63) {
         castling &= ~CASTLE_BQ;
     }
 
@@ -266,7 +266,7 @@ void Board::makeMove(Move& move) {
     stm = other_color(stm);
 }
 
-void Board::unmakeMove(Move& move) {
+void Board::unmakeMove(Move move) {
     // Remove from move history
     if (!moveHistory.empty()) {
         moveHistory.pop_back();
@@ -530,7 +530,7 @@ uint64_t position_key(const Board& board) {
     return h;
 }
 
-bool is_repetition(const std::vector<uint64_t>& positionHistory, int halfMoveClock) {
+bool is_repetition(const std::vector<uint64_t>& positionHistory, int16_t halfMoveClock) {
     int size = static_cast<int>(positionHistory.size());
     if (size < 3) return false;
 

@@ -98,8 +98,6 @@ inline constexpr int make_piece(int type, int color) {
 // Color helper
 inline constexpr int other_color(int c) { return c ^ 1; }
 
-extern int pieces_on_board[14]; // Simplified piece count for endgame detection (2 knights, 2 bishops, 2 rooks, 1 queen per side)
-
 // Move representation: 16 bits total
 // Bits 0-5: from square (0-63)
 // Bits 6-11: to square (0-63)
@@ -178,7 +176,7 @@ struct UndoState {
     int capturedPiece;    // We gotta remember the piece we took so we can put it back
     uint8_t castling;     // Castling rights before the move (4 bits: KQkq)
     int8_t enPassant;     // EP column copy (-1 or 0-7)
-    int8_t halfMoveClock; // 50 move rule counter before the move
+    int16_t halfMoveClock; // 50 move rule counter before the move
     uint64_t hash;         // Position hash before the move (for repetition detection)
 };
 
@@ -195,13 +193,13 @@ struct Board {
     std::vector<UndoState> undoStack;
 
     int8_t mailbox[64];
-    int8_t halfMoveClock;
+    int16_t halfMoveClock;
 
     Board();
     void reset();
     void loadFEN(const std::string& fen);
-    void makeMove(Move& move);
-    void unmakeMove(Move& move);
+    void makeMove(Move move);
+    void unmakeMove(Move move);
 };
 
 inline int row_col_to_sq(int row, int col) {
@@ -240,7 +238,7 @@ void get_capture_moves(Board& board, Move moves[], int& moveCount);
 
 // Attack detection
 bool is_square_attacked(const Board& board, int sq, bool isWhiteAttacker);
-int see_exchange(const Board& board, const Move& move);
+
 int staticExchangeEvaluation(const Board& board, const Move& move, int threshold);
 // Utility functions
 void printBoard(const Board& board);
@@ -260,7 +258,7 @@ struct Zobrist {
 const Zobrist& zobrist();
 int piece_to_zobrist_index(int piece);
 uint64_t position_key(const Board& board);
-bool is_repetition(const std::vector<uint64_t>& positionHistory, int halfMoveClock);
+bool is_repetition(const std::vector<uint64_t>& positionHistory, int16_t halfMoveClock);
 
 // Draw detection
 inline bool is_fifty_move_draw(const Board& board) {

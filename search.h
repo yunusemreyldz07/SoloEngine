@@ -6,6 +6,7 @@
 extern void initLMRtables();
 void resetNodeCounter();
 long long getNodeCounter();
+void requestSearchStop();
 
 int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, std::vector<Move>& pvLine, std::vector<uint64_t>& positionHistory);
 
