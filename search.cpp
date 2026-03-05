@@ -204,6 +204,10 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
 
     if (ttHit) {
         ttScore = ttEntry.score;
+
+        if (ttScore >= MATE_SCORE - MAX_PLY) ttScore -= ply;
+        else if (ttScore <= -MATE_SCORE + MAX_PLY) ttScore += ply;
+
         if (ttEntry.flag == TT_EXACT) return ttScore;
         if (ttEntry.flag == TT_BETA && ttScore <= alpha) return ttScore;
         if (ttEntry.flag == TT_ALPHA && ttScore >= beta) return ttScore;
@@ -257,8 +261,13 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
     } else if (bestEval >= beta) {
         flag = TT_ALPHA;
     }
-    
-    ttTable.writeEntry(hashKey, bestEval, 0, flag, bestMove);
+
+    int16_t ttStoreScore = bestEval;
+
+    if (ttStoreScore >= MATE_SCORE - MAX_PLY) ttStoreScore += ply;
+    else if (ttStoreScore <= -MATE_SCORE + MAX_PLY) ttStoreScore -= ply;
+
+    ttTable.writeEntry(hashKey, ttStoreScore, 0, flag, bestMove);
 
     return bestEval;
 }
@@ -303,6 +312,13 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         ttHit = true;
         if (ttEntry.depth >= depth && ply > 0) {
             int16_t ttScore = ttEntry.score;
+
+            if (ttScore >= MATE_SCORE - MAX_PLY) {
+                ttScore -= ply;
+            } else if (ttScore <= -MATE_SCORE + MAX_PLY) {
+                ttScore += ply;
+            }
+
             if (ttEntry.flag == TT_EXACT) {
                 return ttScore;
             }
@@ -500,8 +516,14 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
     } else if (alpha >= beta) {
         flag = TT_ALPHA;
     }
+    int16_t ttScore = bestEval;
 
-    ttTable.writeEntry(hashKey, bestEval, static_cast<int8_t>(depth), flag, bestMove);
+    if (ttScore >= MATE_SCORE - MAX_PLY) {
+        ttScore += ply;
+    } else if (ttScore <= -MATE_SCORE + MAX_PLY) {
+        ttScore -= ply;
+    }
+    ttTable.writeEntry(hashKey, ttScore, static_cast<int8_t>(depth), flag, bestMove);
 
 
     return bestEval;
