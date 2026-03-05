@@ -216,6 +216,16 @@ void ensure_tables_init() {
 }
 }
 
+int material_count(const Board& board) { // Counts total material otb, for sacrifice detection
+    int material = 0;
+    int pieceValue[6] = { 100, 300, 300, 500, 900, 20000 }; // Standard piece values in centipawns
+    for (int i = 0; i < 6; i++) {
+        material += popcount(board.piece[i] & board.color[WHITE]) * pieceValue[i];
+        material -= popcount(board.piece[i] & board.color[BLACK]) * pieceValue[i];
+    }
+    return material;
+}
+
 const int doublePawnPenaltyOpening = -5;
 const int doublePawnPenaltyEndgame = -10;
 
@@ -259,8 +269,8 @@ int evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard 
     return totalMobility;
 }
 
-int evaluate_board(const Board& board) {
-    ensure_tables_init();
+int raw_evaluate_board(const Board& board) {
+ensure_tables_init();
 
     int mg[2] = {0, 0};
     int eg[2] = {0, 0};
@@ -327,3 +337,20 @@ int evaluate_board(const Board& board) {
     return (staticEval + mobilityScore);
 }
 
+
+int evaluate_board(const Board& board) {
+    int raw_eval = raw_evaluate_board(board);
+    int eval = raw_eval;
+
+    // raw_eval is side-to-move relative; align material sign to side-to-move too.
+    int mat_stm = material_count(board);
+    if (board.stm == BLACK) mat_stm = -mat_stm;
+
+    if (raw_eval > 0 && mat_stm < 0) {
+        eval += 50;
+    } else if (raw_eval < 0 && mat_stm > 0) {
+        eval -= 50;
+    }
+
+    return eval;
+}
