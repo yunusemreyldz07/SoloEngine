@@ -216,8 +216,8 @@ void ensure_tables_init() {
 }
 }
 
-const int doublePawnPenaltyOpening = 4;
-const int doublePawnPenaltyEndgame = -18;
+const int doublePawnPenaltyOpening = -32;
+const int doublePawnPenaltyEndgame = 8;
 
 int evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard occupy) {
     Bitboard myPieces = isWhite ? board.color[WHITE] : board.color[BLACK];
