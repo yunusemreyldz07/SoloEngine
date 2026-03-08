@@ -216,22 +216,11 @@ void ensure_tables_init() {
 }
 }
 
-const Bitboard adjacent_file_masks[8] = {
-    0x0202020202020202ULL, // File A's neighbor: Only File B
-    0x0505050505050505ULL, // File B's neighbors: File A | File C
-    0x0a0a0a0a0a0a0a0aULL, // File C's neighbors: File B | File D
-    0x1414141414141414ULL, // File D's neighbors: File C | File E
-    0x2828282828282828ULL, // File E's neighbors: File D | File F
-    0x5050505050505050ULL, // File F's neighbors: File E | File G
-    0xa0a0a0a0a0a0a0a0ULL, // File G's neighbors: File F | File H
-    0x4040404040404040ULL  // File H's neighbor: Only File G
-};
+const int doublePawnPenaltyOpening = -12;
+const int doublePawnPenaltyEndgame = -34;
 
-const int doublePawnPenaltyOpening = -5;
-const int doublePawnPenaltyEndgame = -10;
-
-const int isolatedPawnPenaltyOpening = -5;
-const int isolatedPawnPenaltyEndgame = -10;
+const int isolatedPawnPenaltyOpening = -13;
+const int isolatedPawnPenaltyEndgame = -13;
 
 int evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard occupy) {
     Bitboard myPieces = isWhite ? board.color[WHITE] : board.color[BLACK];
@@ -273,28 +262,7 @@ int evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard 
     return totalMobility;
 }
 
-int evaluate_board(const Board& board) {
-    ensure_tables_init();
-
-    int mg[2] = {0, 0};
-    int eg[2] = {0, 0};
-    int gamePhase = 0;
-    int side2move = board.stm == WHITE ? WHITE : BLACK;
-
-    for (int color = 0; color < 2; color++) {
-        for (int p = 0; p < 6; p++) {
-            Bitboard bb = board.piece[p] & board.color[color];
-            const int tableIdx = p * 2 + (color == BLACK ? 1 : 0);
-            while (bb) {
-                int sq = lsb(bb);
-                bb &= bb - 1;
-                mg[color] += mg_table[tableIdx][sq];
-                eg[color] += eg_table[tableIdx][sq];
-                gamePhase += gamephaseInc[p];
-            }
-        }
-    }
-
+void evaluate_pawn_penalties(const Board& board, int mg[2], int eg[2]) {
     // Double pawn penalty
     Bitboard file_masks[8] = {
         0x0101010101010101ULL, // File A
@@ -305,6 +273,17 @@ int evaluate_board(const Board& board) {
         0x2020202020202020ULL, // File F
         0x4040404040404040ULL, // File G
         0x8080808080808080ULL  // File H
+    };
+
+    const Bitboard adjacent_file_masks[8] = {
+        0x0202020202020202ULL, // File A's neighbor: Only File B
+        file_masks[0] | file_masks[2], // File B's neighbors: File A | File C
+        file_masks[1] | file_masks[3], // File C's neighbors: File B | File D
+        file_masks[2] | file_masks[4], // File D's neighbors: File C | File E
+        file_masks[3] | file_masks[5], // File E's neighbors: File D | File F
+        file_masks[4] | file_masks[6], // File F's neighbors: File E | File G
+        file_masks[5] | file_masks[7], // File G's neighbors: File F | File H
+        0x4040404040404040ULL  // File H's neighbor: Only File G
     };
 
     for (int color = 0; color < 2; color++) {
@@ -326,7 +305,34 @@ int evaluate_board(const Board& board) {
 
         }
     }
+}
 
+int evaluate_board(const Board& board, bool include_pawn_penalties) {
+    ensure_tables_init();
+
+    int mg[2] = {0, 0};
+    int eg[2] = {0, 0};
+    int gamePhase = 0;
+    int side2move = board.stm == WHITE ? WHITE : BLACK;
+
+    for (int color = 0; color < 2; color++) {
+        for (int p = 0; p < 6; p++) {
+            Bitboard bb = board.piece[p] & board.color[color];
+            const int tableIdx = p * 2 + (color == BLACK ? 1 : 0);
+            while (bb) {
+                int sq = lsb(bb);
+                bb &= bb - 1;
+                mg[color] += mg_table[tableIdx][sq];
+                eg[color] += eg_table[tableIdx][sq];
+                gamePhase += gamephaseInc[p];
+            }
+        }
+    }
+
+    // Pawn structure penalties
+    if (include_pawn_penalties) {
+        evaluate_pawn_penalties(board, mg, eg);
+    }
 
     /* tapered eval */
     int mgScore = mg[side2move] - mg[OTHER(side2move)];
