@@ -216,8 +216,22 @@ void ensure_tables_init() {
 }
 }
 
+const Bitboard adjacent_file_masks[8] = {
+    0x0202020202020202ULL, // File A's neighbor: Only File B
+    0x0505050505050505ULL, // File B's neighbors: File A | File C
+    0x0a0a0a0a0a0a0a0aULL, // File C's neighbors: File B | File D
+    0x1414141414141414ULL, // File D's neighbors: File C | File E
+    0x2828282828282828ULL, // File E's neighbors: File D | File F
+    0x5050505050505050ULL, // File F's neighbors: File E | File G
+    0xa0a0a0a0a0a0a0a0ULL, // File G's neighbors: File F | File H
+    0x4040404040404040ULL  // File H's neighbor: Only File G
+};
+
 const int doublePawnPenaltyOpening = -5;
 const int doublePawnPenaltyEndgame = -10;
+
+const int isolatedPawnPenaltyOpening = -5;
+const int isolatedPawnPenaltyEndgame = -10;
 
 int evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard occupy) {
     Bitboard myPieces = isWhite ? board.color[WHITE] : board.color[BLACK];
@@ -301,6 +315,15 @@ int evaluate_board(const Board& board) {
                 mg[color] += doublePawnPenaltyOpening * (count - 1);
                 eg[color] += doublePawnPenaltyEndgame * (count - 1);
             }
+
+            if (count > 0) {
+                Bitboard adjacentFiles = adjacent_file_masks[file];
+                if ((pawns & adjacentFiles) == 0) {
+                    mg[color] += isolatedPawnPenaltyOpening * count;
+                    eg[color] += isolatedPawnPenaltyEndgame * count;
+                }
+            }
+
         }
     }
 
