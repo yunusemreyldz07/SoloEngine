@@ -19,162 +19,152 @@ constexpr int mirror_sq(int sq) { return sq ^ 56; }
 }
 
 
-const int mg_value[6] = { 82, 337, 365, 477, 1025, 0 };
-const int eg_value[6] = { 94, 281, 297, 512,  936, 0 };
+const int mg_value[6] = { 74, 286, 318, 386, 819, 0 };
+const int eg_value[6] = { 116, 338, 345, 613, 1156, 0 };
 
 const int gamephaseInc[6] = { 0, 1, 1, 2, 4, 0 };
 
 // Mobility bonuses and penalties
-// Can go to 8 squares max
-// 0 squares = -20
-// 4 squares = 0
-// 8 squares = +15
-const int KnightMobility[9] = { -20, -10, -5, -2, 0, 5, 10, 12, 15 };
-
-// Can go to 13 squares max
-// Same logic here, hopefully this will prevent bad BISHOP placements lol
-// 0 squares = -20
-// 6 squares = 0
-// 13 squares = +20
-const int BishopMobility[14] = { -20, -10, -5, -2, 0, 2, 4, 6, 8, 10, 12, 15, 18, 20 };
-
-// and the rest...
-const int RookMobility[15] = { -10, -5, -2, 0, 2, 4, 6, 8, 10, 12, 14, 16, 20, 25, 30 };
-
-// QUEEN bonuses are not that much according to other pieces, it is because QUEEN already can go to many squares and this might cause our engine to get its QUEEN out too early
-const int QueenMobility[28] = { -5, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15 };
+const int mgKnightMobility[] = { -27, -12, -6, -3, 0, -1, -3, -4, -2 };
+const int egKnightMobility[] = { 9, 11, 17, 14, 17, 22, 24, 26, 22 };
+const int mgBishopMobility[] = { -34, -26, -19, -17, -10, -3, 3, 6, 7, 9, 12, 15, 13, 42 };
+const int egBishopMobility[] = { -42, -22, -14, -5, 8, 21, 25, 31, 39, 37, 35, 35, 39, 23 };
+const int mgRookMobility[] = { -28, -18, -13, -9, -9, -2, 2, 9, 13, 19, 24, 29, 29, 34, 36 };
+const int egRookMobility[] = { -17, -2, 0, 3, 9, 11, 14, 16, 24, 27, 28, 31, 37, 42, 38 };
+const int mgQueenMobility[] = { -21, -23, -31, -28, -25, -22, -18, -20, -18, -15, -15, -15, -14, -13, -11, -11, -8, -11, -8, -6, 4, 7, 7, 12, 34, 89, 86, 124 };
+const int egQueenMobility[] = { -77, -110, -46, -29, -26, -22, -16, 4, 10, 14, 24, 30, 37, 43, 48, 54, 57, 68, 73, 73, 71, 73, 75, 76, 57, 37, 37, 33 };
 
 // Pesto tables
 const int mg_pawn_table[64] = {
-      0,   0,   0,   0,   0,   0,  0,   0,
-     98, 134,  61,  95,  68, 126, 34, -11,
-     -6,   7,  26,  31,  65,  56, 25, -20,
-    -14,  13,   6,  21,  23,  12, 17, -23,
-    -27,  -2,  -5,  12,  17,   6, 10, -25,
-    -26,  -4,  -4, -10,   3,   3, 33, -12,
-    -35,  -1, -20, -23, -15,  24, 38, -22,
-      0,   0,   0,   0,   0,   0,  0,   0
+    0, 0, 0, 0, 0, 0, 0, 0,
+    58, 87, 62, 89, 74, 62, -2, -35,
+    -13, 4, 35, 38, 44, 67, 48, 1,
+    -25, 0, 3, 8, 26, 20, 22, -4,
+    -33, -7, -4, 9, 12, 9, 9, -15,
+    -30, -11, -6, -3, 11, 7, 24, -6,
+    -29, -9, -12, -12, 0, 18, 34, -14,
+    0, 0, 0, 0, 0, 0, 0, 0
 };
 
 const int eg_pawn_table[64] = {
-      0,   0,   0,   0,   0,   0,   0,   0,
-    178, 173, 158, 134, 147, 132, 165, 187,
-     94, 100,  85,  67,  56,  53,  82,  84,
-     32,  24,  13,   5,  -2,   4,  17,  17,
-     13,   9,  -3,  -7,  -7,  -8,   3,  -1,
-      4,   7,  -6,   1,   0,  -5,  -1,  -8,
-     13,   8,   8,  10,  13,   0,   2,  -7,
-      0,   0,   0,   0,   0,   0,   0,   0
+    0, 0, 0, 0, 0, 0, 0, 0,
+    182, 173, 176, 123, 120, 135, 180, 190,
+    117, 128, 95, 71, 61, 52, 98, 90,
+    44, 36, 19, 8, 0, 6, 22, 19,
+    18, 18, 2, -4, -5, -1, 8, -2,
+    10, 16, 2, 8, 4, 3, 6, -7,
+    13, 18, 9, 17, 19, 7, 4, -6,
+    0, 0, 0, 0, 0, 0, 0, 0
 };
 
 const int mg_knight_table[64] = {
-    -167, -89, -34, -49,  61, -97, -15, -107,
-     -73, -41,  72,  36,  23,  62,   7,  -17,
-     -47,  60,  37,  65,  84, 129,  73,   44,
-      -9,  17,  19,  53,  37,  69,  18,   22,
-     -13,   4,  16,  13,  28,  19,  21,   -8,
-     -23,  -9,  12,  10,  19,  17,  25,  -16,
-     -29, -53, -12,  -3,  -1,  18, -14,  -19,
-    -105, -21, -58, -33, -17, -28, -19,  -23
+    -149, -129, -68, -38, -1, -57, -105, -103,
+    -26, -11, 16, 38, 19, 78, -8, 18,
+    -11, 26, 45, 54, 91, 95, 50, 21,
+    -11, 6, 30, 53, 34, 57, 18, 25,
+    -21, -6, 15, 18, 28, 21, 15, -9,
+    -38, -16, 2, 11, 23, 10, 6, -18,
+    -44, -34, -19, -2, -2, 0, -17, -18,
+    -84, -25, -37, -21, -17, -12, -23, -55
 };
 
 const int eg_knight_table[64] = {
-    -58, -38, -13, -28, -31, -27, -63, -99,
-    -25,  -8, -25,  -2,  -9, -25, -24, -52,
-    -24, -20,  10,   9,  -1,  -9, -19, -41,
-    -17,   3,  22,  22,  22,  11,   8, -18,
-    -18,  -6,  16,  25,  16,  17,   4, -18,
-    -23,  -3,  -1,  15,  10,  -3, -20, -22,
-    -42, -20, -10,  -5,  -2, -20, -23, -44,
-    -29, -51, -23, -15, -22, -18, -50, -64
+    -84, -18, -6, -15, -12, -36, -14, -104,
+    -27, -7, -8, -9, -14, -30, -13, -43,
+    -12, -5, 11, 12, -4, -9, -15, -24,
+    -2, 10, 22, 23, 23, 19, 9, -11,
+    -3, 1, 23, 23, 25, 15, 4, -11,
+    -19, -5, 0, 17, 14, -4, -11, -17,
+    -26, -12, -5, -5, -5, -10, -20, -16,
+    -33, -38, -18, -14, -13, -23, -31, -40
 };
 
 const int mg_bishop_table[64] = {
-    -29,   4, -82, -37, -25, -42,   7,  -8,
-    -26,  16, -18, -13,  30,  59,  18, -47,
-    -16,  37,  43,  40,  35,  50,  37,  -2,
-     -4,   5,  19,  50,  37,  37,   7,  -2,
-     -6,  13,  13,  26,  34,  12,  10,   4,
-      0,  15,  15,  15,  14,  27,  18,  10,
-      4,  15,  16,   0,   7,  21,  33,   1,
-    -33,  -3, -14, -21, -13, -12, -39, -21
+    -27, -53, -48, -88, -73, -55, -25, -55,
+    -18, -1, -9, -24, 2, 1, -2, -3,
+    -6, 14, 10, 28, 16, 49, 33, 25,
+    -11, -1, 14, 25, 22, 16, 0, -9,
+    -10, -7, -3, 20, 16, -1, -7, 0,
+    -3, 5, 7, 6, 8, 9, 7, 10,
+    3, 10, 14, -3, 8, 17, 25, 7,
+    -6, 15, 2, -8, -2, -5, 14, 3
 };
 
 const int eg_bishop_table[64] = {
-    -14, -21, -11,  -8,  -7,  -9, -17, -24,
-     -8,  -4,   7, -12,  -3, -13,  -4, -14,
-      2,  -8,   0,  -1,  -2,   6,   0,   4,
-     -3,   9,  12,   9,  14,  10,   3,   2,
-     -6,   3,  13,  19,   7,  10,  -3,  -9,
-    -12,  -3,   8,  10,  13,   3,  -7, -15,
-    -14, -18,  -7,  -1,   4,  -9, -15, -27,
-    -23,  -9, -23,  -5,  -9, -16,  -5, -17
+    0, 10, 3, 16, 9, 0, -6, -3,
+    -11, -4, -1, 0, -9, -10, 0, -16,
+    11, 1, 4, -5, 0, 2, -3, 5,
+    4, 10, 6, 16, 9, 8, 6, 3,
+    -2, 9, 13, 11, 10, 9, 5, -10,
+    2, 6, 9, 9, 13, 6, 1, -8,
+    1, -5, -12, 5, 0, -6, -1, -14,
+    -10, 1, -2, 2, 2, 9, -14, -21
 };
 
 const int mg_rook_table[64] = {
-     32,  42,  32,  51, 63,   9,  31,  43,
-     27,  32,  58,  62, 80,  67,  26,  44,
-     -5,  19,  26,  36, 17,  45,  61,  16,
-    -24, -11,   7,  26, 24,  35,  -8, -20,
-    -36, -26, -12,  -1,  9,  -7,   6, -23,
-    -45, -25, -16, -17,  3,   0,  -5, -33,
-    -44, -16, -20,  -9, -1,  11,  -6, -71,
-    -19, -13,   1,  17, 16,   7, -37, -26
+    15, 0, -1, 1, 17, 37, 36, 54,
+    -2, -7, 11, 32, 19, 46, 42, 73,
+    -19, 1, -3, -2, 27, 36, 82, 58,
+    -25, -17, -19, -13, -9, 2, 14, 16,
+    -36, -37, -28, -21, -19, -25, -2, -13,
+    -35, -33, -23, -18, -11, -10, 16, -3,
+    -35, -27, -10, -9, -4, 0, 13, -17,
+    -14, -13, -2, 5, 9, 5, 11, -10
 };
 
 const int eg_rook_table[64] = {
-    13, 10, 18, 15, 12,  12,   8,   5,
-    11, 13, 13, 11, -3,   3,   8,   3,
-     7,  7,  7,  5,  4,  -3,  -5,  -3,
-     4,  3, 13,  1,  2,   1,  -1,   2,
-     3,  5,  8,  4, -5,  -6,  -8, -11,
-    -4,  0, -5, -1, -7, -12,  -8, -16,
-    -6, -6,  0,  2, -9,  -9, -11,  -3,
-    -9,  2,  3, -1, -5, -13,   4, -20
+    13, 21, 30, 26, 18, 10, 9, 5,
+    15, 27, 30, 19, 20, 7, 3, -10,
+    15, 17, 18, 15, 2, -3, -12, -15,
+    17, 15, 23, 17, 4, -2, -3, -7,
+    11, 14, 15, 12, 9, 7, -4, -7,
+    6, 5, 4, 6, 1, -6, -23, -22,
+    0, 3, 3, 5, -3, -8, -18, -12,
+    1, 2, 6, 0, -5, -3, -10, -12
 };
 
 const int mg_queen_table[64] = {
-    -28,   0,  29,  12,  59,  44,  43,  45,
-    -24, -39,  -5,   1, -16,  57,  28,  54,
-    -13, -17,   7,   8,  29,  56,  47,  57,
-    -27, -27, -16, -16,  -1,  17,  -2,   1,
-     -9, -26,  -9, -10,  -2,  -4,   3,  -3,
-    -14,   2, -11,  -2,  -5,   2,  14,   5,
-    -35,  -8,  11,   2,   8,  15,  -3,   1,
-     -1, -18,  -9,  10, -15, -25, -31, -50
+    -34, -46, -25, 6, 10, 13, 51, 1,
+    -12, -35, -33, -41, -35, 2, -10, 38,
+    -8, -15, -19, -10, 0, 41, 51, 52,
+    -24, -20, -20, -21, -20, -7, 0, 7,
+    -18, -23, -20, -13, -14, -13, -6, 1,
+    -17, -11, -10, -11, -8, -2, 6, 2,
+    -10, -9, 1, 5, 3, 13, 17, 29,
+    -11, -11, -1, 6, 4, -10, 11, 1
 };
 
 const int eg_queen_table[64] = {
-     -9,  22,  22,  27,  27,  19,  10,  20,
-    -17,  20,  32,  41,  58,  25,  30,   0,
-    -20,   6,   9,  49,  47,  35,  19,   9,
-      3,  22,  24,  45,  57,  40,  57,  36,
-    -18,  28,  19,  47,  31,  34,  39,  23,
-    -16, -27,  15,   6,   9,  17,  10,   5,
-    -22, -23, -30, -16, -16, -23, -36, -32,
-    -33, -28, -22, -43,  -5, -32, -20, -41
+    15, 36, 53, 38, 36, 37, -17, 18,
+    -2, 26, 58, 77, 93, 53, 39, 28,
+    1, 11, 44, 50, 63, 46, 14, 14,
+    9, 18, 29, 49, 62, 55, 48, 38,
+    3, 26, 26, 41, 39, 38, 31, 28,
+    -4, 7, 16, 14, 20, 20, 10, 2,
+    -11, -8, -12, -7, -1, -26, -49, -71,
+    -14, -13, -15, -1, -18, -14, -39, -42
 };
 
 const int mg_king_table[64] = {
-    -65,  23,  16, -15, -56, -34,   2,  13,
-     29,  -1, -20,  -7,  -8,  -4, -38, -29,
-     -9,  24,   2, -16, -20,   6,  22, -22,
-    -17, -20, -12, -27, -30, -25, -14, -36,
-    -49,  -1, -27, -39, -46, -44, -33, -51,
-    -14, -14, -22, -46, -44, -30, -15, -27,
-      1,   7,  -8, -64, -43, -16,   9,   8,
-    -15,  36,  12, -54,   8, -28,  24,  14
+    57, 38, 64, -78, -30, 19, 64, 166,
+    -75, -29, -69, 38, -20, -12, 15, -5,
+    -99, 13, -57, -73, -35, 36, 11, -28,
+    -64, -78, -94, -137, -129, -93, -92, -119,
+    -67, -72, -104, -134, -136, -98, -103, -127,
+    -28, -11, -67, -81, -77, -73, -31, -48,
+    56, 16, 3, -30, -33, -14, 29, 38,
+    51, 80, 59, -36, 23, -11, 61, 58
 };
 
 const int eg_king_table[64] = {
-    -74, -35, -18, -18, -11,  15,   4, -17,
-    -12,  17,  14,  17,  17,  38,  23,  11,
-     10,  17,  23,  15,  20,  45,  44,  13,
-     -8,  22,  24,  27,  26,  33,  26,   3,
-    -18,  -4,  21,  24,  27,  23,   9, -11,
-    -19,  -3,  11,  21,  23,  16,   7,  -9,
-    -27, -11,   4,  13,  14,   4,  -5, -17,
-    -53, -34, -21, -11, -28, -14, -24, -43
+    -106, -54, -42, 7, -9, -8, -17, -126,
+    -8, 21, 33, 15, 37, 47, 39, 6,
+    8, 26, 46, 56, 55, 49, 47, 18,
+    -3, 32, 51, 63, 63, 57, 48, 23,
+    -14, 17, 41, 56, 56, 43, 31, 14,
+    -23, 0, 22, 34, 34, 25, 6, -7,
+    -44, -17, -4, 6, 10, 0, -18, -36,
+    -80, -61, -42, -23, -43, -26, -54, -81
 };
 
 // Pointer arrays for easy access
@@ -216,14 +206,13 @@ void ensure_tables_init() {
 }
 }
 
-const int doublePawnPenaltyOpening = -5;
-const int doublePawnPenaltyEndgame = -10;
+const int doublePawnPenaltyOpening = -16;
+const int doublePawnPenaltyEndgame = -36;
 
-int evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard occupy) {
+void evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard occupy, int& mgMob, int& egMob) {
     Bitboard myPieces = isWhite ? board.color[WHITE] : board.color[BLACK];
     
     Bitboard pieces = board.piece[pieceType - 1] & myPieces;
-    int totalMobility = 0;
 
     while (pieces) {
         int sq = lsb(pieces);
@@ -250,13 +239,11 @@ int evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard 
         
         int mobilityCount = popcount(validMoves);
 
-        if (pieceType == KNIGHT) totalMobility += KnightMobility[mobilityCount];
-        else if (pieceType == BISHOP) totalMobility += BishopMobility[mobilityCount];
-        else if (pieceType == ROOK) totalMobility += RookMobility[mobilityCount];
-        else if (pieceType == QUEEN) totalMobility += QueenMobility[mobilityCount];
+        if (pieceType == KNIGHT) { mgMob += mgKnightMobility[mobilityCount]; egMob += egKnightMobility[mobilityCount]; }
+        else if (pieceType == BISHOP) { mgMob += mgBishopMobility[mobilityCount]; egMob += egBishopMobility[mobilityCount]; }
+        else if (pieceType == ROOK) { mgMob += mgRookMobility[mobilityCount]; egMob += egRookMobility[mobilityCount]; }
+        else if (pieceType == QUEEN) { mgMob += mgQueenMobility[mobilityCount]; egMob += egQueenMobility[mobilityCount]; }
     }
-    
-    return totalMobility;
 }
 
 int evaluate_board(const Board& board) {
@@ -314,16 +301,20 @@ int evaluate_board(const Board& board) {
     
     int egPhase = 24 - mgPhase;
     
-    int staticEval = (mgScore * mgPhase + egScore * egPhase) / 24;
-
     // Mobility evaluation
-    int mobilityScore = 0;
+    int mgMob[2] = {0, 0};
+    int egMob[2] = {0, 0};
     Bitboard occupy = board.color[WHITE] | board.color[BLACK];
-    for (int pieceType = KNIGHT; pieceType <= QUEEN; pieceType++) {
-        mobilityScore += evaluate_mobility(board, pieceType, board.stm == WHITE, occupy);
-        mobilityScore -= evaluate_mobility(board, pieceType, !(board.stm == WHITE), occupy);
+    for (int color = 0; color < 2; color++) {
+        bool isWhite = (color == 0);
+        for (int pieceType = KNIGHT; pieceType <= QUEEN; pieceType++) {
+            evaluate_mobility(board, pieceType, isWhite, occupy, mgMob[color], egMob[color]);
+        }
     }
+    int sideIdx = (board.stm == WHITE) ? 0 : 1;
+    mgScore += mgMob[sideIdx] - mgMob[sideIdx ^ 1];
+    egScore += egMob[sideIdx] - egMob[sideIdx ^ 1];
 
-    return (staticEval + mobilityScore);
+    return (mgScore * mgPhase + egScore * egPhase) / 24;
 }
 
