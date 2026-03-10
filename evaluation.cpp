@@ -174,6 +174,28 @@ const int* eg_pesto_tables[6] = { eg_pawn_table, eg_knight_table, eg_bishop_tabl
 namespace {
 int mg_table[12][64];
 int eg_table[12][64];
+
+const Bitboard file_masks[8] = {
+    0x0101010101010101ULL, 0x0202020202020202ULL,
+    0x0404040404040404ULL, 0x0808080808080808ULL,
+    0x1010101010101010ULL, 0x2020202020202020ULL,
+    0x4040404040404040ULL, 0x8080808080808080ULL
+};
+
+const Bitboard adjacent_file_masks[8] = {
+    file_masks[1],
+    file_masks[0] | file_masks[2],
+    file_masks[1] | file_masks[3],
+    file_masks[2] | file_masks[4],
+    file_masks[3] | file_masks[5],
+    file_masks[4] | file_masks[6],
+    file_masks[5] | file_masks[7],
+    file_masks[6]
+};
+
+Bitboard white_passed_mask[64];
+Bitboard black_passed_mask[64];
+
 bool tables_initialized = false;
 
 int piece_to_table_index(int piece) {
@@ -188,13 +210,29 @@ void init_tables() {
         const int bIdx = p * 2 + 1;
         for (int sq = 0; sq < 64; ++sq) {
             const int msq = mirror_sq(sq);
-            // PSTs are A8..H1; board squares are A1..H8.
-            // White uses mirrored squares, black uses raw squares.
             mg_table[wIdx][sq] = mg_value[p] + mg_pesto_tables[p][msq];
             eg_table[wIdx][sq] = eg_value[p] + eg_pesto_tables[p][msq];
             mg_table[bIdx][sq] = mg_value[p] + mg_pesto_tables[p][sq];
             eg_table[bIdx][sq] = eg_value[p] + eg_pesto_tables[p][sq];
         }
+    }
+
+    for (int sq = 0; sq < 64; ++sq) {
+        int file = sq & 7;
+        int rank = sq >> 3;
+        Bitboard fileMask = file_masks[file] | adjacent_file_masks[file];
+
+        // White: ranks above this square (toward rank 8)
+        if (rank >= 7)
+            white_passed_mask[sq] = 0;
+        else
+            white_passed_mask[sq] = fileMask & ~((1ULL << ((rank + 1) * 8)) - 1);
+
+        // Black: ranks below this square (toward rank 1)
+        if (rank == 0)
+            black_passed_mask[sq] = 0;
+        else
+            black_passed_mask[sq] = fileMask & ((1ULL << (rank * 8)) - 1);
     }
 }
 
@@ -296,30 +334,7 @@ int evaluate_board(const Board& board) {
         }
     }
 
-    // Double pawn penalty
-    Bitboard file_masks[8] = {
-        0x0101010101010101ULL, // File A
-        0x0202020202020202ULL, // File B
-        0x0404040404040404ULL, // File C
-        0x0808080808080808ULL, // File D
-        0x1010101010101010ULL, // File E
-        0x2020202020202020ULL, // File F
-        0x4040404040404040ULL, // File G
-        0x8080808080808080ULL  // File H
-    };
-
-    // Isolated pawn penalty (& passed pawn bonus in the future maybe)
-    Bitboard adjacent_file_masks[8] = {
-        file_masks[1],                      // A -> B
-        file_masks[0] | file_masks[2],      // B -> A, C
-        file_masks[1] | file_masks[3],      // C -> B, D
-        file_masks[2] | file_masks[4],      // D -> C, E
-        file_masks[3] | file_masks[5],      // E -> D, F
-        file_masks[4] | file_masks[6],      // F -> E, G
-        file_masks[5] | file_masks[7],      // G -> F, H
-        file_masks[6]                       // H -> G
-    };
-
+    // Pawn structure evaluation
     for (int color = 0; color < 2; color++) {
         Bitboard pawns = board.piece[PAWN - 1] & board.color[color];
         Bitboard enemyPawns = board.piece[PAWN - 1] & board.color[OTHER(color)];
@@ -331,37 +346,21 @@ int evaluate_board(const Board& board) {
             }
 
             if (count > 0) {
-                // Isolated pawn if no pawns on adjacent files
                 if ((pawns & adjacent_file_masks[file]) == 0) {
                     mg[color] += mgIsolatedPawnPenalty * count;
                     eg[color] += egIsolatedPawnPenalty * count;
                 }
             }
-
         }
 
-        // Passed pawn bonus - iterate over each pawn
+        // Passed pawn bonus
+        const Bitboard* passedMasks = (color == WHITE) ? white_passed_mask : black_passed_mask;
         Bitboard pawnsCopy = pawns;
         while (pawnsCopy) {
             int sq = lsb(pawnsCopy);
             pawnsCopy &= pawnsCopy - 1;
 
-            int file = sq & 7;
-            int rank = sq >> 3;
-
-            // Forward span: same file + adjacent files, only ranks ahead
-            Bitboard forwardMask = file_masks[file] | adjacent_file_masks[file];
-            Bitboard rankMask;
-            if (color == WHITE) {
-                // Ranks above (toward rank 8)
-                rankMask = ~((1ULL << ((rank + 1) * 8)) - 1);
-            } else {
-                // Ranks below (toward rank 1)
-                rankMask = (1ULL << (rank * 8)) - 1;
-            }
-            forwardMask &= rankMask;
-
-            if ((enemyPawns & forwardMask) == 0) {
+            if ((enemyPawns & passedMasks[sq]) == 0) {
                 int tableIdx = (color == WHITE) ? mirror_sq(sq) : sq;
                 mg[color] += passed_pawn_mg_table[tableIdx];
                 eg[color] += passed_pawn_eg_table[tableIdx];
