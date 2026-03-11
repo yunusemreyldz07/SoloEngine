@@ -3,13 +3,20 @@
 
 #include "board.h"
 
-// History table: [color][fromSquare][toSquare]
-// Each square is from 0-63, total 64x64 = 4096 entries
-extern int historyTable[2][64][64];
+struct MoveInfo {
+    int piece; // 0-11 (colored piece index), -1 for invalid/null
+    int to;    // 0-63, -1 for invalid
+};
 
-// History functions
-void clear_history();                          // Reset history table
-void update_history(int color, int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount); // Update on beta cutoff
-int get_history_score(int color, int fromSq, int toSq);  // Get score for move ordering
+// History table: [color][fromSquare][toSquare]
+extern int historyTable[2][64][64];
+extern int conhistTable[12][64][12][64]; // [prevPiece][prevTo][currPiece][currTo]
+extern MoveInfo moveStack[MAX_PLY];
+
+void clear_history();
+void reset_movestack();
+void update_history(const Board& board, int color, int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount, int ply);
+int get_history_score(int color, int fromSq, int toSq);
+int get_conhist_score(int piece, int to, int ply);
 
 #endif
