@@ -161,6 +161,7 @@ int scoreMove(Board& board, const Move& move, Move ttMove = 0, int ply = 0) {
             score += SCORE_KILLER_2;
         } else {
             score += get_history_score(board.stm, from, to);
+            score += get_conhist_score(piece - 1, to, ply);
         }
     }
 
@@ -381,6 +382,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         board.hash ^= zobrist().epFile[oldEp];
         board.hash ^= zobrist().epFile[8];
 
+        moveStack[ply] = {-1, -1}; // Sentinel for null move
         positionHistory.push_back(board.hash);
 
         int R = 3 + (depth / 3);
@@ -435,6 +437,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
             continue;
         }
 
+        moveStack[ply] = {board.mailbox[move_from(chosenMove)] - 1, move_to(chosenMove)};
         board.makeMove(chosenMove);
 
         positionHistory.push_back(board.hash); // Add new position to history for repetition detection
@@ -493,7 +496,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 
         if (alpha >= beta) {
             if (is_quiet(chosenMove)){
-                update_history(board.stm, move_from(chosenMove), move_to(chosenMove), depth, badQuiets, badQuietCount);
+                update_history(board, board.stm, move_from(chosenMove), move_to(chosenMove), depth, badQuiets, badQuietCount, ply);
                 updateKillers(ply, chosenMove);
             }
             break; // Beta cutoff
@@ -534,6 +537,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
     std::vector<uint64_t> searchHistory = positionHistory;
 
+    reset_movestack();
     stop_search.store(false, std::memory_order_relaxed);
     resetNodeCounter();
     clearKillers();
