@@ -3,13 +3,15 @@
 #include <algorithm>
 
 int historyTable[2][64][64]; // color x fromSquare x toSquare
-int conhistTable[12][64][12][64]; // [prevPiece][prevTo][currPiece][currTo]
+int conhistTable[12][64][12][64];  // 1-ply
+int conhistTable2[12][64][12][64]; // 2-ply
 MoveInfo moveStack[MAX_PLY];
 constexpr int HISTORY_MAX = 16384;
 
 void clear_history() {
     std::memset(historyTable, 0, sizeof(historyTable));
     std::memset(conhistTable, 0, sizeof(conhistTable));
+    std::memset(conhistTable2, 0, sizeof(conhistTable2));
 }
 
 void reset_movestack() {
@@ -19,26 +21,35 @@ void reset_movestack() {
 }
 
 static void update_conhist(int piece, int to, int bonus, int ply) {
-    constexpr int offsets[] = {1, 2};
-    for (int offset : offsets) {
-        if (ply >= offset && moveStack[ply - offset].piece >= 0) {
-            int prevPiece = moveStack[ply - offset].piece;
-            int prevTo = moveStack[ply - offset].to;
-            int& entry = conhistTable[prevPiece][prevTo][piece][to];
-            entry += bonus - (entry * std::abs(bonus)) / HISTORY_MAX;
-        }
+    // 1-ply offset
+    if (ply >= 1 && moveStack[ply - 1].piece >= 0) {
+        int prevPiece = moveStack[ply - 1].piece;
+        int prevTo = moveStack[ply - 1].to;
+        int& entry = conhistTable[prevPiece][prevTo][piece][to];
+        entry += bonus - (entry * std::abs(bonus)) / HISTORY_MAX;
+    }
+    // 2-ply offset
+    if (ply >= 2 && moveStack[ply - 2].piece >= 0) {
+        int prevPiece = moveStack[ply - 2].piece;
+        int prevTo = moveStack[ply - 2].to;
+        int& entry = conhistTable2[prevPiece][prevTo][piece][to];
+        entry += bonus - (entry * std::abs(bonus)) / HISTORY_MAX;
     }
 }
 
 int get_conhist_score(int piece, int to, int ply) {
     int score = 0;
-    constexpr int offsets[] = {1, 2};
-    for (int offset : offsets) {
-        if (ply >= offset && moveStack[ply - offset].piece >= 0) {
-            int prevPiece = moveStack[ply - offset].piece;
-            int prevTo = moveStack[ply - offset].to;
-            score += conhistTable[prevPiece][prevTo][piece][to];
-        }
+    // 1-ply offset
+    if (ply >= 1 && moveStack[ply - 1].piece >= 0) {
+        int prevPiece = moveStack[ply - 1].piece;
+        int prevTo = moveStack[ply - 1].to;
+        score += conhistTable[prevPiece][prevTo][piece][to];
+    }
+    // 2-ply offset
+    if (ply >= 2 && moveStack[ply - 2].piece >= 0) {
+        int prevPiece = moveStack[ply - 2].piece;
+        int prevTo = moveStack[ply - 2].to;
+        score += conhistTable2[prevPiece][prevTo][piece][to];
     }
     return score;
 }
