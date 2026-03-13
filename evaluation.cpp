@@ -253,6 +253,8 @@ const int egKingShieldBonus = -2;
 const int mgIsolatedPawnPenalty = -15;
 const int egIsolatedPawnPenalty = -14;
 
+const int aggressivenessWeight = 15;
+
 const int passed_pawn_mg_table[64] = {
     0, 0, 0, 0, 0, 0, 0, 0,
     15, 18, 20, 20, 19, 17, 19, 14,
@@ -275,7 +277,7 @@ const int passed_pawn_eg_table[64] = {
     0, 0, 0, 0, 0, 0, 0, 0
 };
 
-void evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard occupy, int& mgMob, int& egMob) {
+void evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard occupy, int& mgMob, int& egMob, int& kingAttacks, Bitboard enemyKingZone) {
     Bitboard myPieces = isWhite ? board.color[WHITE] : board.color[BLACK];
     
     Bitboard pieces = board.piece[pieceType - 1] & myPieces;
@@ -304,6 +306,8 @@ void evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard
         Bitboard validMoves = attacks & ~myPieces;
         
         int mobilityCount = popcount(validMoves);
+
+        kingAttacks += popcount(validMoves & enemyKingZone);
 
         if (pieceType == KNIGHT) { mgMob += mgKnightMobility[mobilityCount]; egMob += egKnightMobility[mobilityCount]; }
         else if (pieceType == BISHOP) { mgMob += mgBishopMobility[mobilityCount]; egMob += egBishopMobility[mobilityCount]; }
@@ -371,6 +375,10 @@ int evaluate_board(const Board& board) {
     // King shield bonus
     Bitboard whiteShield = king_attacks[lsb(board.piece[KING - 1] & board.color[WHITE])] & board.color[WHITE];
     Bitboard blackShield = king_attacks[lsb(board.piece[KING - 1] & board.color[BLACK])] & board.color[BLACK];
+    
+    Bitboard whiteKingZone = king_attacks[lsb(board.piece[KING - 1] & board.color[WHITE])];
+    Bitboard blackKingZone = king_attacks[lsb(board.piece[KING - 1] & board.color[BLACK])];
+
     mg[WHITE] += mgKingShieldBonus * popcount(whiteShield);
     eg[WHITE] += egKingShieldBonus * popcount(whiteShield);
     mg[BLACK] += mgKingShieldBonus * popcount(blackShield);
@@ -389,17 +397,20 @@ int evaluate_board(const Board& board) {
     // Mobility evaluation
     int mgMob[2] = {0, 0};
     int egMob[2] = {0, 0};
+    int kingAttacks[2] = {0, 0};
+
     Bitboard occupy = board.color[WHITE] | board.color[BLACK];
     for (int color = 0; color < 2; color++) {
         bool isWhite = (color == 0);
         for (int pieceType = KNIGHT; pieceType <= QUEEN; pieceType++) {
-            evaluate_mobility(board, pieceType, isWhite, occupy, mgMob[color], egMob[color]);
+            evaluate_mobility(board, pieceType, isWhite, occupy, mgMob[color], egMob[color], kingAttacks[color], (color == WHITE) ? blackKingZone : whiteKingZone);
         }
     }
     int sideIdx = (board.stm == WHITE) ? 0 : 1;
     mgScore += mgMob[sideIdx] - mgMob[sideIdx ^ 1];
     egScore += egMob[sideIdx] - egMob[sideIdx ^ 1];
-
+    
+    mgScore += aggressivenessWeight * (kingAttacks[sideIdx] - kingAttacks[sideIdx ^ 1]);
     return (mgScore * mgPhase + egScore * egPhase) / 24;
 }
 
