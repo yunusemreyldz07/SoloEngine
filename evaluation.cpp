@@ -410,7 +410,17 @@ int evaluate_board(const Board& board) {
     mgScore += mgMob[sideIdx] - mgMob[sideIdx ^ 1];
     egScore += egMob[sideIdx] - egMob[sideIdx ^ 1];
     
-    mgScore += aggressivenessWeight * (kingAttacks[sideIdx] - kingAttacks[sideIdx ^ 1]);
+    int whiteAttackScore = (kingAttacks[WHITE] * kingAttacks[WHITE] * aggressivenessWeight) / 10;
+    int blackAttackScore = (kingAttacks[BLACK] * kingAttacks[BLACK] * aggressivenessWeight) / 10;
+
+    int attackDiff = whiteAttackScore - blackAttackScore;
+
+    if (side2move == BLACK) {
+        attackDiff = -attackDiff;
+    }
+
+    mgScore += attackDiff;
+
     return (mgScore * mgPhase + egScore * egPhase) / 24;
 }
 
