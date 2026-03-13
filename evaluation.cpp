@@ -250,6 +250,17 @@ const int doublePawnPenaltyEndgame = -18;
 const int mgKingShieldBonus = 16;
 const int egKingShieldBonus = -2;
 
+const int mgKingZoneAttackUnit = 10;
+
+const int kingZoneAttackWeight[6] = {
+    1, // pawn
+    2, // knight
+    2, // bishop
+    3, // rook
+    4, // queen
+    0  // king
+};
+
 const int mgIsolatedPawnPenalty = -15;
 const int egIsolatedPawnPenalty = -14;
 
@@ -310,6 +321,56 @@ void evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard
         else if (pieceType == ROOK) { mgMob += mgRookMobility[mobilityCount]; egMob += egRookMobility[mobilityCount]; }
         else if (pieceType == QUEEN) { mgMob += mgQueenMobility[mobilityCount]; egMob += egQueenMobility[mobilityCount]; }
     }
+}
+
+int material_score(const Board& board, int color) {
+
+    // Just counting material based on piece values. pawn = 1, knight = 3, bishop = 3, rook = 5, queen = 9, king = 0
+    int score = 0;
+    for (int pieceType = PAWN; pieceType <= QUEEN; pieceType++) {
+        int pieceCount = popcount(board.piece[pieceType - 1] & board.color[color]);
+        score += pieceCount * mg_value[pieceType - 1];
+    }
+    return score;
+}
+
+Bitboard attacks_from_piece(const Board& board, int pieceType, int sq, Bitboard occupancy, int color) {
+    switch (pieceType) {
+        case PAWN: return pawn_attacks[color][sq];
+        case KNIGHT: return knight_attacks[sq];
+        case BISHOP: return get_bishop_attacks(sq, occupancy);
+        case ROOK: return get_rook_attacks(sq, occupancy);
+        case QUEEN: return get_bishop_attacks(sq, occupancy) | get_rook_attacks(sq, occupancy);
+        case KING: return king_attacks[sq];
+        default: return 0ULL;
+    }
+}
+
+int weighted_king_zone_attack_score(const Board& board, int attackerColor) {
+    const int defenderColor = OTHER(attackerColor);
+    Bitboard enemyKing = board.piece[KING - 1] & board.color[defenderColor];
+    if (!enemyKing) return 0;
+
+    const int enemyKingSq = lsb(enemyKing);
+    const Bitboard kingZone = king_attacks[enemyKingSq] | (1ULL << enemyKingSq);
+    const Bitboard occupancy = board.color[WHITE] | board.color[BLACK];
+    const Bitboard ownPieces = board.color[attackerColor];
+
+    int score = 0;
+    for (int pieceType = PAWN; pieceType <= KING; ++pieceType) {
+        Bitboard pieces = board.piece[pieceType - 1] & ownPieces;
+        while (pieces) {
+            const int sq = lsb(pieces);
+            pieces &= pieces - 1;
+
+            const Bitboard attacks = attacks_from_piece(board, pieceType, sq, occupancy, attackerColor);
+            if (attacks & kingZone) {
+                score += kingZoneAttackWeight[pieceType - 1];
+            }
+        }
+    }
+
+    return score;
 }
 
 int evaluate_board(const Board& board) {
@@ -397,9 +458,39 @@ int evaluate_board(const Board& board) {
         }
     }
     int sideIdx = (board.stm == WHITE) ? 0 : 1;
-    mgScore += mgMob[sideIdx] - mgMob[sideIdx ^ 1];
-    egScore += egMob[sideIdx] - egMob[sideIdx ^ 1];
+    int oppIdx = sideIdx ^ 1;
+    
+    mgScore += mgMob[sideIdx] - mgMob[oppIdx];
+    egScore += egMob[sideIdx] - egMob[oppIdx];
 
-    return (mgScore * mgPhase + egScore * egPhase) / 24;
+    int final_score = (mgScore * mgPhase + egScore * egPhase) / 24;
+
+    // Aggressive position heuristic
+    int my_mat = material_score(board, sideIdx);
+    int opp_mat = material_score(board, oppIdx);
+    int total_mat = my_mat + opp_mat;
+
+    if (total_mat > 3000) {
+        // Filter 1
+        bool i_sacrificed = (my_mat < opp_mat) && (final_score > 0);
+        // Filter 2
+        bool i_have_king_attack = weighted_king_zone_attack_score(board, sideIdx) >= 15;
+        bool im_aggressive = i_sacrificed || i_have_king_attack;
+
+        // Filter 1 
+        bool opp_sacrificed = (opp_mat < my_mat) && (final_score < 0);
+        // Filter 2 
+        bool opp_has_king_attack = weighted_king_zone_attack_score(board, oppIdx) >= 15;
+        bool opp_aggressive = opp_sacrificed || opp_has_king_attack;
+
+        if (im_aggressive) {
+            final_score += 50; 
+        }
+        if (opp_aggressive) {
+            final_score -= 50;
+        }
+    }
+
+    return final_score;
 }
 

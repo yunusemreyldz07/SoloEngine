@@ -679,19 +679,3 @@ void print_attacked_squares(int by_side) {
     }
     std::cout << "\n     a b c d e f g h\n\n";
 }
-
-// Demo entry
-#ifdef BITBOARD_DEMO
-int main() {
-    init_all();
-    parse_fen(cmk_position);
-    side = WHITE;
-    enPassantSquare = e6;
-    castle |= wk | wq | bk | bq; // all castling rights
-    print_bitboard(get_queen_attacks(d4, occupancies[BOTH]));
-    print_attacked_squares(BLACK);
-    print_bitboard(bitboards[P]);
-    print_board();
-    return 0;
-}
-#endif
