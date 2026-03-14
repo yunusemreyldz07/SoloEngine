@@ -131,7 +131,7 @@ Runs a built-in benchmark on 12 positions at depth 8.
 ## Credits
 
 - **Author**: xsolod3v
-- **Inspired by**: Potential Engine by ProgramciDusunur
+- **Inspired by**: Patricia engine by Adam Kulju, Potential Engine by ProgramciDusunur
 - **Evaluation Base**: PeSTO piece-square tables by Ronald Friederich (further tuned)
 - **Resources**: Chess Programming Wiki, Potential source code, Ethereal source code
 
