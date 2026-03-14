@@ -1,5 +1,5 @@
 # Solo - UCI Chess Engine
-**Version 1.5.0**
+**Version 1.6.0**
 
 A bitboard-based chess engine with advanced search techniques and evaluation.
 
