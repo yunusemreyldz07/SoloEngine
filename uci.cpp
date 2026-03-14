@@ -11,7 +11,7 @@
 #include <thread>
 #include <algorithm>
 
-#define VERSION "1.5.0"
+#define VERSION "1.6.0"
 
 TranspositionTable ttTable;
 
