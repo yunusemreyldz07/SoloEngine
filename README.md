@@ -21,22 +21,28 @@ A bitboard-based chess engine with advanced search techniques and evaluation.
   - Internal Iterative Reductions (IIR)
   - Check extensions
   - Quiescence search with SEE filtering
+  - Repetition / draw detection in search
+  - Soft/Hard time management
   - Transposition Table
 
 - **Move Ordering**:
   - TT move first
   - Good captures (SEE ≥ threshold) with MVV-LVA scoring
-  - History heuristic for quiet moves (Bad quiets are penalized)
+  - Killer moves
+  - History + continuation history for quiet moves (Bad quiets are penalized)
   - Bad captures ordered last
 
 - **Evaluation**:
-  - PeSTO Piece-Square Tables
+  - Tuned MG/EG piece values (not default PeSTO values)
+  - Tuned PSTs (PeSTO-initialized, then engine-tuned)
   - Tapered evaluation (midgame/endgame interpolation)
-  - Piece mobility (Knight, Bishop, Rook, Queen)
+  - Piece mobility (Knight, Bishop, Rook, Queen) with MG/EG terms
+  - King-zone attack pressure from mobility
   - Double pawn penalty
-  - Incremental Zobrist hashing
-  - Threefold repetition detection
-  - 50-move rule & insufficient material draw detection
+  - Isolated pawn penalty
+  - Passed pawn bonuses (MG/EG tables)
+  - King shield bonus
+  - Precomputed passed-pawn masks for faster eval hot path
 
 ## Building
 
@@ -112,7 +118,7 @@ Runs a built-in benchmark on 12 positions at depth 8.
 ```
 ├── bitboard.cpp/h      # Magic bitboards & attack generation
 ├── board.cpp/h         # Board representation & move make/unmake
-├── evaluation.cpp/h    # PeSTO evaluation & mobility
+├── evaluation.cpp/h    # Tuned tapered evaluation & mobility
 ├── history.cpp/h       # History heuristic for move ordering
 ├── movegen.cpp         # Legal move generation
 ├── search.cpp/h        # Negamax search, pruning & reductions
@@ -126,7 +132,7 @@ Runs a built-in benchmark on 12 positions at depth 8.
 
 - **Author**: xsolod3v
 - **Inspired by**: Potential Engine by ProgramciDusunur
-- **Evaluation**: PeSTO piece-square tables by Ronald Friederich
+- **Evaluation Base**: PeSTO piece-square tables by Ronald Friederich (further tuned)
 - **Resources**: Chess Programming Wiki, Potential source code, Ethereal source code
 
 ## License
