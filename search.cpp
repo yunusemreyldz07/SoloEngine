@@ -188,7 +188,7 @@ void orderMoves(Board& board, Move* moves, int moveCount, Move ttMove = 0, int p
     }
 }
 
-int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
+int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply, SearchStack* ss) {
     if (stop_search.load(std::memory_order_relaxed)) return 0;
     nodeCount.fetch_add(1, std::memory_order_relaxed);
     updateSeldepth(ply);
@@ -238,7 +238,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
         }
         board.makeMove(captureMove);
         
-        int eval = -qsearch(board, -beta, -alpha, ply + 1);
+        int eval = -qsearch(board, -beta, -alpha, ply + 1, ss + 1);
         
         board.unmakeMove(captureMove);
 
@@ -273,7 +273,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply) {
     return bestEval;
 }
 
-int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, std::vector<Move>& pvLine, std::vector<uint64_t>& positionHistory) {
+int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, SearchStack* ss, std::vector<Move>& pvLine, std::vector<uint64_t>& positionHistory) {
     nodeCount.fetch_add(1, std::memory_order_relaxed);
 
     updateSeldepth(ply);
@@ -281,7 +281,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
     if (should_stop_search()) return 0;
     
     if (depth <= 0) {
-        return qsearch(board, alpha, beta, ply);
+        return qsearch(board, alpha, beta, ply, ss);
     }
 
     // Check for repetition
@@ -293,6 +293,8 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
     int16_t eval = 0; 
 
     const int16_t staticEval = evaluate_board(board);
+    ss->staticEval = staticEval;
+    ss->cutOffCount = 0;  // Initialize cutoff counter for this node
     const bool pvNode = (beta - alpha > 1);
 
     int kingSq = 0;
@@ -337,6 +339,14 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         depth--;
     }
 
+    int16_t ttAdjustedEval = staticEval;
+    if (ttHit && !inCheck) {
+        if (ttEntry.flag == TT_EXACT ||
+        (ttEntry.flag == TT_ALPHA && ttEntry.score >= staticEval) ||
+        (ttEntry.flag == TT_BETA && ttEntry.score <= staticEval)) {
+            ttAdjustedEval = ttEntry.score;
+        }
+    }
 
     int moveCount = 0;
     Move moves[MAX_MOVES];
@@ -362,9 +372,9 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 
         int margin = 80 * depth;
 
-        if (staticEval - margin >= beta) {
+        if (ttAdjustedEval - margin >= beta) {
             // I am so far ahead that even if I reduce my score by the margin, I am still above beta. No need to search this node.
-            return staticEval - margin;
+            return ttAdjustedEval - margin;
         }
     }
 
@@ -387,7 +397,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 
         int R = 3 + (depth / 3);
         std::vector<Move> nullPv;
-        int16_t nullScore = -negamax(board, depth - R, -beta, -beta + 1, ply + 1, nullPv, positionHistory);
+        int16_t nullScore = -negamax(board, depth - R, -beta, -beta + 1, ply + 1, ss + 1, nullPv, positionHistory);
         
         positionHistory.pop_back();
 
@@ -442,7 +452,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 
         positionHistory.push_back(board.hash); // Add new position to history for repetition detection
         if (firstMove){
-            eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv, positionHistory);
+            eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, ss + 1, childPv, positionHistory);
             firstMove = false;
         } else {
 
@@ -461,17 +471,17 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
             int lmrDepth = std::max(0, depth - 1 - reduction);
 
 
-            eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, childPv, positionHistory); // PVS null window search
+            eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, ss + 1, childPv, positionHistory); // PVS null window search
             
             if (reduction > 0 && eval > alpha) {
                 // if the eval suggest a better move we research
                 childPv.clear();
-                eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, childPv, positionHistory); // Re-search with no reduction
+                eval = -negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1, ss + 1, childPv, positionHistory); // Re-search with no reduction
             }
             if (eval > alpha && eval < beta) {
                 // if we fail high search again with no reduction, and window
                 childPv.clear();
-                eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, childPv, positionHistory); // Re-search if we failed high
+                eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, ss + 1, childPv, positionHistory); // Re-search if we failed high
             }
         }
         if (!positionHistory.empty()) positionHistory.pop_back();
@@ -495,6 +505,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
         }
 
         if (alpha >= beta) {
+            ss->cutOffCount++;  // Increment cutoff counter
             if (is_quiet(chosenMove)){
                 update_history(board, board.stm, move_from(chosenMove), move_to(chosenMove), depth, badQuiets, badQuietCount, ply);
                 updateKillers(ply, chosenMove);
@@ -534,6 +545,8 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, s
 
 Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<uint64_t>& positionHistory, int ply) {
     int16_t score = 0;
+
+    SearchStack ss[MAX_PLY + 8] = {};
 
     std::vector<uint64_t> searchHistory = positionHistory;
 
@@ -585,7 +598,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
         while (true) {
             pvLine.clear();
-            int16_t searchScore = negamax(board, iterativeDepth, alpha, beta, ply, pvLine, searchHistory);
+            int16_t searchScore = negamax(board, iterativeDepth, alpha, beta, ply, ss, pvLine, searchHistory);
 
             if (should_stop_search()) {
                 score = searchScore;

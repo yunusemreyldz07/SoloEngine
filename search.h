@@ -18,6 +18,12 @@ enum TTFlag : uint8_t {
     TT_BETA   // Upper bound (Fail-Low)
 };
 
+struct SearchStack {
+    Move singularMove;
+    int cutOffCount;
+    int16_t staticEval;
+};
+
 struct TTEntry { // 16 bytes total
     uint64_t hashKey;
     int16_t score;
