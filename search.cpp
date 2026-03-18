@@ -411,7 +411,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
             break;
         }
         Move chosenMove = moves[movesSearched];
-        
+
         if (chosenMove == ss->singularMove) {
             continue;
         }
@@ -432,30 +432,14 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
 
             int singularBeta = ttSeScore - (depth * 5 + (!pvNode) * 10) / 8;
             const int singularDepth = (depth - 1) / 2;
-            bool isSingular = true;
+            (ss + 1)->singularMove = chosenMove;
+            std::vector<Move> tmpPv;
+            int16_t s = -negamax(board, singularDepth, -singularBeta, -singularBeta + 1, ply + 1, ss + 1, tmpPv, positionHistory);
+            (ss + 1)->singularMove = 0;
 
-            for (int j = 0; j < moveCount; ++j) {
-                Move alt = moves[j];
-                if (alt == chosenMove) continue;
-
-                board.makeMove(alt);
-                positionHistory.push_back(board.hash);
-
-                (ss + 1)->singularMove = chosenMove; // recursion guard
-                std::vector<Move> tmpPv; // temporary PV for singular search
-                int16_t s = -negamax(board, singularDepth, -singularBeta, -singularBeta + 1, ply + 1, ss + 1, tmpPv, positionHistory);
-                (ss + 1)->singularMove = 0;
-
-                positionHistory.pop_back();
-                board.unmakeMove(alt);
-
-                if (s >= singularBeta) { // not singular
-                    isSingular = false;
-                    break;
-                }
+            if (s < singularBeta) {
+                extension = 1;
             }
-
-            if (isSingular) extension = 1;
         }
 
 
