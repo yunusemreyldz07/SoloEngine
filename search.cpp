@@ -310,7 +310,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     TTEntry& ttEntry = ttTable.getEntry(hashKey);
     Move ttMove = 0;
     bool ttHit = false;
-    if (ttEntry.hashKey == hashKey) {
+    if (!ss->singularMove && ttEntry.hashKey == hashKey) {
         ttMove = ttEntry.bestMove;
         ttHit = true;
         if (ttEntry.depth >= depth && ply > 0) {
@@ -419,9 +419,10 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
         bool isKiller = (ply < MAX_PLY && is_quiet(chosenMove) && (chosenMove == killerMoves[ply][0] || chosenMove == killerMoves[ply][1]));
         
         std::vector<Move> childPv; 
+
         // Singular Extensions
         int extension = 0;
-        bool trySingular = !(ply == 0) && !ss->singularMove && ttHit && (chosenMove == ttMove) && depth >= 6 && (ttEntry.flag != TT_BETA) && (ttEntry.depth >= depth - 3) && abs(ttEntry.score) < MATE_SCORE - MAX_PLY;
+        bool trySingular = !(ply == 0) && !ss->singularMove && ttHit && (chosenMove == ttMove) && depth >= 8 && (ttEntry.flag != TT_BETA) && (ttEntry.depth >= depth - 3) && abs(ttEntry.score) < MATE_SCORE - MAX_PLY;
         if (trySingular) {
             int16_t ttSeScore = ttEntry.score;
             if (ttSeScore >= MATE_SCORE - MAX_PLY) {
@@ -557,7 +558,10 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     } else if (ttScore <= -MATE_SCORE + MAX_PLY) {
         ttScore -= ply;
     }
-    ttTable.writeEntry(hashKey, ttScore, static_cast<int8_t>(depth), flag, bestMove);
+    
+    if (!ss->singularMove) {
+        ttTable.writeEntry(hashKey, ttScore, static_cast<int8_t>(depth), flag, bestMove);
+    }
 
 
     return bestEval;
