@@ -421,7 +421,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
         std::vector<Move> childPv; 
         // Singular Extensions
         int extension = 0;
-        bool trySingular = !(ply == 0) && !ss->singularMove && ttHit && (chosenMove == ttMove) && depth >= 6 && (ttEntry.flag != TT_BETA) && (ttEntry.depth >= depth - 3);
+        bool trySingular = !(ply == 0) && !ss->singularMove && ttHit && (chosenMove == ttMove) && depth >= 6 && (ttEntry.flag != TT_BETA) && (ttEntry.depth >= depth - 3) && abs(ttEntry.score) < MATE_SCORE - MAX_PLY;
         if (trySingular) {
             int16_t ttSeScore = ttEntry.score;
             if (ttSeScore >= MATE_SCORE - MAX_PLY) {
@@ -430,7 +430,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
                 ttSeScore += ply;
             }
 
-            int singularBeta = ttSeScore - 2 * depth;
+            int singularBeta = ttSeScore - depth;
             const int singularDepth = (depth - 1) / 2;
             std::vector<Move> tmpPv;
             ss->singularMove = chosenMove;
