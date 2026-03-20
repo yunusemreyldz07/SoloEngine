@@ -318,8 +318,8 @@ void evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard
     }
 }
 
-/*
-evaluate_board(const Board& board) {
+
+int evaluate_classical(const Board& board) {
     ensure_tables_init();
 
     int mg[2] = {0, 0};
@@ -431,7 +431,6 @@ evaluate_board(const Board& board) {
 
     return (mgScore * mgPhase + egScore * egPhase) / 24;
 }
-*/
 
 int evaluate_board(const Board& board) {
     return evaluate_nnue(board.stm, board.accumulator[0], board.accumulator[1]);

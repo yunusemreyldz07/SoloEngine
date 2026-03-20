@@ -4,6 +4,7 @@
 #include "evaluation.h"
 #include "board.h"
 #include "history.h"
+#include "nnue.h"
 
 #include <atomic>
 #include <iostream>
@@ -99,6 +100,19 @@ void updateKillers(int ply, Move move) {
     if (killerMoves[ply][0] == move) return;
     killerMoves[ply][1] = killerMoves[ply][0];
     killerMoves[ply][0] = move;
+}
+
+void verify_accumulator(const Board& board) {
+    int16_t test_white[256], test_black[256];
+    RefreshAccumulator(board, test_white, test_black); // Sıfırdan temiz hesapla
+    
+    for(int i = 0; i < 256; i++) {
+        if(board.accumulator[0][i] != test_white[i] || board.accumulator[1][i] != test_black[i]) {
+            std::cout << "ALARM: Accumulator Incremental Update HATASI!" << std::endl;
+            // board.printBoard() vs. yazdırıp hangi hamlede koptuğunu bulabilirsin
+            break;
+        }
+    }
 }
 
 void initLMRtables(){
@@ -214,6 +228,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply, SearchStack*
         if (ttEntry.flag == TT_ALPHA && ttScore >= beta) return ttScore;
     }
 
+    verify_accumulator(board);
     int stand_pat = evaluate_board(board);
 
     if (stand_pat >= beta) {
@@ -292,6 +307,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     bool firstMove = true; // for PVS
     int16_t eval = 0; 
 
+    verify_accumulator(board);
     const int16_t staticEval = evaluate_board(board);
     ss->staticEval = staticEval;
     ss->cutOffCount = 0;  // Initialize cutoff counter for this node

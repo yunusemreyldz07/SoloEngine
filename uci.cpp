@@ -11,6 +11,9 @@
 #include <thread>
 #include <algorithm>
 
+#include <fstream>
+
+
 #define VERSION "1.6.0"
 
 TranspositionTable ttTable;
@@ -26,6 +29,42 @@ struct SearchLimit {
     int timeToThink = -1;
     int depthLimit = -1;
 };
+
+void generate_dataset() {
+    std::string input_file = "bullet_ready.txt";
+    std::string output_file = "bullet_scored.txt";
+
+    std::ifstream fin(input_file);
+    std::ofstream fout(output_file);
+    std::string line;
+    Board board;
+    int count = 0;
+
+    while (std::getline(fin, line)) {
+        size_t first_pipe = line.find('|');
+        size_t second_pipe = line.find('|', first_pipe + 1);
+        
+        if (first_pipe != std::string::npos && second_pipe != std::string::npos) {
+            std::string fen = line.substr(0, first_pipe - 1);
+            std::string result = line.substr(second_pipe + 2); 
+            
+            board.loadFEN(fen);
+            int score = evaluate_classical(board);
+            
+            if (board.stm == BLACK) {
+                score = -score; 
+            }
+
+            fout << fen << " | " << score << " | " << result << "\n";
+            
+            count++;
+            if (count % 500000 == 0) {
+                std::cout << count << " position was scored..." << std::endl;
+            }
+        }
+    }
+    std::cout << "Done. Total: " << count << " position is scored." << std::endl;
+}
 
 std::string move_to_uci(const Move m) {
         if (m == 0) return std::string("0000");
@@ -183,7 +222,9 @@ int handle_uci_commands(int argc, char* argv[]){
             stop_and_join_search();
             continue;
         }
-        
+        if (line == "generatedata") {
+            generate_dataset();
+        }
         if (line == "uci") {
             std::cout << "id name Solo " << VERSION << std::endl;
             std::cout << "id author Yunus Emre" << std::endl;
