@@ -17,6 +17,6 @@ int main(int argc, char* argv[]) {
     std::cout.setf(std::ios::unitbuf); // Disable output buffering
     init_all();
     initLMRtables();
-    load_nnue("solo.brain");
+    load_nnue();
     handle_uci_commands(argc, argv);
 }

@@ -15,7 +15,7 @@ extern int16_t output_bias;
 int clippedReLu(int16_t x);
 int evaluate_nnue(int stm, const int16_t* acc_white, const int16_t* acc_black);
 void update_feature(int16_t* acc, int feature_idx, bool is_add);
-bool load_nnue(const std::string& filename);
+void load_nnue();
 void RefreshAccumulator(const Board& board, int16_t* acc_white, int16_t* acc_black);
 
 #endif

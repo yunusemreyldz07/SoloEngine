@@ -1,6 +1,6 @@
 #include "nnue.h"
-
-#include <fstream>
+#include <cstring>
+#include "nnue_data.h"
 #include <iostream>
 
 #include "board.h"
@@ -55,22 +55,19 @@ void update_feature(int16_t* acc, int feature_idx, bool is_add) {
     }
 }
 
-bool load_nnue(const std::string& filename) {
-    std::ifstream file(filename, std::ios::binary);
-    
-    if (!file.is_open()) {
-        std::cerr << "NNUE file not found: " << filename << std::endl;
-        return false;
-    }
+void load_nnue() {
+    size_t offset = 0;
 
-    file.read(reinterpret_cast<char*>(feature_weights), sizeof(feature_weights));
-    file.read(reinterpret_cast<char*>(feature_biases), sizeof(feature_biases));
-    file.read(reinterpret_cast<char*>(output_weights), sizeof(output_weights));
-    file.read(reinterpret_cast<char*>(&output_bias), sizeof(output_bias));
+    std::memcpy(feature_weights, nnue_data + offset, sizeof(feature_weights));
+    offset += sizeof(feature_weights);
 
-    file.close();
-    std::cout << "NNUE successfully loaded!" << std::endl;
-    return true;
+    std::memcpy(feature_biases, nnue_data + offset, sizeof(feature_biases));
+    offset += sizeof(feature_biases);
+
+    std::memcpy(output_weights, nnue_data + offset, sizeof(output_weights));
+    offset += sizeof(output_weights);
+
+    std::memcpy(&output_bias, nnue_data + offset, sizeof(output_bias));
 }
 
 void RefreshAccumulator(const Board& board, int16_t* acc_white, int16_t* acc_black) {
