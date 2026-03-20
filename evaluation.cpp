@@ -2,6 +2,7 @@
 #include <cmath>
 #include "board.h"
 #include "bitboard.h"
+#include "nnue.h"
 #include <iostream>
 
 // Bit manipulation - using inline functions from types.h
@@ -317,7 +318,8 @@ void evaluate_mobility(const Board& board, int pieceType, bool isWhite, Bitboard
     }
 }
 
-int evaluate_board(const Board& board) {
+/*
+evaluate_board(const Board& board) {
     ensure_tables_init();
 
     int mg[2] = {0, 0};
@@ -386,7 +388,7 @@ int evaluate_board(const Board& board) {
     eg[BLACK] += egKingShieldBonus * popcount(blackShield);
 
 
-    /* tapered eval */
+    // tapered eval
     int mgScore = mg[side2move] - mg[OTHER(side2move)];
     int egScore = eg[side2move] - eg[OTHER(side2move)];
     
@@ -428,5 +430,10 @@ int evaluate_board(const Board& board) {
     egScore += attackDiffEg;
 
     return (mgScore * mgPhase + egScore * egPhase) / 24;
+}
+*/
+
+int evaluate_board(const Board& board) {
+    return evaluate_nnue(board.stm, board.accumulator[0], board.accumulator[1]);
 }
 

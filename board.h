@@ -178,6 +178,8 @@ struct UndoState {
     int8_t enPassant;     // EP column copy (-1 or 0-7)
     int16_t halfMoveClock; // 50 move rule counter before the move
     uint64_t hash;         // Position hash before the move (for repetition detection)
+
+    int16_t accumulator[2][256]; // NNUE accumulator states for both sides before the move (for incremental updates)
 };
 
 struct Board {
@@ -194,6 +196,8 @@ struct Board {
 
     int8_t mailbox[64];
     int16_t halfMoveClock;
+
+    int16_t accumulator[2][256];
 
     Board();
     void reset();
