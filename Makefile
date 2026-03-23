@@ -12,8 +12,14 @@ SOURCES := main.cpp \
            search.cpp \
            evaluation.cpp \
            bitboard.cpp \
+<<<<<<< HEAD
 		   history.cpp 
 >>>>>>> b15a78f (Fixed code structure and added a new file 'history.cpp' for history/killer move actions.)
+=======
+		   history.cpp \
+		   nnue.cpp \
+		   datagen.cpp
+>>>>>>> 0868a55 (NNUE was added and implemented successfully. (#92))
 
 ifeq ($(OS),Windows_NT)
     DETECTED_OS := windows

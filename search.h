@@ -16,7 +16,9 @@ struct SearchStack {
 
 int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, SearchStack* ss, std::vector<Move>& pvLine, std::vector<uint64_t>& positionHistory);
 
-Move getBestMove(Board& board, int maxDepth, int movetimeMs = -1, const std::vector<uint64_t>& positionHistory = {}, int ply = 0);
+Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<uint64_t>& positionHistory, int ply, bool silent, int16_t& outScore);
+
+void setSoftNodeLimit(long long nodes); // 0 or negative = no limit
 
 enum TTFlag : uint8_t {
     TT_EXACT, // Exact Score (PV Node)

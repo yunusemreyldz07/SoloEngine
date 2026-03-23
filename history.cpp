@@ -4,7 +4,7 @@
 
 int historyTable[2][64][64]; // color x fromSquare x toSquare
 int conhistTable[12][64][12][64]; // [prevPiece][prevTo][currPiece][currTo]
-MoveInfo moveStack[MAX_PLY];
+thread_local MoveInfo moveStack[MAX_PLY];
 constexpr int HISTORY_MAX = 16384;
 
 void clear_history() {
