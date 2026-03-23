@@ -646,7 +646,6 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             int16_t searchScore = negamax(board, iterativeDepth, alpha, beta, ply, ss, pvLine, searchHistory);
 
             if (should_stop_search()) {
-                score = searchScore;
                 break;
             }
 

@@ -213,6 +213,7 @@ int play_selfgen_game(std::ofstream& out_file, int soft_nodes, bool use_book, st
     double result = 0.5;
     int win_adj_count = 0;
     int draw_adj_count = 0;
+    int game_ply = 0;
 
     while ((int)fen_list.size() < MAX_GAME_PLYS) {
         Move legal_moves[256];
@@ -231,14 +232,11 @@ int play_selfgen_game(std::ofstream& out_file, int soft_nodes, bool use_book, st
 
         std::string current_fen = get_fen(pos);
 
-        // Search with soft node limit: run iterative deepening until nodes >= soft_nodes
         setSoftNodeLimit(soft_nodes);
         int16_t raw_score = 0;
         Move best_move = getBestMove(pos, 128, -1, {}, 0, true, raw_score);
         setSoftNodeLimit(-1);
 
-        // raw_score is from the side-to-move's perspective.
-        // Convert to white's perspective for consistent output.
         int16_t white_score = (pos.stm == WHITE) ? raw_score : static_cast<int16_t>(-raw_score);
 
         bool skip_save = filtering(pos, raw_score, best_move);
@@ -246,7 +244,7 @@ int play_selfgen_game(std::ofstream& out_file, int soft_nodes, bool use_book, st
             fen_list.push_back({current_fen, white_score});
         }
 
-        // Win adjudication: if one side is consistently far ahead, end the game
+        // Win adjudication
         if (std::abs(raw_score) > 2000) win_adj_count++;
         else win_adj_count = 0;
 
@@ -257,8 +255,8 @@ int play_selfgen_game(std::ofstream& out_file, int soft_nodes, bool use_book, st
             break;
         }
 
-        // Draw adjudication: after move 32, if score stays near zero, call a draw
-        if (pos.moveHistory.size() >= 32) {
+        // Draw adjudication
+        if (game_ply >= 64) {
             if (std::abs(raw_score) < 15) draw_adj_count++;
             else draw_adj_count = 0;
 
@@ -272,6 +270,7 @@ int play_selfgen_game(std::ofstream& out_file, int soft_nodes, bool use_book, st
 
         if (best_move == 0) break;
         pos.makeMove(best_move);
+        game_ply++;
     }
 
     // Write positions in bullet trainer format: fen | score | wdl
