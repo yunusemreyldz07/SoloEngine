@@ -9,7 +9,7 @@ struct Board;
 inline constexpr bool USE_NNUE = false;
 
 inline constexpr int NNUE_INPUT_SIZE = 768;
-inline constexpr int NNUE_HIDDEN_SIZE = 1024;
+inline constexpr int NNUE_HIDDEN_SIZE = 64;
 
 using Accumulator = std::array<int16_t, NNUE_HIDDEN_SIZE>;
 

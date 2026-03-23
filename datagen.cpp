@@ -7,6 +7,7 @@
 #include <thread>
 #include <cmath>
 #include <mutex>
+#include <filesystem>
 
 std::atomic<uint64_t> total_fens_generated{0};
 std::atomic<uint64_t> games_played_count{0};
@@ -16,6 +17,50 @@ std::mutex book_mutex;
 bool book_loaded = false;
 
 namespace {
+
+void trim_incomplete_last_line(const std::string& file_path) {
+    std::error_code ec;
+    if (!std::filesystem::exists(file_path, ec)) {
+        return;
+    }
+
+    std::fstream file(file_path, std::ios::in | std::ios::out | std::ios::binary);
+    if (!file.is_open()) {
+        return;
+    }
+
+    file.seekg(0, std::ios::end);
+    std::streamoff size = file.tellg();
+    if (size <= 0) {
+        return;
+    }
+
+    char ch = '\0';
+    file.seekg(size - 1);
+    file.get(ch);
+    if (ch == '\n') {
+        return;
+    }
+
+    std::streamoff cut_pos = -1;
+    for (std::streamoff i = size - 1; i >= 0; --i) {
+        file.seekg(i);
+        file.get(ch);
+        if (ch == '\n') {
+            cut_pos = i + 1;
+            break;
+        }
+        if (i == 0) {
+            break;
+        }
+    }
+
+    file.close();
+    if (cut_pos < 0) {
+        cut_pos = 0;
+    }
+    std::filesystem::resize_file(file_path, static_cast<uintmax_t>(cut_pos), ec);
+}
 
 char piece_to_fen_char(int piece) {
     if (piece == 0) return '1';
@@ -202,23 +247,27 @@ int play_selfgen_game(std::ofstream& out_file, int soft_nodes, bool use_book, st
         }
 
         // Win adjudication: if one side is consistently far ahead, end the game
-        if (std::abs(raw_score) > 1000) win_adj_count++;
+        if (std::abs(raw_score) > 2000) win_adj_count++;
         else win_adj_count = 0;
 
-        if (win_adj_count >= 4) {
+        if (win_adj_count >= 5) {
             result = (raw_score > 0)
                 ? (pos.stm == WHITE ? 1.0 : 0.0)
                 : (pos.stm == WHITE ? 0.0 : 1.0);
             break;
         }
 
-        // Draw adjudication: if score stays near zero, call a draw
-        if (std::abs(raw_score) < 10) draw_adj_count++;
-        else draw_adj_count = 0;
+        // Draw adjudication: after move 32, if score stays near zero, call a draw
+        if (pos.moveHistory.size() >= 32) {
+            if (std::abs(raw_score) < 15) draw_adj_count++;
+            else draw_adj_count = 0;
 
-        if (draw_adj_count >= 8) {
-            result = 0.5;
-            break;
+            if (draw_adj_count >= 6) {
+                result = 0.5;
+                break;
+            }
+        } else {
+            draw_adj_count = 0;
         }
 
         if (best_move == 0) break;
@@ -238,6 +287,7 @@ void datagen_worker(int thread_id, uint64_t target_games, int soft_nodes, bool u
     std::mt19937_64 gen(seed + static_cast<uint64_t>(thread_id));
 
     std::string out_filename = "datagen_" + std::to_string(thread_id) + ".txt";
+    trim_incomplete_last_line(out_filename);
     std::ofstream out_file(out_filename, std::ios::app);
 
     while (true) {

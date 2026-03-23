@@ -7,7 +7,7 @@
 #include <algorithm>
 
 constexpr int INPUT_SIZE = 768;
-constexpr int HIDDEN_SIZE = 1024;
+constexpr int HIDDEN_SIZE = 64;
 
 
 using Accumulator = std::array<int16_t, HIDDEN_SIZE>;
@@ -27,7 +27,6 @@ int32_t screlu(int16_t x) {
 }
 
 void updateAccumulator(Accumulator& acc, int featureIdx, bool isAdd) { 
-    // İşlemci "Ekleme mi Çıkarma mı?" kararını 1024 kere değil, sadece 1 kere verir.
     int offset = featureIdx * HIDDEN_SIZE;
     
     if (isAdd) {
@@ -56,8 +55,7 @@ int makeFeatureIndex(int piece_type, int piece_color, int square, int perspectiv
     
     // if the perspective is zero (white), the square index remains the same. If the perspective is one (black), we flip the square index to mirror it vertically.
     int sq = square ^ (perspective * 56);
-    
-    // 4. Final: 768'lik düzlüğe yerleştir
+
     return (pieceIdx * 64) + sq;
 }
 
@@ -108,8 +106,6 @@ int evaluate_nnue(const Accumulator& acc_white, const Accumulator& acc_black, in
         raw_sum += screlu(us[i]) * outputWeight[i];
         raw_sum += screlu(them[i]) * outputWeight[HIDDEN_SIZE + i];
     }
-
-    std::cout << "Unscaled eval without output bias: " << raw_sum << std::endl;
 
     // Turning it into a real chess score (QA=255, QB=64, Scale=400)
     int finalScore = ((raw_sum / 255) + outputBias) * 400 / 16320; // 255 * 64 = 16320

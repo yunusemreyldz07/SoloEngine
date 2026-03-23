@@ -11,7 +11,7 @@ struct MoveInfo {
 // History table: [color][fromSquare][toSquare]
 extern int historyTable[2][64][64];
 extern int conhistTable[12][64][12][64]; // [prevPiece][prevTo][currPiece][currTo]
-extern MoveInfo moveStack[MAX_PLY];
+extern thread_local MoveInfo moveStack[MAX_PLY];
 
 void clear_history();
 void reset_movestack();
