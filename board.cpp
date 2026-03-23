@@ -1,9 +1,11 @@
 #include "board.h"
 #include "bitboard.h"
+#include "nnue.h"
 #include <algorithm>
 #include <cctype>
 #include <iostream>
 #include <sstream>
+#include <cstring> // for memcpy
 
 char columns[] = "abcdefgh";
 
@@ -104,6 +106,10 @@ void Board::reset() {
     undoStack.clear();
 
     hash = position_key(*this);
+
+    if (USE_NNUE) {
+        RefreshAccumulator(*this, &this->accumulator[0], &this->accumulator[1]);
+    }
 }
 
 void Board::makeMove(Move move) {
@@ -125,6 +131,10 @@ void Board::makeMove(Move move) {
         st.capturedPiece = mailbox[to]; 
     }
 
+    if (USE_NNUE) {
+        std::memcpy(st.accumulator, this->accumulator, sizeof(this->accumulator));
+    }
+
     undoStack.push_back(st);
 
     const int fromSq = move_from(move);
@@ -140,6 +150,34 @@ void Board::makeMove(Move move) {
         halfMoveClock++;
     }
     
+    if (USE_NNUE) {
+        // Remove the piece from its original square
+        int w_idx_from = 64 * (movingPiece - 1) + fromSq;
+        int b_idx_from = 64 * ((movingPiece - 1 + 6) % 12) + (fromSq ^ 56);
+        updateAccumulator(this->accumulator[0], w_idx_from, false);
+        updateAccumulator(this->accumulator[1], b_idx_from, false);
+
+        // Add the piece to its new square
+        int w_idx_to = 64 * (movingPiece - 1) + toSq;
+        int b_idx_to = 64 * ((movingPiece - 1 + 6) % 12) + (toSq ^ 56);
+        updateAccumulator(this->accumulator[0], w_idx_to, true);
+        updateAccumulator(this->accumulator[1], b_idx_to, true);
+    }
+
+    if (st.capturedPiece != EMPTY) {
+        int cap_sq = toSq;
+        if (flags == FLAG_EN_PASSANT) {
+            cap_sq = (stm == WHITE) ? toSq - 8 : toSq + 8;
+        }
+
+        if (USE_NNUE) {
+            int w_idx_cap = 64 * (st.capturedPiece - 1) + cap_sq;
+            int b_idx_cap = 64 * ((st.capturedPiece - 1 + 6) % 12) + (cap_sq ^ 56);
+            updateAccumulator(this->accumulator[0], w_idx_cap, false);
+            updateAccumulator(this->accumulator[1], b_idx_cap, false);
+        }
+    }
+
     // Add to move history for continuation history
     moveHistory.push_back(move);
 
@@ -181,6 +219,19 @@ void Board::makeMove(Move move) {
             int rookFromSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) + 1);
             int rookToSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) - 1);
             int rookPiece = make_piece(ROOK, piece_color(movingPiece));
+
+            if (USE_NNUE) {
+                int w_idx_rook_from = 64 * (rookPiece - 1) + rookFromSq;
+                int b_idx_rook_from = 64 * ((rookPiece - 1 + 6) % 12) + (rookFromSq ^ 56);
+                updateAccumulator(this->accumulator[0], w_idx_rook_from, false);
+                updateAccumulator(this->accumulator[1], b_idx_rook_from, false);
+
+                int w_idx_rook_to = 64 * (rookPiece - 1) + rookToSq;
+                int b_idx_rook_to = 64 * ((rookPiece - 1 + 6) % 12) + (rookToSq ^ 56);
+                updateAccumulator(this->accumulator[0], w_idx_rook_to, true);
+                updateAccumulator(this->accumulator[1], b_idx_rook_to, true);
+            }
+
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookToSq] = mailbox[rookFromSq];
@@ -191,6 +242,19 @@ void Board::makeMove(Move move) {
             int rookFromSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) - 2);
             int rookToSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) + 1);
             int rookPiece = make_piece(ROOK, piece_color(movingPiece));
+
+            if (USE_NNUE) {
+                int w_idx_rook_from = 64 * (rookPiece - 1) + rookFromSq;
+                int b_idx_rook_from = 64 * ((rookPiece - 1 + 6) % 12) + (rookFromSq ^ 56);
+                updateAccumulator(this->accumulator[0], w_idx_rook_from, false);
+                updateAccumulator(this->accumulator[1], b_idx_rook_from, false);
+
+                int w_idx_rook_to = 64 * (rookPiece - 1) + rookToSq;
+                int b_idx_rook_to = 64 * ((rookPiece - 1 + 6) % 12) + (rookToSq ^ 56);
+                updateAccumulator(this->accumulator[0], w_idx_rook_to, true);
+                updateAccumulator(this->accumulator[1], b_idx_rook_to, true);
+            }
+
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookToSq] = mailbox[rookFromSq];
@@ -204,6 +268,19 @@ void Board::makeMove(Move move) {
     if (piece_type(movingPiece) == PAWN) {
         if (promo != -1) {
             placedPiece = make_piece(promo, piece_color(movingPiece));
+
+            if (USE_NNUE) {
+                int w_idx_pawn_to = 64 * (movingPiece - 1) + toSq;
+                int b_idx_pawn_to = 64 * ((movingPiece - 1 + 6) % 12) + (toSq ^ 56);
+                updateAccumulator(this->accumulator[0], w_idx_pawn_to, false);
+                updateAccumulator(this->accumulator[1], b_idx_pawn_to, false);
+
+                int w_idx_promoted_to = 64 * (placedPiece - 1) + toSq;
+                int b_idx_promoted_to = 64 * ((placedPiece - 1 + 6) % 12) + (toSq ^ 56);
+                updateAccumulator(this->accumulator[0], w_idx_promoted_to, true);
+                updateAccumulator(this->accumulator[1], b_idx_promoted_to, true);
+            }
+
             bb_clear(*this, movingPiece, toSq);
             bb_set(*this, placedPiece, toSq);
         }
@@ -329,6 +406,10 @@ void Board::unmakeMove(Move move) {
     enPassant = st.enPassant;
     halfMoveClock = st.halfMoveClock;
     this->hash = st.hash;
+
+    if (USE_NNUE) {
+        std::memcpy(this->accumulator, st.accumulator, sizeof(this->accumulator));
+    }
 }
 
 void Board::loadFEN(const std::string& fen) {
@@ -397,6 +478,9 @@ void Board::loadFEN(const std::string& fen) {
     }
 
     hash = position_key(*this);
+    if (USE_NNUE) {
+        RefreshAccumulator(*this, &this->accumulator[0], &this->accumulator[1]);
+    }
 }
 
 void printBoard(const Board& board) {

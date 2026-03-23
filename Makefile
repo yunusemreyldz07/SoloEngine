@@ -9,7 +9,9 @@ SOURCES := main.cpp \
            search.cpp \
            evaluation.cpp \
            bitboard.cpp \
-		   history.cpp 
+		   history.cpp \
+		   nnue.cpp \
+		   datagen.cpp
 
 ifeq ($(OS),Windows_NT)
     DETECTED_OS := windows

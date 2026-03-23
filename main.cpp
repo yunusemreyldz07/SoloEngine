@@ -3,6 +3,7 @@
 #include "search.h"
 #include "evaluation.h"
 #include "uci.h"
+#include "nnue.h"
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -16,5 +17,8 @@ int main(int argc, char* argv[]) {
     std::cout.setf(std::ios::unitbuf); // Disable output buffering
     init_all();
     initLMRtables();
+    if (USE_NNUE) {
+        load_nnue();
+    }
     handle_uci_commands(argc, argv);
 }
