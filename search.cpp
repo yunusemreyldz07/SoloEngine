@@ -65,6 +65,11 @@ inline long long now_ms() {
 inline bool should_stop_search() {
     if (stop_search_global.load(std::memory_order_relaxed)) return true;
     if (stop_search_local) return true;
+    // Check soft node limit on every node (thread_local, no contention)
+    if (soft_node_limit > 0 && nodeCount >= soft_node_limit) {
+        stop_search_local = true;
+        return true;
+    }
     if (!time_limited) return false;
     if ((nodeCount & 2047) == 0) {
         long long elapsed = now_ms() - start_time_ms;
