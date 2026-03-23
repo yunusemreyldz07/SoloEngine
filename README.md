@@ -1,5 +1,5 @@
 # Solo - UCI Chess Engine
-**Version 1.6.0**
+**Version 2.0.0**
 
 A bitboard-based chess engine with advanced search techniques and evaluation.
 
@@ -24,6 +24,7 @@ A bitboard-based chess engine with advanced search techniques and evaluation.
   - Repetition / draw detection in search
   - Soft/Hard time management
   - Transposition Table
+  - Singular Extensions (SE)
 
 - **Move Ordering**:
   - TT move first
@@ -33,16 +34,7 @@ A bitboard-based chess engine with advanced search techniques and evaluation.
   - Bad captures ordered last
 
 - **Evaluation**:
-  - Tuned MG/EG piece values (not default PeSTO values)
-  - Tuned PSTs (PeSTO-initialized, then engine-tuned)
-  - Tapered evaluation (midgame/endgame interpolation)
-  - Piece mobility (Knight, Bishop, Rook, Queen) with MG/EG terms
-  - King-zone attack pressure from mobility
-  - Double pawn penalty
-  - Isolated pawn penalty
-  - Passed pawn bonuses (MG/EG tables)
-  - King shield bonus
-  - Precomputed passed-pawn masks for faster eval hot path
+  - NNUE net trained with 76M self-play generated data.
 
 ## Building
 
@@ -67,13 +59,13 @@ make clean
 If you don't have Make:
 
 # Windows (MinGW/MSYS2)
-```g++ -O3 -mavx2 -std=c++23 -ffast-math -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp -o Solo.exe -static -static-libgcc -static-libstdc++```
+```g++ -O3 -mavx2 -std=c++23 -ffast-math -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp nnue.cpp datagen.cpp -o Solo.exe -static -static-libgcc -static-libstdc++```
 
 # Linux
-```g++ -O3 -std=c++23 -ffast-math -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp -o Solo -lm```
+```g++ -O3 -std=c++23 -ffast-math -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp nnue.cpp datagen.cpp -o Solo -lm```
 
 # macOS (Apple Silicon)
-```clang++ -O3 -std=c++23 -ffast-math -march=armv8-a -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp -o Solo -lm```
+```clang++ -O3 -std=c++23 -ffast-math -march=armv8-a -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp nnue.cpp datagen.cpp -o Solo -lm```
 
 ## Usage
 
@@ -104,15 +96,13 @@ Runs a built-in benchmark on 12 positions at depth 8.
 
 ## Strength
 
-- **Estimated ELO**: ~2300+ (based on SPRT testing)
-- **Lichess ELO**: [~2200](https://lichess.org/@/SoloBot)
+- **CCRL ELO**: [~2700+](https://computerchess.org.uk/ccrl/4040/cgi/engine_details.cgi?print=Details&each_game=0&eng=Solo%201.6.0%2064-bit#Solo_1_6_0_64-bit)
+- **Lichess ELO**: [~2400](https://lichess.org/@/SoloBot)
 
 ## Roadmap
 
 - [ ] Multi-threading support (Lazy SMP)
-- [ ] NNUE evaluation
-- [ ] Continuation history
-- [ ] Singular extensions
+- [ ] Continuation history (2 & 4 ply)
 
 ## Project Structure
 ```
@@ -124,6 +114,8 @@ Runs a built-in benchmark on 12 positions at depth 8.
 ├── search.cpp/h        # Negamax search, pruning & reductions
 ├── uci.cpp/h           # UCI protocol handler
 ├── types.h             # Basic types & constants
+├── nnue.cpp/h          # NNUE evaluation
+├── datagen.cpp/h       # Data generation for training
 ├── main.cpp            # Entry point
 └── Makefile            # Build system
 ```
