@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "nnue.h"
 #include "types.h"
 
 extern char columns[];
@@ -179,7 +180,7 @@ struct UndoState {
     int16_t halfMoveClock; // 50 move rule counter before the move
     uint64_t hash;         // Position hash before the move (for repetition detection)
 
-    int16_t accumulator[2][256]; // NNUE accumulator states for both sides before the move (for incremental updates)
+    Accumulator accumulator[2]; // NNUE accumulator states for both sides before the move (for incremental updates)
 };
 
 struct Board {
@@ -197,7 +198,7 @@ struct Board {
     int8_t mailbox[64];
     int16_t halfMoveClock;
 
-    int16_t accumulator[2][256];
+    Accumulator accumulator[2];
 
     Board();
     void reset();

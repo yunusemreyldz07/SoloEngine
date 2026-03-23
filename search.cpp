@@ -22,6 +22,7 @@ std::atomic<long long> nodeCount{0};
 std::atomic<long long> start_time_ms{0};
 std::atomic<long long> soft_time_limit_ms{0};
 std::atomic<long long> hard_time_limit_ms{0};
+std::atomic<long long> soft_node_limit{-1};
 std::atomic<bool> time_limited{false};
 std::atomic<int> seldepth{0};
 
@@ -78,6 +79,17 @@ inline bool soft_limit_reached() {
     long long elapsed = now_ms() - start_time_ms.load(std::memory_order_relaxed);
     return elapsed >= soft_time_limit_ms.load(std::memory_order_relaxed);
 }
+
+inline bool soft_node_limit_reached() {
+    long long limit = soft_node_limit.load(std::memory_order_relaxed);
+    if (limit <= 0) return false;
+    return nodeCount.load(std::memory_order_relaxed) >= limit;
+}
+
+} // namespace
+
+void setSoftNodeLimit(long long nodes) {
+    soft_node_limit.store(nodes, std::memory_order_relaxed);
 }
 
 int LMR_TABLE[256][256];
@@ -100,19 +112,6 @@ void updateKillers(int ply, Move move) {
     if (killerMoves[ply][0] == move) return;
     killerMoves[ply][1] = killerMoves[ply][0];
     killerMoves[ply][0] = move;
-}
-
-void verify_accumulator(const Board& board) {
-    int16_t test_white[256], test_black[256];
-    RefreshAccumulator(board, test_white, test_black); // Sıfırdan temiz hesapla
-    
-    for(int i = 0; i < 256; i++) {
-        if(board.accumulator[0][i] != test_white[i] || board.accumulator[1][i] != test_black[i]) {
-            std::cout << "ALARM: Accumulator Incremental Update HATASI!" << std::endl;
-            // board.printBoard() vs. yazdırıp hangi hamlede koptuğunu bulabilirsin
-            break;
-        }
-    }
 }
 
 void initLMRtables(){
@@ -228,7 +227,6 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply, SearchStack*
         if (ttEntry.flag == TT_ALPHA && ttScore >= beta) return ttScore;
     }
 
-    verify_accumulator(board);
     int stand_pat = evaluate_board(board);
 
     if (stand_pat >= beta) {
@@ -307,7 +305,6 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     bool firstMove = true; // for PVS
     int16_t eval = 0; 
 
-    verify_accumulator(board);
     const int16_t staticEval = evaluate_board(board);
     ss->staticEval = staticEval;
     ss->cutOffCount = 0;  // Initialize cutoff counter for this node
@@ -583,8 +580,9 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     return bestEval;
 }
 
-Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<uint64_t>& positionHistory, int ply) {
+Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<uint64_t>& positionHistory, int ply, bool silent, int16_t& outScore) {
     int16_t score = 0;
+    outScore = 0;
 
     SearchStack ss[MAX_PLY + 8] = {};
 
@@ -678,25 +676,34 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
         if (elapsedMs < 0) elapsedMs = 0;
         long long nodes = getNodeCounter();
         long long nps = (elapsedMs > 0) ? (nodes * 1000 / elapsedMs) : (nodes * 1000);
+        
+        
+        if (!silent) {
+            std::cout << "info depth " << iterativeDepth
+                      << " seldepth " << getSeldepth()
+                      << " hashfull " << hash_full()
+                      << " time " << elapsedMs
+                      << " nps " << nps
+                      << " score cp " << score
+                      << " pv ";
 
-        std::cout << "info depth " << iterativeDepth
-                  << " seldepth " << getSeldepth()
-                  << " hashfull " << hash_full()
-                  << " time " << elapsedMs
-                  << " nps " << nps
-                  << " score cp " << score
-                  << " pv ";
-        for (Move m : pvLine) {
-            std::cout << move_to_uci(m) << " ";
+            for (Move m : pvLine) {
+                std::cout << move_to_uci(m) << " ";
+            }
+            std::cout << std::endl;
         }
-        std::cout << std::endl;
 
         if (soft_limit_reached()) {
             stop_search.store(true, std::memory_order_relaxed);
             break;
         }
+
+        if (soft_node_limit_reached()) {
+            stop_search.store(true, std::memory_order_relaxed);
+            break;
+        }
     }
 
+    outScore = score;
     return bestMoveSoFar;
 }
-

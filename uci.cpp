@@ -4,6 +4,7 @@
 #include "search.h"
 #include "evaluation.h"
 #include "history.h"
+#include "datagen.h"
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -32,13 +33,15 @@ struct SearchLimit {
 
 void generate_dataset() {
     std::string input_file = "bullet_ready.txt";
-    std::string output_file = "bullet_scored.txt";
+    std::string output_file = "bullet_scored_search.txt";
 
     std::ifstream fin(input_file);
     std::ofstream fout(output_file);
     std::string line;
     Board board;
     int count = 0;
+
+    std::cout << "Starting search..." << std::endl;
 
     while (std::getline(fin, line)) {
         size_t first_pipe = line.find('|');
@@ -49,7 +52,8 @@ void generate_dataset() {
             std::string result = line.substr(second_pipe + 2); 
             
             board.loadFEN(fen);
-            int score = evaluate_classical(board);
+            
+            int score = evaluate_classical(board); 
             
             if (board.stm == BLACK) {
                 score = -score; 
@@ -58,12 +62,12 @@ void generate_dataset() {
             fout << fen << " | " << score << " | " << result << "\n";
             
             count++;
-            if (count % 500000 == 0) {
-                std::cout << count << " position was scored..." << std::endl;
+            if (count % 10000 == 0) {
+                std::cout << count << " positions evaluated with deep search..." << std::endl;
             }
         }
     }
-    std::cout << "Done. Total: " << count << " position is scored." << std::endl;
+    std::cout << "Done! Total: " << count << " positions scored." << std::endl;
 }
 
 std::string move_to_uci(const Move m) {
@@ -129,7 +133,8 @@ void bench() {
 
         resetNodeCounter();
         auto startTime = std::chrono::steady_clock::now();
-        Move best = getBestMove(board, benchDepth);
+        int16_t score = 0;
+        Move best = getBestMove(board, benchDepth, -1, {}, 0, false, score);
         auto endTime = std::chrono::steady_clock::now();
 
         long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
@@ -172,6 +177,36 @@ static uint64_t perft(Board& board, int depth) {
     return nodes;
 }
 
+void handle_genfens(const std::string& line) {
+    uint64_t games   = 0;      // 0 = unlimited
+    int      threads = 1;
+    int      nodes   = 5000;   // 5k soft nodes
+    bool     use_book = false;
+    uint64_t seed    = 42;
+
+    std::stringstream ss(line);
+    std::string token;
+    ss >> token; // consume "genfens"
+
+    while (ss >> token) {
+        auto eq = token.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = token.substr(0, eq);
+        std::string val = token.substr(eq + 1);
+
+        if      (key == "games")   games   = std::stoull(val);
+        else if (key == "threads") threads = std::stoi(val);
+        else if (key == "nodes")   nodes   = std::stoi(val);
+        else if (key == "seed")    seed    = std::stoull(val);
+        else if (key == "book") {
+            // book=<filename> if a file is provided, enable book usage
+            use_book = !val.empty() && val != "false" && val != "0";
+        }
+    }
+
+    start_datagen(threads, games, nodes, use_book, seed);
+}
+
 int handle_uci_commands(int argc, char* argv[]){
     std::cout.setf(std::ios::unitbuf);
 
@@ -181,6 +216,17 @@ int handle_uci_commands(int argc, char* argv[]){
     }
     else if (argc > 1 && std::string(argv[1]) == "--version") {
         std::cout << "Solo version " << VERSION << std::endl;
+        return 0;
+    }
+
+    // ./Solo genfens games=10000 threads=4 nodes=5000 seed=123
+    else if (argc > 1 && std::string(argv[1]) == "genfens") {
+        std::string full_line = "genfens";
+        for (int i = 2; i < argc; ++i) {
+            full_line += " ";
+            full_line += argv[i];
+        }
+        handle_genfens(full_line);
         return 0;
     }
 
@@ -225,6 +271,14 @@ int handle_uci_commands(int argc, char* argv[]){
         if (line == "generatedata") {
             generate_dataset();
         }
+
+        // for OpenBench datagen
+        if (line.rfind("genfens", 0) == 0) {
+            stop_and_join_search();
+            handle_genfens(line);
+            continue;
+        }
+
         if (line == "uci") {
             std::cout << "id name Solo " << VERSION << std::endl;
             std::cout << "id author Yunus Emre" << std::endl;
@@ -381,7 +435,8 @@ int handle_uci_commands(int argc, char* argv[]){
             
             // Get the best move within the specified limits and current position history for repetition detection.
             searchThread = std::thread([&board, &gameHistory, depthLimit = limits.depthLimit, timeToThink = limits.timeToThink, &searchRunning]() {
-                Move best = getBestMove(board, depthLimit, timeToThink, gameHistory);
+                int16_t score = 0;
+                Move best = getBestMove(board, depthLimit, timeToThink, gameHistory, 0, false, score);
 
                 // If no legal move was found (mate/stalemate), output UCI null move.
                 if (best == 0) {

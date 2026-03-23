@@ -17,6 +17,8 @@ int main(int argc, char* argv[]) {
     std::cout.setf(std::ios::unitbuf); // Disable output buffering
     init_all();
     initLMRtables();
-    load_nnue();
+    if (USE_NNUE) {
+        load_nnue();
+    }
     handle_uci_commands(argc, argv);
 }

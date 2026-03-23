@@ -433,6 +433,7 @@ int evaluate_classical(const Board& board) {
 }
 
 int evaluate_board(const Board& board) {
-    return evaluate_nnue(board.stm, board.accumulator[0], board.accumulator[1]);
+    // return evaluate_nnue(board.accumulator[0], board.accumulator[1], board.stm);
+    return evaluate_classical(board);
 }
 
