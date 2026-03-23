@@ -15,7 +15,7 @@
 #include <fstream>
 
 
-#define VERSION "1.6.0"
+#define VERSION "2.0.0"
 
 TranspositionTable ttTable;
 
@@ -242,6 +242,7 @@ int handle_uci_commands(int argc, char* argv[]){
             std::cout << "id author Yunus Emre" << std::endl;
             std::cout << "option name Hash type spin default 128 min 1 max 2048" << std::endl;
             std::cout << "option name Threads type spin default 1 min 1 max 8" << std::endl;
+            std::cout << "option name Use_NNUE type check default true" << std::endl;
             std::cout << "uciok" << std::endl;
         }
         
@@ -278,6 +279,11 @@ int handle_uci_commands(int argc, char* argv[]){
                 int mb = std::max(1, std::stoi(value));
                 ttTable.resize(mb);
                 ttTable.clear();
+            } else if (name == "Use_NNUE") {
+                USE_NNUE = (value == "true");
+                if (USE_NNUE) {
+                    RefreshAccumulator(board, &board.accumulator[0], &board.accumulator[1]);
+                }
             }
 
         }

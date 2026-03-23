@@ -6,7 +6,7 @@
 
 struct Board;
 
-inline constexpr bool USE_NNUE = false;
+inline bool USE_NNUE = true;
 
 inline constexpr int NNUE_INPUT_SIZE = 768;
 inline constexpr int NNUE_HIDDEN_SIZE = 64;
