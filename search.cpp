@@ -295,6 +295,8 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply, SearchStack*
 int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, SearchStack* ss, std::vector<Move>& pvLine, std::vector<uint64_t>& positionHistory) {
     nodeCount++;
 
+    const bool rootNode = (ply == 0);
+
     updateSeldepth(ply);
 
     if (should_stop_search()) return 0;
@@ -379,7 +381,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     Move bestMove = 0;
 
     // Reverse Futility Pruning
-    if (!ss->singularMove && !inCheck && !pvNode && depth < 9 && beta < MATE_SCORE - 100){
+    if (!rootNode && !ss->singularMove && !inCheck && !pvNode && depth < 9 && beta < MATE_SCORE - 100){
 
         int margin = 80 * depth;
 
@@ -390,7 +392,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     }
 
     // Null Move Pruning
-    if (!ss->singularMove && !inCheck && depth >= 3 && !pvNode) {
+    if (!rootNode && !ss->singularMove && !inCheck && depth >= 3 && !pvNode) {
         const int prevEnPassant = board.enPassant;
         const uint64_t prevHash = board.hash;
 
@@ -465,7 +467,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
 
         
         // Futility Pruning (skip for killer moves)
-        if (!isKiller && depth < 3 && !inCheck && get_promotion_type(chosenMove) == -1 && is_quiet(chosenMove)) {
+        if (!rootNode && !isKiller && depth < 3 && !inCheck && get_promotion_type(chosenMove) == -1 && is_quiet(chosenMove)) {
             int futilityMargin = 100 + 60 * depth; // Margin increases with depth
             if (staticEval + futilityMargin < alpha) {
                 continue; // Skip this move, it's unlikely to raise the evaluation enough
@@ -475,7 +477,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
 
         int lmpCount = (3 * depth * depth) + 4;
         // Late Move Pruning (LMP) logic (skip for killer moves)
-        if (!pvNode && !isKiller &&
+        if (!rootNode && !pvNode && !isKiller &&
             movesSearched >= lmpCount && is_quiet(chosenMove)) {
             continue; // skip this move (late move pruning)
         }
