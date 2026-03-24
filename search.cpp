@@ -326,6 +326,22 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
         depth++; // Check extension
     }
 
+    const bool improving = [&]() {
+        if (inCheck){
+            return false;
+        }
+
+        if (ply >= 2 && (ss - 2)->staticEval != -VALUE_INF){
+            return staticEval > (ss - 2)->staticEval;
+        } 
+        
+        if (ply >= 4 && (ss - 4)->staticEval != -VALUE_INF) {
+            return staticEval > (ss - 4)->staticEval;
+        }
+
+        return true;
+    }();
+
     int16_t originalAlpha = alpha;
     uint64_t hashKey = board.hash; 
     TTEntry& ttEntry = ttTable.getEntry(hashKey);
@@ -383,7 +399,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     // Reverse Futility Pruning
     if (!rootNode && !ss->singularMove && !inCheck && !pvNode && depth < 9 && beta < MATE_SCORE - 100){
 
-        int margin = 80 * depth;
+        int margin = 80 * (depth - improving);
 
         if (staticEval - margin >= beta) {
             // I am so far ahead that even if I reduce my score by the margin, I am still above beta. No need to search this node.
