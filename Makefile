@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-EXE = SoloEngine
-=======
 .PHONY: build default windows linux mac android all clean mac-clean linux-clean windows-clean android-clean objs distclean list debug debug-windows debug-linux debug-mac debug-android
 
 EXE := Solo
@@ -12,14 +9,9 @@ SOURCES := main.cpp \
            search.cpp \
            evaluation.cpp \
            bitboard.cpp \
-<<<<<<< HEAD
-		   history.cpp 
->>>>>>> b15a78f (Fixed code structure and added a new file 'history.cpp' for history/killer move actions.)
-=======
 		   history.cpp \
 		   nnue.cpp \
 		   datagen.cpp
->>>>>>> 0868a55 (NNUE was added and implemented successfully. (#92))
 
 ifeq ($(OS),Windows_NT)
     DETECTED_OS := windows
@@ -46,11 +38,6 @@ else
 	$(MAKE) $(DETECTED_OS)
 endif
 
-<<<<<<< HEAD
-CXX = g++
-
-CXXFLAGS = -Ofast -march=native -flto -DNDEBUG -funroll-loops -fno-stack-protector -fomit-frame-pointer -std=c++17 -s
-=======
 default: build
 
 EXEEXT ?=
@@ -146,7 +133,6 @@ debug-android: CXX ?= $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/$(ANDROID_HOS
 debug-android: ASAN_ARCH := -march=armv8-a
 debug-android: LINKER := -lm -static-libstdc++
 debug-android: check-android-ndk asan
->>>>>>> b15a78f (Fixed code structure and added a new file 'history.cpp' for history/killer move actions.)
 
 all:
 	@echo "Building for all platforms..."
@@ -170,10 +156,6 @@ windows-clean:
 	@rm -f $(EXE).exe
 	@echo "Removed $(EXE).exe"
 
-<<<<<<< HEAD
-unknown_os:
-	@:
-=======
 android-clean:
 	@rm -f $(EXE) $(EXE)_asan
 	@echo "Removed Android binaries ($(EXE) $(EXE)_asan)"
@@ -192,4 +174,3 @@ list:
 	@echo "  $(EXE).exe"
 	@echo "  $(EXE) $(EXE)_asan"
 	@echo "Use: make clean"
->>>>>>> b15a78f (Fixed code structure and added a new file 'history.cpp' for history/killer move actions.)
