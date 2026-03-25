@@ -475,6 +475,8 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
 
         }
 
+        int histScore = get_history_score(board.stm, move_from(chosenMove), move_to(chosenMove));
+
         int lmpCount = (3 * depth * depth) + 4;
         // Late Move Pruning (LMP) logic (skip for killer moves)
         if (!rootNode && !pvNode && !isKiller &&
@@ -505,6 +507,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
                 if (isKiller) reduction--; // Reduce killer moves less
+                reduction -= histScore / 8192; // Reduce moves with bad history more
                 if (reduction < 0) reduction = 0;
                 if (reduction > depth - 1) reduction = depth - 1;
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we dont search negative depth
