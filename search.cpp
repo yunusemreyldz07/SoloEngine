@@ -454,7 +454,8 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
                 ttSeScore += ply;
             }
 
-            int singularBeta = ttSeScore - depth;
+            int singularMargin = (depth * 5 + (!pvNode ? 10 : 0)) / 8;
+            int singularBeta = ttSeScore - singularMargin;
             const int singularDepth = (depth - 1) / 2;
             std::vector<Move> tmpPv;
             ss->singularMove = chosenMove;
