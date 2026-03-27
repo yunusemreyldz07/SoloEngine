@@ -394,7 +394,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     }
 
     // Null Move Pruning
-    if (!rootNode && !ss->singularMove && !inCheck && depth >= 3 && !pvNode) {
+    if (!rootNode && !ss->singularMove && !inCheck && depth >= 3 && !pvNode && staticEval >= beta) {
         const int prevEnPassant = board.enPassant;
         const uint64_t prevHash = board.hash;
 
