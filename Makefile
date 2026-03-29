@@ -81,7 +81,7 @@ windows-bmi2:
 	$(MAKE) build-windows EXEEXT=-windows-bmi2.exe CXX="$(WIN_CXX)" CXXFLAGS="$(BASE_CXXFLAGS) $(ARCH_BMI2)" LINKER="$(WIN_LINKER)" STRIP="$(WIN_STRIP)"
 
 windows-avx2:
-	$(MAKE) build-windows EXEEXT=-windows-avx2.exe CXX="$(WIN_CXX)" CXXFLAGS="$(BASE_CXXFLAGS) $(ARCH_AVX2)" LINKER="$(WIN_LINKER)" STRIP="$(WIN_STRIP)"
+	$(MAKE) build-windows EXEEXT=.exe CXX="$(WIN_CXX)" CXXFLAGS="$(BASE_CXXFLAGS) $(ARCH_AVX2)" LINKER="$(WIN_LINKER)" STRIP="$(WIN_STRIP)"
 
 build-windows: $(OUT)
 
@@ -118,7 +118,7 @@ linux-bmi2:
 	$(MAKE) build-linux EXEEXT=-linux-bmi2 CXX="$(LINUX_CXX)" CXXFLAGS="$(BASE_CXXFLAGS) $(ARCH_BMI2)" LINKER="$(LINUX_LINKER)" STRIP="$(LINUX_STRIP)"
 
 linux-avx2:
-	$(MAKE) build-linux EXEEXT=-linux-avx2 CXX="$(LINUX_CXX)" CXXFLAGS="$(BASE_CXXFLAGS) $(ARCH_AVX2)" LINKER="$(LINUX_LINKER)" STRIP="$(LINUX_STRIP)"
+	$(MAKE) build-linux EXEEXT= CXX="$(LINUX_CXX)" CXXFLAGS="$(BASE_CXXFLAGS) $(ARCH_AVX2)" LINKER="$(LINUX_LINKER)" STRIP="$(LINUX_STRIP)"
 
 build-linux: $(OUT)
 
