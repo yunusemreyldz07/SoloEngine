@@ -390,7 +390,7 @@ int handle_uci_commands(int argc, char* argv[]){
                 if (limits.timeToThink < 10) limits.timeToThink = 10;
                 limits.depthLimit = 128;
             } else if (limits.depthLimit == -1) {
-                limits.depthLimit = 8;
+                limits.depthLimit = 128;
             }
 
             // Run search on a worker thread so we can still react to `stop` / `isready`.
