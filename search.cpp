@@ -292,7 +292,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply, SearchStack*
     return bestEval;
 }
 
-int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, SearchStack* ss, std::vector<Move>& pvLine, std::vector<uint64_t>& positionHistory, bool cutNode = false) {
+int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, SearchStack* ss, std::vector<Move>& pvLine, std::vector<uint64_t>& positionHistory, bool cutNode) {
     nodeCount++;
 
     const bool rootNode = (ply == 0);
@@ -412,7 +412,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
 
         int R = 3 + (depth / 3);
         std::vector<Move> nullPv;
-        int16_t nullScore = -negamax(board, depth - R, -beta, -beta + 1, ply + 1, ss + 1, nullPv, positionHistory, true);
+        int16_t nullScore = -negamax(board, depth - R, -beta, -beta + 1, ply + 1, ss + 1, nullPv, positionHistory, !cutNode);
         
         positionHistory.pop_back();
 
@@ -507,9 +507,6 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
                 if (isKiller) reduction--; // Reduce killer moves less
-
-                if (cutNode) reduction += 1;
-
                 if (reduction < 0) reduction = 0;
                 if (reduction > depth - 1) reduction = depth - 1;
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we dont search negative depth
@@ -523,7 +520,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
             if (reduction > 0 && eval > alpha) {
                 // if the eval suggest a better move we research
                 childPv.clear();
-                eval = -negamax(board, fullDepth, -alpha - 1, -alpha, ply + 1, ss + 1, childPv, positionHistory, !cutNode); // Re-search with no reduction
+                eval = -negamax(board, fullDepth, -alpha - 1, -alpha, ply + 1, ss + 1, childPv, positionHistory, false); // Re-search with no reduction
             }
             if (eval > alpha && eval < beta) {
                 // if we fail high search again with no reduction, and window
@@ -650,7 +647,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
         while (true) {
             pvLine.clear();
-            int16_t searchScore = negamax(board, iterativeDepth, alpha, beta, ply, ss, pvLine, searchHistory);
+            int16_t searchScore = negamax(board, iterativeDepth, alpha, beta, ply, ss, pvLine, searchHistory, false);
 
             if (should_stop_search()) {
                 break;
