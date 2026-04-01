@@ -292,7 +292,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply, SearchStack*
     return bestEval;
 }
 
-int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, SearchStack* ss, std::vector<Move>& pvLine, std::vector<uint64_t>& positionHistory) {
+int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, SearchStack* ss, std::vector<Move>& pvLine, std::vector<uint64_t>& positionHistory, bool cutNode = false) {
     nodeCount++;
 
     const bool rootNode = (ply == 0);
@@ -412,7 +412,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
 
         int R = 3 + (depth / 3);
         std::vector<Move> nullPv;
-        int16_t nullScore = -negamax(board, depth - R, -beta, -beta + 1, ply + 1, ss + 1, nullPv, positionHistory);
+        int16_t nullScore = -negamax(board, depth - R, -beta, -beta + 1, ply + 1, ss + 1, nullPv, positionHistory, !cutNode);
         
         positionHistory.pop_back();
 
@@ -458,7 +458,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
             const int singularDepth = (depth - 1) / 2;
             std::vector<Move> tmpPv;
             ss->singularMove = chosenMove;
-            int16_t s = negamax(board, singularDepth, singularBeta - 1, singularBeta, ply, ss, tmpPv, positionHistory);
+            int16_t s = negamax(board, singularDepth, singularBeta - 1, singularBeta, ply, ss, tmpPv, positionHistory, cutNode);
             ss->singularMove = 0;
 
             if (s < singularBeta) {
@@ -496,7 +496,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
         positionHistory.push_back(board.hash); // Add new position to history for repetition detection
         const int fullDepth = depth - 1 + extension;
         if (firstMove){
-            eval = -negamax(board, fullDepth, -beta, -alpha, ply + 1, ss + 1, childPv, positionHistory);
+            eval = -negamax(board, fullDepth, -beta, -alpha, ply + 1, ss + 1, childPv, positionHistory, false);
             firstMove = false;
         } else {
 
@@ -507,6 +507,9 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
                 if (isKiller) reduction--; // Reduce killer moves less
+
+                if (cutNode) reduction += 1;
+
                 if (reduction < 0) reduction = 0;
                 if (reduction > depth - 1) reduction = depth - 1;
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we dont search negative depth
@@ -515,17 +518,17 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
             int lmrDepth = std::max(0, fullDepth - reduction);
 
 
-            eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, ss + 1, childPv, positionHistory); // PVS null window search
+            eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, ss + 1, childPv, positionHistory, true); // PVS null window search
             
             if (reduction > 0 && eval > alpha) {
                 // if the eval suggest a better move we research
                 childPv.clear();
-                eval = -negamax(board, fullDepth, -alpha - 1, -alpha, ply + 1, ss + 1, childPv, positionHistory); // Re-search with no reduction
+                eval = -negamax(board, fullDepth, -alpha - 1, -alpha, ply + 1, ss + 1, childPv, positionHistory, !cutNode); // Re-search with no reduction
             }
             if (eval > alpha && eval < beta) {
                 // if we fail high search again with no reduction, and window
                 childPv.clear();
-                eval = -negamax(board, fullDepth, -beta, -alpha, ply + 1, ss + 1, childPv, positionHistory); // Re-search if we failed high
+                eval = -negamax(board, fullDepth, -beta, -alpha, ply + 1, ss + 1, childPv, positionHistory, false); // Re-search if we failed high
             }
         }
         if (!positionHistory.empty()) positionHistory.pop_back();
