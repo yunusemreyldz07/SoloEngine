@@ -507,6 +507,9 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
                 int lmrTableMovesSearched = std::min(movesSearched, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
                 if (isKiller) reduction--; // Reduce killer moves less
+
+                if (cutNode) reduction += 1;
+
                 if (reduction < 0) reduction = 0;
                 if (reduction > depth - 1) reduction = depth - 1;
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we dont search negative depth
