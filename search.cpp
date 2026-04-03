@@ -458,11 +458,16 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
             const int singularDepth = (depth - 1) / 2;
             std::vector<Move> tmpPv;
             ss->singularMove = chosenMove;
-            int16_t s = negamax(board, singularDepth, singularBeta - 1, singularBeta, ply, ss, tmpPv, positionHistory);
+            int16_t singularScore = negamax(board, singularDepth, singularBeta - 1, singularBeta, ply, ss, tmpPv, positionHistory);
             ss->singularMove = 0;
 
-            if (s < singularBeta) {
+            if (singularScore < singularBeta) {
                 extension = 1;
+            }
+
+            // Double ext
+            if (!pvNode && singularScore <= singularBeta - 40){
+                extension = 2;
             }
 
             // Multicut
