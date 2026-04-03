@@ -495,6 +495,17 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
             continue;
         }
 
+        // History Pruning
+        if (!rootNode && !pvNode && !inCheck && is_quiet(chosenMove) && !isKiller && movesSearched > 0 && depth <= 4) {
+            int from = move_from(chosenMove);
+            int to = move_to(chosenMove);
+            int piece = board.mailbox[from] - 1;
+            int histScore = get_history_score(board.stm, from, to) + get_conhist_score(piece, to, ply);
+            if (histScore < -1024 * depth) {
+                continue;
+            }
+        }
+
         moveStack[ply] = {board.mailbox[move_from(chosenMove)] - 1, move_to(chosenMove)};
         board.makeMove(chosenMove);
 
