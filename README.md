@@ -1,7 +1,7 @@
 # Solo - UCI Chess Engine
-**Version 2.0.0**
+**Version 2.0.1**
 
-A bitboard-based chess engine with advanced search techniques and evaluation.
+A bitboard-based aggressive chess engine with advanced search techniques and evaluation.
 
 ## Features
 
@@ -25,6 +25,8 @@ A bitboard-based chess engine with advanced search techniques and evaluation.
   - Soft/Hard time management
   - Transposition Table
   - Singular Extensions (SE)
+  - Multicut
+  - History Pruning
 
 - **Move Ordering**:
   - TT move first
@@ -34,19 +36,14 @@ A bitboard-based chess engine with advanced search techniques and evaluation.
   - Bad captures ordered last
 
 - **Evaluation**:
-  - NNUE net trained with 76M self-play generated data.
+  - 256HL NNUE net trained with 500M self-play generated data. Fine-tuned with 2M filtered aggressive positions. Estimated EAS score is 200k.
 
 ## Building
 
-The Makefile automatically detects your operating system.
+The Makefile automatically detects your operating system and compiles with the highest optimizations available for your processor architecture.
 ```bash
-# Automatic detection (recommended)
+# Simply run make
 make
-
-# Or specify your OS explicitly
-make windows
-make linux
-make mac
 
 # Clean build artifacts
 make clean
@@ -59,13 +56,13 @@ make clean
 If you don't have Make:
 
 # Windows (MinGW/MSYS2)
-```g++ -O3 -mavx2 -std=c++23 -ffast-math -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp nnue.cpp datagen.cpp -o Solo.exe -static -static-libgcc -static-libstdc++```
+```g++ -O3 -flto -march=native -std=c++23 -ffast-math -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp nnue.cpp datagen.cpp -o Solo.exe -static -static-libgcc -static-libstdc++```
 
 # Linux
-```g++ -O3 -std=c++23 -ffast-math -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp nnue.cpp datagen.cpp -o Solo -lm```
+```g++ -O3 -flto -march=native -std=c++23 -ffast-math -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp nnue.cpp datagen.cpp -o Solo -lm```
 
 # macOS (Apple Silicon)
-```clang++ -O3 -std=c++23 -ffast-math -march=armv8-a -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp nnue.cpp datagen.cpp -o Solo -lm```
+```clang++ -O3 -flto -march=native -std=c++23 -ffast-math -pthread main.cpp board.cpp movegen.cpp search.cpp evaluation.cpp bitboard.cpp history.cpp nnue.cpp datagen.cpp -o Solo -lm```
 
 ## Usage
 
@@ -96,8 +93,8 @@ Runs a built-in benchmark on 12 positions at depth 8.
 
 ## Strength
 
-- **CCRL ELO**: [~2700+](https://computerchess.org.uk/ccrl/4040/cgi/engine_details.cgi?print=Details&each_game=0&eng=Solo%201.6.0%2064-bit#Solo_1_6_0_64-bit)
-- **Lichess ELO**: [~2400](https://lichess.org/@/SoloBot)
+- **CCRL ELO**: [~2900+](https://computerchess.org.uk/ccrl/4040/cgi/engine_details.cgi?print=Details&each_game=0&eng=Solo%201.6.0%2064-bit#Solo_1_6_0_64-bit)
+- **Lichess ELO**: [~2500](https://lichess.org/@/SoloBot)
 
 ## Roadmap
 
@@ -124,8 +121,8 @@ Runs a built-in benchmark on 12 positions at depth 8.
 
 - **Author**: xsolod3v
 - **Inspired by**: Patricia engine by Adam Kulju, Potential Engine by ProgramciDusunur
-- **Evaluation Base**: PeSTO piece-square tables by Ronald Friederich (further tuned)
-- **Resources**: Chess Programming Wiki, Potential source code, Ethereal source code
+- **Evaluation Base**: For HCE: PeSTO piece-square tables by Ronald Friederich (further tuned) For NNUE: 500M self-play generated data.
+- **Resources**: Chess Programming Wiki, Potential source code, Ethereal source code, Patricia wiki
 
 ## License
 

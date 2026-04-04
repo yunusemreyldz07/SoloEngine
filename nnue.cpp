@@ -26,6 +26,67 @@ int32_t screlu(int16_t x) {
     return y * y;
 }
 
+// Optimization additions. 
+// Instead of running a lot of loops while updating the accumulator, 
+// we run a single loop that updates both accumulators at once and do add/sub in one loop.
+
+// Quiet move or non-capture promotion 
+// 1 add + 1 sub per perspective
+void applyQuietBoth(Accumulator acc[2],
+    int wAdd, int wSub,
+    int bAdd, int bSub)
+{
+    const int addOffW = wAdd * HIDDEN_SIZE;
+    const int subOffW = wSub * HIDDEN_SIZE;
+    const int addOffB = bAdd * HIDDEN_SIZE;
+    const int subOffB = bSub * HIDDEN_SIZE;
+    for (int i = 0; i < HIDDEN_SIZE; i++) {
+        acc[0][i] += hiddenWeight[addOffW + i] - hiddenWeight[subOffW + i];
+        acc[1][i] += hiddenWeight[addOffB + i] - hiddenWeight[subOffB + i];
+    }
+}
+
+// Capture
+// 1 add + 2 subs per perspective (moved piece arrives, moved piece leaves + captured piece removed)
+void applyCaptureBoth(Accumulator acc[2],
+    int wAdd, int wSub1, int wSub2,
+    int bAdd, int bSub1, int bSub2)
+{
+    const int addOffW  = wAdd  * HIDDEN_SIZE;
+    const int sub1OffW = wSub1 * HIDDEN_SIZE;
+    const int sub2OffW = wSub2 * HIDDEN_SIZE;
+    const int addOffB  = bAdd  * HIDDEN_SIZE;
+    const int sub1OffB = bSub1 * HIDDEN_SIZE;
+    const int sub2OffB = bSub2 * HIDDEN_SIZE;
+    for (int i = 0; i < HIDDEN_SIZE; i++) {
+        acc[0][i] += hiddenWeight[addOffW + i] - hiddenWeight[sub1OffW + i] - hiddenWeight[sub2OffW + i];
+        acc[1][i] += hiddenWeight[addOffB + i] - hiddenWeight[sub1OffB + i] - hiddenWeight[sub2OffB + i];
+    }
+}
+
+// Castling
+// 2 adds + 2 subs per perspective (king + rook each move)
+void applyCastlingBoth(Accumulator acc[2],
+    int wAdd1, int wAdd2, int wSub1, int wSub2,
+    int bAdd1, int bAdd2, int bSub1, int bSub2)
+{
+    const int add1OffW = wAdd1 * HIDDEN_SIZE;
+    const int add2OffW = wAdd2 * HIDDEN_SIZE;
+    const int sub1OffW = wSub1 * HIDDEN_SIZE;
+    const int sub2OffW = wSub2 * HIDDEN_SIZE;
+    const int add1OffB = bAdd1 * HIDDEN_SIZE;
+    const int add2OffB = bAdd2 * HIDDEN_SIZE;
+    const int sub1OffB = bSub1 * HIDDEN_SIZE;
+    const int sub2OffB = bSub2 * HIDDEN_SIZE;
+    for (int i = 0; i < HIDDEN_SIZE; i++) {
+        acc[0][i] += hiddenWeight[add1OffW + i] + hiddenWeight[add2OffW + i]
+                   - hiddenWeight[sub1OffW + i] - hiddenWeight[sub2OffW + i];
+        acc[1][i] += hiddenWeight[add1OffB + i] + hiddenWeight[add2OffB + i]
+                   - hiddenWeight[sub1OffB + i] - hiddenWeight[sub2OffB + i];
+    }
+}
+
+// Legacy single accumulator update (kept for RefreshAccumulator)
 void updateAccumulator(Accumulator& acc, int featureIdx, bool isAdd) { 
     int offset = featureIdx * HIDDEN_SIZE;
     
@@ -38,13 +99,6 @@ void updateAccumulator(Accumulator& acc, int featureIdx, bool isAdd) {
             acc[i] -= hiddenWeight[offset + i];
         }
     }
-
-    /*
-    hiddenWeight is actually a 2D array. 
-    But we store it as a 1D array for cache efficiency. 
-    The index in the 1D array is calculated as featureIdx * HIDDEN_SIZE + i, where featureIdx is the index of the input feature (0 to 767) and i is the index of the hidden layer neuron (0 to 1023). 
-    This way, we can efficiently access the weights for each feature and hidden neuron without needing to do complex pointer arithmetic or multi-dimensional indexing.
-    */
 }
 
 int makeFeatureIndex(int piece_type, int piece_color, int square, int perspective) {
