@@ -26,4 +26,12 @@ int evaluate_nnue(const Accumulator& acc_white, const Accumulator& acc_black, in
 void load_nnue();
 void RefreshAccumulator(const Board& board, Accumulator* acc_white, Accumulator* acc_black);
 
+inline void featureIndices(int piece, int sq, int& w_idx, int& b_idx) {
+    w_idx = 64 * (piece - 1) + sq;
+    b_idx = 64 * ((piece - 1 + 6) % 12) + (sq ^ 56);
+}
+void applyQuietBoth(Accumulator acc[2], int wAdd, int wSub, int bAdd, int bSub);
+void applyCaptureBoth(Accumulator acc[2], int wAdd, int wSub1, int wSub2, int bAdd, int bSub1, int bSub2);
+void applyCastlingBoth(Accumulator acc[2], int wAdd1, int wAdd2, int wSub1, int wSub2, int bAdd1, int bAdd2, int bSub1, int bSub2);
+
 #endif

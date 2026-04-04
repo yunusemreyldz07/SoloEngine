@@ -149,32 +149,70 @@ void Board::makeMove(Move move) {
     } else {
         halfMoveClock++;
     }
-    
     if (USE_NNUE) {
-        // Remove the piece from its original square
-        int w_idx_from = 64 * (movingPiece - 1) + fromSq;
-        int b_idx_from = 64 * ((movingPiece - 1 + 6) % 12) + (fromSq ^ 56);
-        updateAccumulator(this->accumulator[0], w_idx_from, false);
-        updateAccumulator(this->accumulator[1], b_idx_from, false);
+        // Feature indices for moving piece (from → to)
+        int wFrom, bFrom, wTo, bTo;
+        featureIndices(movingPiece, fromSq, wFrom, bFrom);
+        featureIndices(movingPiece, toSq,   wTo,   bTo);
 
-        // Add the piece to its new square
-        int w_idx_to = 64 * (movingPiece - 1) + toSq;
-        int b_idx_to = 64 * ((movingPiece - 1 + 6) % 12) + (toSq ^ 56);
-        updateAccumulator(this->accumulator[0], w_idx_to, true);
-        updateAccumulator(this->accumulator[1], b_idx_to, true);
-    }
+        const bool isCastle = piece_type(movingPiece) == KING &&
+                              std::abs(sq_to_col(fromSq) - sq_to_col(toSq)) == 2;
 
-    if (st.capturedPiece != EMPTY) {
-        int cap_sq = toSq;
-        if (flags == FLAG_EN_PASSANT) {
-            cap_sq = (stm == WHITE) ? toSq - 8 : toSq + 8;
-        }
+        if (isCastle) {
+            // Castling
+            int rookFromSq, rookToSq;
+            if (sq_to_col(toSq) > sq_to_col(fromSq)) { // Kingside
+                rookFromSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) + 1);
+                rookToSq   = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) - 1);
+            } else { // Queenside
+                rookFromSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) - 2);
+                rookToSq   = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) + 1);
+            }
+            int rookPiece = make_piece(ROOK, piece_color(movingPiece));
+            int wRookFrom, bRookFrom, wRookTo, bRookTo;
+            featureIndices(rookPiece, rookFromSq, wRookFrom, bRookFrom);
+            featureIndices(rookPiece, rookToSq,   wRookTo,   bRookTo);
 
-        if (USE_NNUE) {
-            int w_idx_cap = 64 * (st.capturedPiece - 1) + cap_sq;
-            int b_idx_cap = 64 * ((st.capturedPiece - 1 + 6) % 12) + (cap_sq ^ 56);
-            updateAccumulator(this->accumulator[0], w_idx_cap, false);
-            updateAccumulator(this->accumulator[1], b_idx_cap, false);
+            // King arrives, Rook arrives, King leaves, Rook leaves
+            applyCastlingBoth(this->accumulator,
+                              wTo, wRookTo, wFrom, wRookFrom,
+                              bTo, bRookTo, bFrom, bRookFrom);
+        } else if (promo != -1) {
+            // Promotion
+            int placedPiece = make_piece(promo, piece_color(movingPiece));
+            int wPromoTo, bPromoTo;
+            featureIndices(placedPiece, toSq, wPromoTo, bPromoTo);
+
+            if (st.capturedPiece != EMPTY) {
+                // Promotion + capture
+                int wCap, bCap;
+                featureIndices(st.capturedPiece, toSq, wCap, bCap);
+                applyCaptureBoth(this->accumulator,
+                                 wPromoTo, wFrom, wCap,
+                                 bPromoTo, bFrom, bCap);
+            } else {
+                // Promotion without capture
+                applyQuietBoth(this->accumulator,
+                               wPromoTo, wFrom,
+                               bPromoTo, bFrom);
+            }
+        } else if (st.capturedPiece != EMPTY) {
+            // Capture (including en passant)
+            int cap_sq = toSq;
+            if (flags == FLAG_EN_PASSANT) {
+                cap_sq = (stm == WHITE) ? toSq - 8 : toSq + 8;
+            }
+            int wCap, bCap;
+            featureIndices(st.capturedPiece, cap_sq, wCap, bCap);
+
+            applyCaptureBoth(this->accumulator,
+                             wTo, wFrom, wCap,
+                             bTo, bFrom, bCap);
+        } else {
+            // Quiet move (includes double pawn push)
+            applyQuietBoth(this->accumulator,
+                           wTo, wFrom,
+                           bTo, bFrom);
         }
     }
 
@@ -220,18 +258,6 @@ void Board::makeMove(Move move) {
             int rookToSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) - 1);
             int rookPiece = make_piece(ROOK, piece_color(movingPiece));
 
-            if (USE_NNUE) {
-                int w_idx_rook_from = 64 * (rookPiece - 1) + rookFromSq;
-                int b_idx_rook_from = 64 * ((rookPiece - 1 + 6) % 12) + (rookFromSq ^ 56);
-                updateAccumulator(this->accumulator[0], w_idx_rook_from, false);
-                updateAccumulator(this->accumulator[1], b_idx_rook_from, false);
-
-                int w_idx_rook_to = 64 * (rookPiece - 1) + rookToSq;
-                int b_idx_rook_to = 64 * ((rookPiece - 1 + 6) % 12) + (rookToSq ^ 56);
-                updateAccumulator(this->accumulator[0], w_idx_rook_to, true);
-                updateAccumulator(this->accumulator[1], b_idx_rook_to, true);
-            }
-
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
             mailbox[rookToSq] = mailbox[rookFromSq];
@@ -242,18 +268,6 @@ void Board::makeMove(Move move) {
             int rookFromSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) - 2);
             int rookToSq = row_col_to_sq(sq_to_row(toSq), sq_to_col(toSq) + 1);
             int rookPiece = make_piece(ROOK, piece_color(movingPiece));
-
-            if (USE_NNUE) {
-                int w_idx_rook_from = 64 * (rookPiece - 1) + rookFromSq;
-                int b_idx_rook_from = 64 * ((rookPiece - 1 + 6) % 12) + (rookFromSq ^ 56);
-                updateAccumulator(this->accumulator[0], w_idx_rook_from, false);
-                updateAccumulator(this->accumulator[1], b_idx_rook_from, false);
-
-                int w_idx_rook_to = 64 * (rookPiece - 1) + rookToSq;
-                int b_idx_rook_to = 64 * ((rookPiece - 1 + 6) % 12) + (rookToSq ^ 56);
-                updateAccumulator(this->accumulator[0], w_idx_rook_to, true);
-                updateAccumulator(this->accumulator[1], b_idx_rook_to, true);
-            }
 
             bb_clear(*this, rookPiece, rookFromSq);
             bb_set(*this, rookPiece, rookToSq);
@@ -268,19 +282,6 @@ void Board::makeMove(Move move) {
     if (piece_type(movingPiece) == PAWN) {
         if (promo != -1) {
             placedPiece = make_piece(promo, piece_color(movingPiece));
-
-            if (USE_NNUE) {
-                int w_idx_pawn_to = 64 * (movingPiece - 1) + toSq;
-                int b_idx_pawn_to = 64 * ((movingPiece - 1 + 6) % 12) + (toSq ^ 56);
-                updateAccumulator(this->accumulator[0], w_idx_pawn_to, false);
-                updateAccumulator(this->accumulator[1], b_idx_pawn_to, false);
-
-                int w_idx_promoted_to = 64 * (placedPiece - 1) + toSq;
-                int b_idx_promoted_to = 64 * ((placedPiece - 1 + 6) % 12) + (toSq ^ 56);
-                updateAccumulator(this->accumulator[0], w_idx_promoted_to, true);
-                updateAccumulator(this->accumulator[1], b_idx_promoted_to, true);
-            }
-
             bb_clear(*this, movingPiece, toSq);
             bb_set(*this, placedPiece, toSq);
         }
