@@ -393,6 +393,11 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
         }
     }
 
+    // Razoring. if eval is far below alpha even the best capture, there's no point in searching. drop straight into qsearch.
+    if (!pvNode && !rootNode && depth <= 3 && staticEval + 300 + 60 * depth < alpha){
+        return qsearch(board, alpha, beta, ply, ss);
+    }
+
     // Null Move Pruning
     if (!rootNode && !ss->singularMove && !inCheck && depth >= 3 && !pvNode) {
         const int prevEnPassant = board.enPassant;
