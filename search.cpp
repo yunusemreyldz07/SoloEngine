@@ -509,7 +509,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
             int from = move_from(chosenMove);
             int to = move_to(chosenMove);
             int piece = board.mailbox[from] - 1;
-            int histScore = get_history_score(board.stm, from, to) + get_conhist_score(piece, to, ply);
+            int histScore = get_history_score(board.stm, from, to);
             if (histScore < -1024 * depth) {
                 continue;
             }
