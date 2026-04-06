@@ -505,7 +505,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
         }
 
         // History Pruning
-        if (!rootNode && !pvNode && !inCheck && is_quiet(chosenMove) && !isKiller && movesSearched > 0 && depth <= 4) {
+        if (!rootNode && !pvNode && !inCheck && is_quiet(chosenMove) && movesSearched > 0 && depth <= 4) {
             int from = move_from(chosenMove);
             int to = move_to(chosenMove);
             int piece = board.mailbox[from] - 1;
