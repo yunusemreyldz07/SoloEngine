@@ -7,7 +7,7 @@
 #include <algorithm>
 
 constexpr int INPUT_SIZE = 768;
-constexpr int HIDDEN_SIZE = 256;
+constexpr int HIDDEN_SIZE = 512;
 
 
 using Accumulator = std::array<int16_t, HIDDEN_SIZE>;
