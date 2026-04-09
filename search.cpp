@@ -329,11 +329,10 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     int16_t originalAlpha = alpha;
     uint64_t hashKey = board.hash; 
     TTEntry& ttEntry = ttTable.getEntry(hashKey);
-    Move ttMove = 0;
-    bool ttHit = false;
-    if (!ss->singularMove && ttEntry.hashKey == hashKey) {
-        ttMove = ttEntry.bestMove;
-        ttHit = true;
+    bool ttHit = (ttEntry.hashKey == hashKey);
+    Move ttMove = ttHit ? ttEntry.bestMove : 0;
+
+    if (!ss->singularMove && ttHit) {
         if (ttEntry.depth >= depth && ply > 0) {
             int16_t ttScore = ttEntry.score;
 
