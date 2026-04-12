@@ -594,7 +594,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
                 int captureBonus = std::min(10 + 200 * depth, 4096);
                 // Bonus for best capture
                 update_capture_history(movingPiece, move_to(chosenMove), capturedPieceType, captureBonus);
-                // Malus for all other captures searched at this node
+                // Malus for all other captures searched at this node, capturehistory
                 for (int i = 0; i < movesSearched; ++i) {
                     if (moves[i] == chosenMove) continue;
                     if (!is_capture(moves[i])) continue;
