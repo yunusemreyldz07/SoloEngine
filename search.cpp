@@ -438,11 +438,8 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
         }
     }
 
-    struct CaptureInfo { int piece; int to; int capturedType; };
     Move badQuiets[MAX_MOVES];
     int badQuietCount = 0;
-    CaptureInfo badCaptureInfos[MAX_MOVES];
-    int badCaptureCount = 0;
     for (int movesSearched = 0; movesSearched < moveCount; ++movesSearched) {
         if (should_stop_search()) {
             aborted = true;
@@ -595,13 +592,19 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
                 updateKillers(ply, chosenMove);
             } else if (is_capture(chosenMove) && capturedPieceType > 0) {
                 int captureBonus = std::min(10 + 200 * depth, 4096);
-                int captureMalus = -captureBonus;
                 // Bonus for best capture
                 update_capture_history(movingPiece, move_to(chosenMove), capturedPieceType, captureBonus);
-                // Malus for bad captures searched before this one
-                for (int i = 0; i < badCaptureCount; ++i) {
-                    auto [bcPiece, bcTo, bcCaptured] = badCaptureInfos[i];
-                    update_capture_history(bcPiece, bcTo, bcCaptured, captureMalus);
+                // Malus for all other captures searched at this node
+                for (int i = 0; i < movesSearched; ++i) {
+                    if (moves[i] == chosenMove) continue;
+                    if (!is_capture(moves[i])) continue;
+                    int mTo   = move_to(moves[i]);
+                    int mFrom = move_from(moves[i]);
+                    int mFlags = move_flags(moves[i]);
+                    int mCaptured = (mFlags == FLAG_EN_PASSANT) ? PAWN : piece_type(board.mailbox[mTo]);
+                    int mPiece   = board.mailbox[mFrom] - 1;
+                    if (mCaptured > 0)
+                        update_capture_history(mPiece, mTo, mCaptured, -captureBonus);
                 }
             }
             break; // Beta cutoff
@@ -610,10 +613,6 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
         if (is_quiet(chosenMove)) {
             if (badQuietCount < MAX_MOVES) {
                 badQuiets[badQuietCount++] = chosenMove;
-            }
-        } else if (is_capture(chosenMove) && capturedPieceType > 0) {
-            if (badCaptureCount < MAX_MOVES) {
-                badCaptureInfos[badCaptureCount++] = {movingPiece, move_to(chosenMove), capturedPieceType};
             }
         }
     }
