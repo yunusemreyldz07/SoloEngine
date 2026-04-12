@@ -11,12 +11,15 @@ struct MoveInfo {
 // History table: [color][fromSquare][toSquare]
 extern int historyTable[2][64][64];
 extern int conhistTable[12][64][12][64]; // [prevPiece][prevTo][currPiece][currTo]
+extern int captureTable[12][64][6]; // [Piece][To][CapturedPiece]
 extern thread_local MoveInfo moveStack[MAX_PLY];
 
 void clear_history();
 void reset_movestack();
 void update_history(const Board& board, int color, int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount, int ply);
+void update_capture_history(int piece, int to, int capturedPieceType, int rawBonus);
 int get_history_score(int color, int fromSq, int toSq);
 int get_conhist_score(int piece, int to, int ply);
+int get_capture_score(int piece, int to, int capturedPieceType);
 
 #endif

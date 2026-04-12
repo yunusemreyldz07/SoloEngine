@@ -4,12 +4,15 @@
 
 int historyTable[2][64][64]; // color x fromSquare x toSquare
 int conhistTable[12][64][12][64]; // [prevPiece][prevTo][currPiece][currTo]
+int captureTable[12][64][6]; // [Piece][To][CapturedPiece]
+
 thread_local MoveInfo moveStack[MAX_PLY];
 constexpr int HISTORY_MAX = 16384;
 
 void clear_history() {
     std::memset(historyTable, 0, sizeof(historyTable));
     std::memset(conhistTable, 0, sizeof(conhistTable));
+    std::memset(captureTable, 0, sizeof(captureTable));
 }
 
 void reset_movestack() {
@@ -41,6 +44,17 @@ int get_conhist_score(int piece, int to, int ply) {
         }
     }
     return score;
+}
+
+// piece: 0-11 (renkli), capturedPieceType: 1-6 (renksiz)
+int get_capture_score(int piece, int to, int capturedPieceType) {
+    return captureTable[piece][to][capturedPieceType - 1];
+}
+
+// piece: 0-11 (renkli), capturedPieceType: 1-6 (renksiz), rawBonus: pozitif=bonus, negatif=malus
+void update_capture_history(int piece, int to, int capturedPieceType, int rawBonus) {
+    int& entry = captureTable[piece][to][capturedPieceType - 1];
+    entry += rawBonus - (entry * std::abs(rawBonus)) / HISTORY_MAX;
 }
 
 void update_history(const Board& board, int color, int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount, int ply) { 

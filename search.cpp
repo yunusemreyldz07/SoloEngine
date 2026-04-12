@@ -182,6 +182,9 @@ int scoreMove(Board& board, const Move& move, Move ttMove = 0, int ply = 0) {
             score += get_history_score(board.stm, from, to);
             score += get_conhist_score(piece - 1, to, ply);
         }
+    } else if (is_capture(move)) {
+        int victimType = flags == FLAG_EN_PASSANT ? PAWN : piece_type(board.mailbox[to]);
+        score += get_capture_score(piece - 1, to, victimType);
     }
 
     return score;
@@ -435,8 +438,11 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
         }
     }
 
+    struct CaptureInfo { int piece; int to; int capturedType; };
     Move badQuiets[MAX_MOVES];
     int badQuietCount = 0;
+    CaptureInfo badCaptureInfos[MAX_MOVES];
+    int badCaptureCount = 0;
     for (int movesSearched = 0; movesSearched < moveCount; ++movesSearched) {
         if (should_stop_search()) {
             aborted = true;
@@ -515,6 +521,15 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
             }
         }
 
+        // Saving the info because board changes after the unmake
+        int capturedPieceType = 0;
+        int movingPiece = board.mailbox[move_from(chosenMove)] - 1; // 0-11
+        if (is_capture(chosenMove)) {
+            int cflags = move_flags(chosenMove);
+            int cto = move_to(chosenMove);
+            capturedPieceType = (cflags == FLAG_EN_PASSANT) ? PAWN : piece_type(board.mailbox[cto]); // When en passant, the moved square will be empty
+        }
+
         moveStack[ply] = {board.mailbox[move_from(chosenMove)] - 1, move_to(chosenMove)};
         board.makeMove(chosenMove);
 
@@ -575,16 +590,30 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
 
         if (alpha >= beta) {
             ss->cutOffCount++;  // Increment cutoff counter
-            if (is_quiet(chosenMove)){
+            if (is_quiet(chosenMove)) {
                 update_history(board, board.stm, move_from(chosenMove), move_to(chosenMove), depth, badQuiets, badQuietCount, ply);
                 updateKillers(ply, chosenMove);
+            } else if (is_capture(chosenMove) && capturedPieceType > 0) {
+                int captureBonus = std::min(10 + 200 * depth, 4096);
+                int captureMalus = -captureBonus;
+                // Bonus for best capture
+                update_capture_history(movingPiece, move_to(chosenMove), capturedPieceType, captureBonus);
+                // Malus for bad captures searched before this one
+                for (int i = 0; i < badCaptureCount; ++i) {
+                    auto [bcPiece, bcTo, bcCaptured] = badCaptureInfos[i];
+                    update_capture_history(bcPiece, bcTo, bcCaptured, captureMalus);
+                }
             }
             break; // Beta cutoff
         }
 
-        if (is_quiet(chosenMove)){
+        if (is_quiet(chosenMove)) {
             if (badQuietCount < MAX_MOVES) {
                 badQuiets[badQuietCount++] = chosenMove;
+            }
+        } else if (is_capture(chosenMove) && capturedPieceType > 0) {
+            if (badCaptureCount < MAX_MOVES) {
+                badCaptureInfos[badCaptureCount++] = {movingPiece, move_to(chosenMove), capturedPieceType};
             }
         }
     }
