@@ -1,13 +1,14 @@
 # Solo - UCI Chess Engine
-**Version 2.0.1**
+**Version 2.1.0**
 
-A bitboard-based aggressive chess engine with advanced search techniques and evaluation.
+A bitboard-based aggressive chess engine with advanced search techniques and a neural network evaluation.
 
 ## Features
 
 - **Bitboard Representation**: 64-bit bitboards for efficient move generation
 - **Magic Bitboards**: Fast sliding piece attack generation using magic numbers
-- **Search Algorithm**: 
+
+- **Search Algorithm**:
   - Negamax with alpha-beta pruning
   - Iterative deepening
   - Aspiration windows
@@ -17,26 +18,27 @@ A bitboard-based aggressive chess engine with advanced search techniques and eva
   - Late Move Pruning (LMP)
   - Reverse Futility Pruning (RFP)
   - Futility Pruning (FP)
+  - Razoring
   - Static Exchange Evaluation (SEE) pruning
   - Internal Iterative Reductions (IIR)
   - Check extensions
+  - Singular Extensions (SE) with Multicut
+  - History Pruning
   - Quiescence search with SEE filtering
   - Repetition / draw detection in search
   - Soft/Hard time management
   - Transposition Table
-  - Singular Extensions (SE)
-  - Multicut
-  - History Pruning
 
 - **Move Ordering**:
   - TT move first
   - Good captures (SEE ≥ threshold) with MVV-LVA scoring
+  - Capture history (bonus/malus updated at beta cutoffs)
   - Killer moves
-  - History + continuation history for quiet moves (Bad quiets are penalized)
+  - Quiet history + continuation history (1-ply & 4-ply offsets)
   - Bad captures ordered last
 
 - **Evaluation**:
-  - 256HL NNUE net trained with 500M self-play generated data. Fine-tuned with 2M filtered aggressive positions. Estimated EAS score is 200k.
+  - 512HL NNUE trained on ~1 billion self-play generated positions, fine-tuned with filtered aggressive positions for playing style.
 
 ## Building
 
@@ -90,6 +92,7 @@ Runs a built-in benchmark on 12 positions at depth 8.
 |--------|------|---------|-------|-------------|
 | `Hash` | spin | 128 | 1-2048 | Transposition table size in MB |
 | `Threads` | spin | 1 | 1-8 | Number of search threads *(not implemented yet)* |
+| `Use_NNUE` | check | true | true/false | Toggle between NNUE and classical HCE evaluation |
 
 ## Strength
 
@@ -99,20 +102,20 @@ Runs a built-in benchmark on 12 positions at depth 8.
 ## Roadmap
 
 - [ ] Multi-threading support (Lazy SMP)
-- [ ] Continuation history (2 & 4 ply)
+- [ ] Correction history
 
 ## Project Structure
 ```
 ├── bitboard.cpp/h      # Magic bitboards & attack generation
 ├── board.cpp/h         # Board representation & move make/unmake
 ├── evaluation.cpp/h    # Tuned tapered evaluation & mobility
-├── history.cpp/h       # History heuristic for move ordering
+├── history.cpp/h       # History, continuation history & capture history
 ├── movegen.cpp         # Legal move generation
 ├── search.cpp/h        # Negamax search, pruning & reductions
 ├── uci.cpp/h           # UCI protocol handler
 ├── types.h             # Basic types & constants
-├── nnue.cpp/h          # NNUE evaluation
-├── datagen.cpp/h       # Data generation for training
+├── nnue.cpp/h          # NNUE evaluation (512 hidden layer)
+├── datagen.cpp/h       # Self-play data generation for training
 ├── main.cpp            # Entry point
 └── Makefile            # Build system
 ```
@@ -121,7 +124,7 @@ Runs a built-in benchmark on 12 positions at depth 8.
 
 - **Author**: xsolod3v
 - **Inspired by**: Patricia engine by Adam Kulju, Potential Engine by ProgramciDusunur
-- **Evaluation Base**: For HCE: PeSTO piece-square tables by Ronald Friederich (further tuned) For NNUE: 500M self-play generated data.
+- **Evaluation**: For HCE: PeSTO piece-square tables by Ronald Friederich (further tuned). For NNUE: self-play generated data.
 - **Resources**: Chess Programming Wiki, Potential source code, Ethereal source code, Patricia wiki
 
 ## License
