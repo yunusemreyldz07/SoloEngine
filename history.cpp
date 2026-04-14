@@ -19,7 +19,7 @@ void reset_movestack() {
 }
 
 static void update_conhist(int piece, int to, int bonus, int ply) {
-    constexpr int offsets[] = {1, 2};
+    constexpr int offsets[] = {1, 2, 4};
     for (int offset : offsets) {
         if (ply >= offset && moveStack[ply - offset].piece >= 0) {
             int prevPiece = moveStack[ply - offset].piece;
@@ -32,7 +32,7 @@ static void update_conhist(int piece, int to, int bonus, int ply) {
 
 int get_conhist_score(int piece, int to, int ply) {
     int score = 0;
-    constexpr int offsets[] = {1, 2};
+    constexpr int offsets[] = {1, 2, 4};
     for (int offset : offsets) {
         if (ply >= offset && moveStack[ply - offset].piece >= 0) {
             int prevPiece = moveStack[ply - offset].piece;
