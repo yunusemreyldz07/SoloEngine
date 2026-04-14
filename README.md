@@ -1,7 +1,10 @@
 # Solo - UCI Chess Engine
 **Version 2.1.0**
 
-A bitboard-based aggressive chess engine with advanced search techniques and a neural network evaluation.
+A bitboard-based chess engine with advanced search techniques and a neural network evaluation.
+
+### Note:
+Aggression was tested in earlier commits but was not released. I am planning to turn the engine into an aggressive engine when I got the NNUE done perfectly with input/output buckets and 1024HL. Currently, it uses 512HL net trained with self-play data.
 
 ## Features
 
@@ -32,13 +35,12 @@ A bitboard-based aggressive chess engine with advanced search techniques and a n
 - **Move Ordering**:
   - TT move first
   - Good captures (SEE ≥ threshold) with MVV-LVA scoring
-  - Capture history (bonus/malus updated at beta cutoffs)
   - Killer moves
-  - Quiet history + continuation history (1-ply & 4-ply offsets)
+  - History + continuation history (1, 2, 4 ply) for quiet moves (Bad quiets are penalized)
   - Bad captures ordered last
 
 - **Evaluation**:
-  - 512HL NNUE trained on ~1 billion self-play generated positions, fine-tuned with filtered aggressive positions for playing style.
+  - 512HL NNUE trained on ~1 billion self-play generated positions.
 
 ## Building
 
@@ -103,13 +105,14 @@ Runs a built-in benchmark on 12 positions at depth 8.
 
 - [ ] Multi-threading support (Lazy SMP)
 - [ ] Correction history
+- [ ] Better NNUE net with aggressiveness
 
 ## Project Structure
 ```
 ├── bitboard.cpp/h      # Magic bitboards & attack generation
 ├── board.cpp/h         # Board representation & move make/unmake
 ├── evaluation.cpp/h    # Tuned tapered evaluation & mobility
-├── history.cpp/h       # History, continuation history & capture history
+├── history.cpp/h       # History, continuation history
 ├── movegen.cpp         # Legal move generation
 ├── search.cpp/h        # Negamax search, pruning & reductions
 ├── uci.cpp/h           # UCI protocol handler
