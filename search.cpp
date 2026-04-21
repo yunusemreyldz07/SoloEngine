@@ -605,7 +605,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     }
 
     // pawn corrhist update
-    if (!aborted && depth >= 3 && !inCheck && std::abs(bestEval) < MATE_SCORE - MAX_PLY) {
+    if (!aborted && !ss->singularMove && depth >= 3 && !inCheck && std::abs(bestEval) < MATE_SCORE - MAX_PLY) {
         
         bool isFailLow = (flag == TT_BETA);
         bool isFailHigh = (flag == TT_ALPHA);
