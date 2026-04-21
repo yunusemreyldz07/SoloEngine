@@ -313,14 +313,20 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     bool firstMove = true; // for PVS
     int16_t eval = 0; 
 
-    const int16_t staticEval = evaluate_board(board);
-    ss->staticEval = staticEval;
-    ss->cutOffCount = 0;  // Initialize cutoff counter for this node
-    const bool pvNode = (beta - alpha > 1);
-
     int kingSq = 0;
     king_square(board, board.stm == WHITE, kingSq);
     bool inCheck = is_square_attacked(board, kingSq, board.stm != WHITE);
+
+    int16_t staticEval = evaluate_board(board);
+
+    if (!inCheck) {
+        int correction = get_pawn_correction(board);
+        staticEval = std::clamp<int>(staticEval + correction, -MATE_SCORE + MAX_PLY, MATE_SCORE - MAX_PLY);
+    }
+
+    ss->staticEval = staticEval;
+    ss->cutOffCount = 0;  // Initialize cutoff counter for this node
+    const bool pvNode = (beta - alpha > 1);
 
     if (inCheck) {
         depth++; // Check extension
@@ -368,9 +374,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     get_all_moves(board, moves, moveCount);
 
     if (moveCount == 0) {
-        int kingSq = -1;
-        king_square(board, board.stm == WHITE, kingSq);
-        if ((kingSq != -1) && is_square_attacked(board, kingSq, board.stm != WHITE)) {
+        if (inCheck) {
             return -MATE_SCORE + ply;
         }
         return 0; // Stalemate
@@ -599,6 +603,22 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     } else if (alpha >= beta) {
         flag = TT_ALPHA;
     }
+
+    // pawn corrhist update
+    if (!aborted && depth >= 3 && !inCheck && std::abs(bestEval) < MATE_SCORE - MAX_PLY) {
+        
+        bool isFailLow = (flag == TT_BETA);
+        bool isFailHigh = (flag == TT_ALPHA);
+        
+        if ((bestMove == 0 || is_quiet(bestMove)) &&
+            !(isFailLow && bestEval <= ss->staticEval) && 
+            !(isFailHigh && bestEval >= ss->staticEval)) {
+            
+            int diff = bestEval - ss->staticEval;
+            update_pawn_history(board, depth, diff);
+        }
+    }
+
     int16_t ttScore = bestEval;
 
     if (ttScore >= MATE_SCORE - MAX_PLY) {
