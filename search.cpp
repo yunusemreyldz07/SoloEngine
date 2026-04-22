@@ -313,11 +313,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     bool firstMove = true; // for PVS
     int16_t eval = 0; 
 
-    const int16_t staticEval = evaluate_board(board);
-    ss->staticEval = staticEval;
-    ss->cutOffCount = 0;  // Initialize cutoff counter for this node
-    const bool pvNode = (beta - alpha > 1);
-
+    // Compute inCheck first so we can skip corrhist in check positions
     int kingSq = 0;
     king_square(board, board.stm == WHITE, kingSq);
     bool inCheck = is_square_attacked(board, kingSq, board.stm != WHITE);
@@ -325,6 +321,13 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     if (inCheck) {
         depth++; // Check extension
     }
+
+    const int16_t rawStaticEval = evaluate_board(board);
+    // Apply pawn correction history when not in check
+    const int16_t staticEval = inCheck ? rawStaticEval : rawStaticEval + static_cast<int16_t>(get_corrhist_adj(board, board.stm));
+    ss->staticEval = staticEval;
+    ss->cutOffCount = 0;  // Initialize cutoff counter for this node
+    const bool pvNode = (beta - alpha > 1);
 
     int16_t originalAlpha = alpha;
     uint64_t hashKey = board.hash; 
@@ -587,6 +590,11 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
                 badQuiets[badQuietCount++] = chosenMove;
             }
         }
+    }
+
+    // Update pawn correction history (skip in check or singular search)
+    if (!inCheck && !ss->singularMove && !aborted) {
+        update_corrhist(board, board.stm, bestEval, rawStaticEval);
     }
 
     if (aborted) {

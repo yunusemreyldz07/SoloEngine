@@ -4,12 +4,14 @@
 
 int historyTable[2][64][64]; // color x fromSquare x toSquare
 int conhistTable[12][64][12][64]; // [prevPiece][prevTo][currPiece][currTo]
+int corrhistTable[2][CORRHIST_SIZE]; // [color][pawnKeyIndex]
 thread_local MoveInfo moveStack[MAX_PLY];
 constexpr int HISTORY_MAX = 16384;
 
 void clear_history() {
-    std::memset(historyTable, 0, sizeof(historyTable));
-    std::memset(conhistTable, 0, sizeof(conhistTable));
+    std::memset(historyTable,  0, sizeof(historyTable));
+    std::memset(conhistTable,  0, sizeof(conhistTable));
+    std::memset(corrhistTable, 0, sizeof(corrhistTable));
 }
 
 void reset_movestack() {
@@ -77,4 +79,22 @@ void update_history(const Board& board, int color, int fromSq, int toSq, int dep
 
 int get_history_score(int color, int fromSq, int toSq) {
     return historyTable[color][fromSq][toSq];
+}
+
+void update_corrhist(const Board& board, int stm, int16_t bestEval, int16_t rawStaticEval) {
+    int diff = (int)bestEval - (int)rawStaticEval;
+    diff = std::max(-512, std::min(512, diff)); // clamp to sane range
+
+    uint64_t pawnKey = board.piece[PAWN - 1]; // piece[0] = all pawns
+    int idx = (int)(pawnKey % CORRHIST_SIZE);
+
+    int& entry = corrhistTable[stm][idx];
+
+    entry += diff - (entry * std::abs(diff)) / HISTORY_MAX;
+}
+
+int get_corrhist_adj(const Board& board, int stm) {
+    uint64_t pawnKey = board.piece[PAWN - 1];
+    int idx = (int)(pawnKey % CORRHIST_SIZE);
+    return corrhistTable[stm][idx] / 16;
 }
