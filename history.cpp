@@ -82,19 +82,21 @@ int get_history_score(int color, int fromSq, int toSq) {
 }
 
 void update_corrhist(const Board& board, int stm, int16_t bestEval, int16_t rawStaticEval) {
+    // Guard
+    if (bestEval <= -30000) return;
+
     int diff = (int)bestEval - (int)rawStaticEval;
-    diff = std::max(-512, std::min(512, diff)); // clamp to sane range
+    diff = std::max(-64, std::min(64, diff));
 
     uint64_t pawnKey = board.piece[PAWN - 1]; // piece[0] = all pawns
     int idx = (int)(pawnKey % CORRHIST_SIZE);
 
     int& entry = corrhistTable[stm][idx];
-
     entry += diff - (entry * std::abs(diff)) / HISTORY_MAX;
 }
 
 int get_corrhist_adj(const Board& board, int stm) {
     uint64_t pawnKey = board.piece[PAWN - 1];
     int idx = (int)(pawnKey % CORRHIST_SIZE);
-    return corrhistTable[stm][idx] / 16;
+    return corrhistTable[stm][idx] / 64;
 }
