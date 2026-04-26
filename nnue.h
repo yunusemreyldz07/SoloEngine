@@ -30,6 +30,16 @@ inline void featureIndices(int piece, int sq, int& w_idx, int& b_idx) {
     w_idx = 64 * (piece - 1) + sq;
     b_idx = 64 * ((piece - 1 + 6) % 12) + (sq ^ 56);
 }
+struct DirtyState {
+    int16_t wAdd[2];
+    int16_t bAdd[2];
+    int16_t wSub[2];
+    int16_t bSub[2];
+    uint8_t type; // 0 = Quiet, 1 = Capture, 2 = Castling
+};
+
+void applyDirtyState(Accumulator* __restrict__ acc, const DirtyState& dirty);
+
 void applyQuietBoth(Accumulator* __restrict__ acc, int wAdd, int wSub, int bAdd, int bSub);
 void applyCaptureBoth(Accumulator* __restrict__ acc, int wAdd, int wSub1, int wSub2, int bAdd, int bSub1, int bSub2);
 void applyCastlingBoth(Accumulator* __restrict__ acc, int wAdd1, int wAdd2, int wSub1, int wSub2, int bAdd1, int bAdd2, int bSub1, int bSub2);

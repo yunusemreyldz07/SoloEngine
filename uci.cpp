@@ -282,7 +282,8 @@ int handle_uci_commands(int argc, char* argv[]){
             } else if (name == "Use_NNUE") {
                 USE_NNUE = (value == "true");
                 if (USE_NNUE) {
-                    RefreshAccumulator(board, &board.accumulator[0], &board.accumulator[1]);
+                    board.accValid[0] = true;
+                    RefreshAccumulator(board, &board.accStack[0][0], &board.accStack[0][1]);
                 }
             }
 

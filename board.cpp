@@ -9,6 +9,8 @@
 
 char columns[] = "abcdefgh";
 
+#define MAX_GAME_PLY 2048
+
 namespace {
 
 // Starting position bitboards
@@ -92,6 +94,8 @@ inline bool is_pawn_attack_possible(const Board& board, bool attackerIsWhite, in
 } // namespace
 
 Board::Board() {
+    accStack = std::make_unique<std::array<Accumulator, 2>[]>(MAX_GAME_PLY);
+    accValid = std::make_unique<bool[]>(MAX_GAME_PLY);
     reset();
 }
 
@@ -108,7 +112,8 @@ void Board::reset() {
     hash = position_key(*this);
 
     if (USE_NNUE) {
-        RefreshAccumulator(*this, &this->accumulator[0], &this->accumulator[1]);
+        accValid[0] = true;
+        RefreshAccumulator(*this, &this->accStack[0][0], &this->accStack[0][1]);
     }
 }
 
@@ -131,11 +136,9 @@ void Board::makeMove(Move move) {
         st.capturedPiece = mailbox[to]; 
     }
 
-    if (USE_NNUE) {
-        std::memcpy(st.accumulator, this->accumulator, sizeof(this->accumulator));
-    }
 
-    undoStack.push_back(st);
+
+
 
     const int fromSq = move_from(move);
     const int toSq = move_to(move);
@@ -150,6 +153,8 @@ void Board::makeMove(Move move) {
         halfMoveClock++;
     }
     if (USE_NNUE) {
+        DirtyState dirty = {};
+        
         // Feature indices for moving piece (from → to)
         int wFrom, bFrom, wTo, bTo;
         featureIndices(movingPiece, fromSq, wFrom, bFrom);
@@ -173,10 +178,11 @@ void Board::makeMove(Move move) {
             featureIndices(rookPiece, rookFromSq, wRookFrom, bRookFrom);
             featureIndices(rookPiece, rookToSq,   wRookTo,   bRookTo);
 
-            // King arrives, Rook arrives, King leaves, Rook leaves
-            applyCastlingBoth(this->accumulator,
-                              wTo, wRookTo, wFrom, wRookFrom,
-                              bTo, bRookTo, bFrom, bRookFrom);
+            dirty.type = 2;
+            dirty.wAdd[0] = (int16_t)wTo; dirty.wAdd[1] = (int16_t)wRookTo;
+            dirty.wSub[0] = (int16_t)wFrom; dirty.wSub[1] = (int16_t)wRookFrom;
+            dirty.bAdd[0] = (int16_t)bTo; dirty.bAdd[1] = (int16_t)bRookTo;
+            dirty.bSub[0] = (int16_t)bFrom; dirty.bSub[1] = (int16_t)bRookFrom;
         } else if (promo != -1) {
             // Promotion
             int placedPiece = make_piece(promo, piece_color(movingPiece));
@@ -187,14 +193,16 @@ void Board::makeMove(Move move) {
                 // Promotion + capture
                 int wCap, bCap;
                 featureIndices(st.capturedPiece, toSq, wCap, bCap);
-                applyCaptureBoth(this->accumulator,
-                                 wPromoTo, wFrom, wCap,
-                                 bPromoTo, bFrom, bCap);
+                dirty.type = 1;
+                dirty.wAdd[0] = (int16_t)wPromoTo;
+                dirty.wSub[0] = (int16_t)wFrom; dirty.wSub[1] = (int16_t)wCap;
+                dirty.bAdd[0] = (int16_t)bPromoTo;
+                dirty.bSub[0] = (int16_t)bFrom; dirty.bSub[1] = (int16_t)bCap;
             } else {
                 // Promotion without capture
-                applyQuietBoth(this->accumulator,
-                               wPromoTo, wFrom,
-                               bPromoTo, bFrom);
+                dirty.type = 0;
+                dirty.wAdd[0] = (int16_t)wPromoTo; dirty.wSub[0] = (int16_t)wFrom;
+                dirty.bAdd[0] = (int16_t)bPromoTo; dirty.bSub[0] = (int16_t)bFrom;
             }
         } else if (st.capturedPiece != EMPTY) {
             // Capture (including en passant)
@@ -205,16 +213,23 @@ void Board::makeMove(Move move) {
             int wCap, bCap;
             featureIndices(st.capturedPiece, cap_sq, wCap, bCap);
 
-            applyCaptureBoth(this->accumulator,
-                             wTo, wFrom, wCap,
-                             bTo, bFrom, bCap);
+            dirty.type = 1;
+            dirty.wAdd[0] = (int16_t)wTo;
+            dirty.wSub[0] = (int16_t)wFrom; dirty.wSub[1] = (int16_t)wCap;
+            dirty.bAdd[0] = (int16_t)bTo;
+            dirty.bSub[0] = (int16_t)bFrom; dirty.bSub[1] = (int16_t)bCap;
         } else {
             // Quiet move (includes double pawn push)
-            applyQuietBoth(this->accumulator,
-                           wTo, wFrom,
-                           bTo, bFrom);
+            dirty.type = 0;
+            dirty.wAdd[0] = (int16_t)wTo; dirty.wSub[0] = (int16_t)wFrom;
+            dirty.bAdd[0] = (int16_t)bTo; dirty.bSub[0] = (int16_t)bFrom;
         }
+        
+        st.dirty = dirty;
     }
+    
+    undoStack.push_back(st);
+    accValid[undoStack.size()] = false;
 
     // Add to move history for continuation history
     moveHistory.push_back(move);
@@ -408,9 +423,6 @@ void Board::unmakeMove(Move move) {
     halfMoveClock = st.halfMoveClock;
     this->hash = st.hash;
 
-    if (USE_NNUE) {
-        std::memcpy(this->accumulator, st.accumulator, sizeof(this->accumulator));
-    }
 }
 
 void Board::loadFEN(const std::string& fen) {
@@ -480,7 +492,27 @@ void Board::loadFEN(const std::string& fen) {
 
     hash = position_key(*this);
     if (USE_NNUE) {
-        RefreshAccumulator(*this, &this->accumulator[0], &this->accumulator[1]);
+        accValid[0] = true;
+        RefreshAccumulator(*this, &this->accStack[0][0], &this->accStack[0][1]);
+    }
+}
+
+void Board::ensureAccumulator(int ply) {
+    if (accValid[ply]) return;
+
+    int lastValid = ply;
+    while (lastValid >= 0 && !accValid[lastValid]) {
+        lastValid--;
+    }
+
+    for (int i = lastValid + 1; i <= ply; i++) {
+        // Copy base state from the previous ply
+        accStack[i] = accStack[i - 1];
+        
+        // Apply the dirty changes from the move that led to this ply
+        applyDirtyState(&accStack[i][0], undoStack[i - 1].dirty);
+        
+        accValid[i] = true;
     }
 }
 
