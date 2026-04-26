@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -180,7 +181,7 @@ struct UndoState {
     int16_t halfMoveClock; // 50 move rule counter before the move
     uint64_t hash;         // Position hash before the move (for repetition detection)
 
-    Accumulator accumulator[2]; // NNUE accumulator states for both sides before the move (for incremental updates)
+    DirtyState dirty;      // NNUE dirty state (lazy updates)
 };
 
 struct Board {
@@ -198,13 +199,15 @@ struct Board {
     int8_t mailbox[64];
     int16_t halfMoveClock;
 
-    Accumulator accumulator[2];
+    std::unique_ptr<std::array<Accumulator, 2>[]> accStack;
+    std::unique_ptr<bool[]> accValid;
 
     Board();
     void reset();
     void loadFEN(const std::string& fen);
     void makeMove(Move move);
     void unmakeMove(Move move);
+    void ensureAccumulator(int ply);
 };
 
 inline int row_col_to_sq(int row, int col) {

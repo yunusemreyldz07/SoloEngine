@@ -434,7 +434,10 @@ int evaluate_classical(const Board& board) {
 
 int evaluate_board(const Board& board) {
     if (USE_NNUE) {
-        return evaluate_nnue(board.accumulator[0], board.accumulator[1], board.stm);
+        Board& b = const_cast<Board&>(board);
+        int ply = b.undoStack.size();
+        b.ensureAccumulator(ply);
+        return evaluate_nnue(b.accStack[ply][0], b.accStack[ply][1], b.stm);
     } else {
         return evaluate_classical(board);
     }

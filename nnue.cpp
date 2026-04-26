@@ -25,6 +25,16 @@ int16_t outputBias;
 // Instead of running a lot of loops while updating the accumulator, 
 // we run a single loop that updates both accumulators at once and do add/sub in one loop.
 
+void applyDirtyState(Accumulator* __restrict__ acc, const DirtyState& dirty) {
+    if (dirty.type == 0) {
+        applyQuietBoth(acc, dirty.wAdd[0], dirty.wSub[0], dirty.bAdd[0], dirty.bSub[0]);
+    } else if (dirty.type == 1) {
+        applyCaptureBoth(acc, dirty.wAdd[0], dirty.wSub[0], dirty.wSub[1], dirty.bAdd[0], dirty.bSub[0], dirty.bSub[1]);
+    } else if (dirty.type == 2) {
+        applyCastlingBoth(acc, dirty.wAdd[0], dirty.wAdd[1], dirty.wSub[0], dirty.wSub[1], dirty.bAdd[0], dirty.bAdd[1], dirty.bSub[0], dirty.bSub[1]);
+    }
+}
+
 // Quiet move or non-capture promotion 
 // 1 add + 1 sub per perspective
 void applyQuietBoth(Accumulator* __restrict__ acc,
