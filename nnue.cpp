@@ -10,7 +10,6 @@ constexpr int INPUT_SIZE = 768;
 constexpr int HIDDEN_SIZE = 512;
 
 
-using Accumulator = std::array<int16_t, HIDDEN_SIZE>;
 
 
 // NNUE Weights and Biases
@@ -20,11 +19,7 @@ alignas(64) int16_t hiddenBias[HIDDEN_SIZE];
 alignas(64) int16_t outputWeight[HIDDEN_SIZE * 2]; 
 int16_t outputBias;
 
-int32_t screlu(int16_t x) {
-    int32_t y = x;
-    y = std::clamp(y, 0, 255);
-    return y * y;
-}
+
 
 // Optimization additions. 
 // Instead of running a lot of loops while updating the accumulator, 
@@ -32,7 +27,7 @@ int32_t screlu(int16_t x) {
 
 // Quiet move or non-capture promotion 
 // 1 add + 1 sub per perspective
-void applyQuietBoth(Accumulator acc[2],
+void applyQuietBoth(Accumulator* __restrict__ acc,
     int wAdd, int wSub,
     int bAdd, int bSub)
 {
@@ -48,7 +43,7 @@ void applyQuietBoth(Accumulator acc[2],
 
 // Capture
 // 1 add + 2 subs per perspective (moved piece arrives, moved piece leaves + captured piece removed)
-void applyCaptureBoth(Accumulator acc[2],
+void applyCaptureBoth(Accumulator* __restrict__ acc,
     int wAdd, int wSub1, int wSub2,
     int bAdd, int bSub1, int bSub2)
 {
@@ -66,7 +61,7 @@ void applyCaptureBoth(Accumulator acc[2],
 
 // Castling
 // 2 adds + 2 subs per perspective (king + rook each move)
-void applyCastlingBoth(Accumulator acc[2],
+void applyCastlingBoth(Accumulator* __restrict__ acc,
     int wAdd1, int wAdd2, int wSub1, int wSub2,
     int bAdd1, int bAdd2, int bSub1, int bSub2)
 {
@@ -157,8 +152,13 @@ int evaluate_nnue(const Accumulator& acc_white, const Accumulator& acc_black, in
     int32_t raw_sum = 0; 
 
     for (int i = 0; i < HIDDEN_SIZE; i++) {
-        raw_sum += screlu(us[i]) * outputWeight[i];
-        raw_sum += screlu(them[i]) * outputWeight[HIDDEN_SIZE + i];
+        int16_t v_us = std::clamp(us[i], (int16_t)0, (int16_t)255);
+        int16_t vw_us = v_us * outputWeight[i];
+        raw_sum += v_us * vw_us;
+
+        int16_t v_them = std::clamp(them[i], (int16_t)0, (int16_t)255);
+        int16_t vw_them = v_them * outputWeight[HIDDEN_SIZE + i];
+        raw_sum += v_them * vw_them;
     }
 
     // Turning it into a real chess score (QA=255, QB=64, Scale=400)
