@@ -313,7 +313,8 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     bool firstMove = true; // for PVS
     int16_t eval = 0; 
 
-    const int16_t staticEval = evaluate_board(board);
+    const int16_t rawEval = evaluate_board(board);
+    const int16_t staticEval = adjustEvalWithCorrectionHistory(&board, rawEval);
     ss->staticEval = staticEval;
     ss->cutOffCount = 0;  // Initialize cutoff counter for this node
     const bool pvNode = (beta - alpha > 1);
@@ -599,6 +600,14 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     } else if (alpha >= beta) {
         flag = TT_ALPHA;
     }
+
+    // Pawn corrhist
+    if (!inCheck && (bestMove == 0 || !is_capture(bestMove)) &&
+        !(flag == TT_ALPHA && bestEval <= staticEval) &&
+        !(flag == TT_BETA && bestEval >= staticEval)) {
+        updatePawnCorrectionHistory(&board, depth, bestEval - staticEval);
+    }
+
     int16_t ttScore = bestEval;
 
     if (ttScore >= MATE_SCORE - MAX_PLY) {

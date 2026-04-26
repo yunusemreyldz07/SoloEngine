@@ -107,6 +107,19 @@ void Board::reset() {
 
     hash = position_key(*this);
 
+    // Compute pawn hash from scratch
+    pawnHashTable = 0;
+    const Zobrist& z = zobrist();
+    for (int c = 0; c < 2; c++) {
+        Bitboard bb = piece[PAWN - 1] & color[c];
+        int zobIdx = piece_to_zobrist_index(make_piece(PAWN, c));
+        while (bb) {
+            int sq = lsb(bb);
+            bb &= bb - 1;
+            pawnHashTable ^= z.piece[zobIdx][sq];
+        }
+    }
+
     if (USE_NNUE) {
         RefreshAccumulator(*this, &this->accumulator[0], &this->accumulator[1]);
     }
@@ -121,6 +134,7 @@ void Board::makeMove(Move move) {
 
     UndoState st;
     st.hash = this->hash; // Store the current hash before making the move
+    st.pawnHashTable = this->pawnHashTable; // Store pawn hash before the move
     st.castling = castling;   
     st.enPassant = enPassant;
     st.halfMoveClock = halfMoveClock;
@@ -141,6 +155,22 @@ void Board::makeMove(Move move) {
     const int toSq = move_to(move);
     const int8_t movingPiece = mailbox[fromSq];
     int target_piece = mailbox[toSq];
+
+    // Incremental pawn hash update
+    if (piece_type(movingPiece) == PAWN) {
+        pawnHashTable ^= z.piece[piece_to_zobrist_index(movingPiece)][fromSq];
+        if (promo == -1) {
+            pawnHashTable ^= z.piece[piece_to_zobrist_index(movingPiece)][toSq];
+        }
+    }
+    if (target_piece != 0 && piece_type(target_piece) == PAWN) {
+        pawnHashTable ^= z.piece[piece_to_zobrist_index(target_piece)][toSq];
+    }
+    if (flags == 5) { // En passant: captured pawn is on a different square
+        int capSq = toSq + ((stm == WHITE) ? -8 : 8);
+        int capturedPawn = (stm == WHITE) ? B_PAWN : W_PAWN;
+        pawnHashTable ^= z.piece[piece_to_zobrist_index(capturedPawn)][capSq];
+    }
 
 
     // Update 50-move clock: reset on pawn move or capture, otherwise increment
@@ -407,6 +437,7 @@ void Board::unmakeMove(Move move) {
     enPassant = st.enPassant;
     halfMoveClock = st.halfMoveClock;
     this->hash = st.hash;
+    this->pawnHashTable = st.pawnHashTable;
 
     if (USE_NNUE) {
         std::memcpy(this->accumulator, st.accumulator, sizeof(this->accumulator));
@@ -479,6 +510,22 @@ void Board::loadFEN(const std::string& fen) {
     }
 
     hash = position_key(*this);
+
+    // Compute pawn hash from scratch
+    pawnHashTable = 0;
+    {
+        const Zobrist& z = zobrist();
+        for (int c = 0; c < 2; c++) {
+            Bitboard bb = piece[PAWN - 1] & color[c];
+            int zobIdx = piece_to_zobrist_index(make_piece(PAWN, c));
+            while (bb) {
+                int sq = lsb(bb);
+                bb &= bb - 1;
+                pawnHashTable ^= z.piece[zobIdx][sq];
+            }
+        }
+    }
+
     if (USE_NNUE) {
         RefreshAccumulator(*this, &this->accumulator[0], &this->accumulator[1]);
     }
@@ -614,6 +661,7 @@ uint64_t position_key(const Board& board) {
     if (board.stm == WHITE) h ^= z.side;
     return h;
 }
+
 
 bool is_repetition(const std::vector<uint64_t>& positionHistory, int16_t halfMoveClock) {
     int size = static_cast<int>(positionHistory.size());

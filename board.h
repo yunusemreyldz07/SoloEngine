@@ -179,6 +179,7 @@ struct UndoState {
     int8_t enPassant;     // EP column copy (-1 or 0-7)
     int16_t halfMoveClock; // 50 move rule counter before the move
     uint64_t hash;         // Position hash before the move (for repetition detection)
+    uint64_t pawnHashTable; // Pawn hash before the move (for correction history)
 
     Accumulator accumulator[2]; // NNUE accumulator states for both sides before the move (for incremental updates)
 };
@@ -187,6 +188,7 @@ struct Board {
     Bitboard piece[6];
     Bitboard color[2];
     uint64_t hash;
+    uint64_t pawnHashTable;
 
     uint8_t castling;
     int8_t enPassant;
