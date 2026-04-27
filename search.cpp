@@ -632,7 +632,6 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
     start_time_ms = searchStartMs;
     if (movetimeMs > 0) {
         long long safeTime = movetimeMs;
-        if (safeTime > 50) safeTime -= 20;
         long long softTime = (safeTime * 7) / 10;
         if (softTime < 1) softTime = 1;
         soft_time_limit_ms = softTime;
