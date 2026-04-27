@@ -383,7 +383,7 @@ int handle_uci_commands(int argc, char* argv[]){
                 if (myTime > 0) {
                     limits.timeToThink = (myTime / 20) + (myInc / 2);
                     if (limits.timeToThink >= myTime) {
-                        limits.timeToThink = myTime - 50;
+                        limits.timeToThink = myTime - 20;
                     }
                 } else {
                     limits.timeToThink = 10;

@@ -632,7 +632,6 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
     start_time_ms = searchStartMs;
     if (movetimeMs > 0) {
         long long safeTime = movetimeMs;
-        if (safeTime > 50) safeTime -= 20;
         long long softTime = (safeTime * 7) / 10;
         if (softTime < 1) softTime = 1;
         soft_time_limit_ms = softTime;
@@ -649,6 +648,12 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
     get_all_moves(board, moves, moveCount);
     if (moveCount == 0) return 0;
     Move bestMoveSoFar = moves[0];
+
+    // for smart time management
+    int bestMoveStableDepths = 0;
+    Move lastIterationBestMove = 0;
+    int16_t lastIterationScore = 0;
+    double tmMultiplier = 1.0;
 
     // Iterative Deepening
     for(int iterativeDepth = 1; iterativeDepth <= maxDepth; ++iterativeDepth) {
@@ -726,6 +731,52 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                 std::cout << move_to_uci(m) << " ";
             }
             std::cout << std::endl;
+        }
+
+        if (!pvLine.empty() && iterativeDepth > 1) {
+            Move currentBestMove = pvLine[0];
+            
+            // Move stability check
+            if (currentBestMove == lastIterationBestMove) {
+                bestMoveStableDepths++;
+            } else {
+                bestMoveStableDepths = 0; // 0 = Best move has changed
+            }
+
+            // unstable eval check
+            bool evalUnstable = false;
+            if (iterativeDepth > 3 && std::abs(score - lastIterationScore) > 30) {
+                evalUnstable = true;
+            }
+
+            // define the tm multiplier
+            tmMultiplier = 1.0;
+            if (bestMoveStableDepths >= 3) {
+                tmMultiplier *= 0.6; // move is stable. so use %60 
+            }
+            if (evalUnstable) {
+                tmMultiplier *= 1.4; // eval is unstable. give %40 more time to think
+            }
+
+            lastIterationBestMove = currentBestMove;
+            lastIterationScore = score;
+        }
+
+        // dynamic soft limit calculation
+        elapsedMs = now_ms() - searchStartMs;
+        if (elapsedMs < 0) elapsedMs = 0;
+        
+        long long adjustedSoftTime = (long long)(soft_time_limit_ms * tmMultiplier);
+        
+        // Do not let soft limit pass hard limit (just for security)
+        if (adjustedSoftTime > hard_time_limit_ms - 20) {
+            adjustedSoftTime = hard_time_limit_ms - 20; 
+        }
+
+        // stop searching
+        if (time_limited && iterativeDepth >= 3 && elapsedMs >= adjustedSoftTime) {
+            stop_search_local = true;
+            break;
         }
 
         if (soft_limit_reached()) {
