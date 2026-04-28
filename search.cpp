@@ -16,9 +16,6 @@
 #define MAX_MOVES 256
 #define SEE_THRESHOLD -82
 
-bool STM_Move_Stability = true;
-bool STM_Eval_Instability = false;
-
 namespace {
 // Global stop flag — set by UCI 'stop' command to interrupt all threads.
 std::atomic<bool> stop_search_global{false};
@@ -661,11 +658,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
     // Iterative Deepening
     for(int iterativeDepth = 1; iterativeDepth <= maxDepth; ++iterativeDepth) {
         resetSeldepth();
-
-        if (iterativeDepth > 1 && soft_limit_reached()) {
-            stop_search_local = true;
-            break;
-        }
+        
         if (should_stop_search()) break;
         
         int16_t alpha = -VALUE_INF;
@@ -754,10 +747,10 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
             // define the tm multiplier
             tmMultiplier = 1.0;
-            if (STM_Move_Stability && bestMoveStableDepths >= 3) {
+            if (bestMoveStableDepths >= 3) {
                 tmMultiplier *= 0.6; // move is stable. so use %60 
             }
-            if (STM_Eval_Instability && evalUnstable) {
+            if (evalUnstable) {
                 tmMultiplier *= 1.4; // eval is unstable. give %40 more time to think
             }
 
@@ -771,18 +764,15 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
         
         long long adjustedSoftTime = (long long)(soft_time_limit_ms * tmMultiplier);
         
-        // Do not let soft limit pass hard limit (just for security)
-        if (adjustedSoftTime > hard_time_limit_ms - 20) {
-            adjustedSoftTime = hard_time_limit_ms - 20; 
+        long long maxSafeTime = hard_time_limit_ms - 20;
+        if (maxSafeTime < 1) maxSafeTime = 1;
+
+        if (adjustedSoftTime > maxSafeTime) {
+            adjustedSoftTime = maxSafeTime; 
         }
 
         // stop searching
         if (time_limited && iterativeDepth >= 3 && elapsedMs >= adjustedSoftTime) {
-            stop_search_local = true;
-            break;
-        }
-
-        if (soft_limit_reached()) {
             stop_search_local = true;
             break;
         }

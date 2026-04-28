@@ -243,8 +243,6 @@ int handle_uci_commands(int argc, char* argv[]){
             std::cout << "option name Hash type spin default 128 min 1 max 2048" << std::endl;
             std::cout << "option name Threads type spin default 1 min 1 max 8" << std::endl;
             std::cout << "option name Use_NNUE type check default true" << std::endl;
-            std::cout << "option name STM_Move_Stability type check default true" << std::endl;
-            std::cout << "option name STM_Eval_Instability type check default true" << std::endl;
             std::cout << "uciok" << std::endl;
         }
         
@@ -287,10 +285,6 @@ int handle_uci_commands(int argc, char* argv[]){
                     board.accValid[0] = true;
                     RefreshAccumulator(board, &board.accStack[0][0], &board.accStack[0][1]);
                 }
-            } else if (name == "STM_Move_Stability") {
-                STM_Move_Stability = (value == "true");
-            } else if (name == "STM_Eval_Instability") {
-                STM_Eval_Instability = (value == "true");
             }
 
         }

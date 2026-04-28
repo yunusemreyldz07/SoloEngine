@@ -8,9 +8,6 @@ void resetNodeCounter();
 long long getNodeCounter();
 void requestSearchStop();
 
-extern bool STM_Move_Stability;
-extern bool STM_Eval_Instability;
-
 struct SearchStack {
     Move singularMove;
     int cutOffCount;
