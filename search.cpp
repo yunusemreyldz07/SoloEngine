@@ -12,6 +12,7 @@
 #include <chrono>
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 #define MAX_MOVES 256
 #define SEE_THRESHOLD -82
@@ -292,13 +293,14 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply, SearchStack*
     return bestEval;
 }
 
-int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, SearchStack* ss, std::vector<Move>& pvLine, std::vector<uint64_t>& positionHistory) {
+int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, SearchStack* ss, Move pvTable[][MAX_PLY], int pvLength[], std::vector<uint64_t>& positionHistory) {
     nodeCount++;
 
     const bool rootNode = (ply == 0);
 
     updateSeldepth(ply);
 
+    pvLength[ply] = ply; // Initialize PV length for this ply
     if (should_stop_search()) return 0;
     
     if (depth <= 0) {
@@ -420,8 +422,8 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
         positionHistory.push_back(board.hash);
 
         int R = 3 + (depth / 3);
-        std::vector<Move> nullPv;
-        int16_t nullScore = -negamax(board, depth - R, -beta, -beta + 1, ply + 1, ss + 1, nullPv, positionHistory);
+
+        int16_t nullScore = -negamax(board, depth - R, -beta, -beta + 1, ply + 1, ss + 1, pvTable, pvLength, positionHistory);
         
         positionHistory.pop_back();
 
@@ -430,14 +432,15 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
         board.hash = prevHash;
 
         if (nullScore >= beta) {
-            pvLine.clear();
             return beta; // Null-move cutoff
         }
     }
 
     Move badQuiets[MAX_MOVES];
     int badQuietCount = 0;
+    pvLength[ply] = ply;
     for (int movesSearched = 0; movesSearched < moveCount; ++movesSearched) {
+
         if (should_stop_search()) {
             aborted = true;
             break;
@@ -449,8 +452,6 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
         }
 
         bool isKiller = (ply < MAX_PLY && is_quiet(chosenMove) && (chosenMove == killerMoves[ply][0] || chosenMove == killerMoves[ply][1]));
-        
-        std::vector<Move> childPv; 
 
         // Singular Extensions
         int extension = 0;
@@ -465,9 +466,9 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
 
             int singularBeta = ttSeScore - depth;
             const int singularDepth = (depth - 1) / 2;
-            std::vector<Move> tmpPv;
+        
             ss->singularMove = chosenMove;
-            int16_t s = negamax(board, singularDepth, singularBeta - 1, singularBeta, ply, ss, tmpPv, positionHistory);
+            int16_t s = negamax(board, singularDepth, singularBeta - 1, singularBeta, ply, ss, pvTable, pvLength, positionHistory);
             ss->singularMove = 0;
 
             if (s < singularBeta) {
@@ -521,7 +522,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
         positionHistory.push_back(board.hash); // Add new position to history for repetition detection
         const int fullDepth = depth - 1 + extension;
         if (firstMove){
-            eval = -negamax(board, fullDepth, -beta, -alpha, ply + 1, ss + 1, childPv, positionHistory);
+            eval = -negamax(board, fullDepth, -beta, -alpha, ply + 1, ss + 1, pvTable, pvLength, positionHistory);
             firstMove = false;
         } else {
 
@@ -540,17 +541,15 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
             int lmrDepth = std::max(0, fullDepth - reduction);
 
 
-            eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, ss + 1, childPv, positionHistory); // PVS null window search
+            eval = -negamax(board, lmrDepth, -alpha - 1, -alpha, ply + 1, ss + 1, pvTable, pvLength, positionHistory); // PVS null window search
             
             if (reduction > 0 && eval > alpha) {
                 // if the eval suggest a better move we research
-                childPv.clear();
-                eval = -negamax(board, fullDepth, -alpha - 1, -alpha, ply + 1, ss + 1, childPv, positionHistory); // Re-search with no reduction
+                eval = -negamax(board, fullDepth, -alpha - 1, -alpha, ply + 1, ss + 1, pvTable, pvLength, positionHistory); // Re-search with no reduction
             }
             if (eval > alpha && eval < beta) {
                 // if we fail high search again with no reduction, and window
-                childPv.clear();
-                eval = -negamax(board, fullDepth, -beta, -alpha, ply + 1, ss + 1, childPv, positionHistory); // Re-search if we failed high
+                eval = -negamax(board, fullDepth, -beta, -alpha, ply + 1, ss + 1, pvTable, pvLength, positionHistory); // Re-search if we failed high
             }
         }
         if (!positionHistory.empty()) positionHistory.pop_back();
@@ -568,9 +567,13 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
         if (eval > alpha) { 
             alpha = eval;
             bestMove = chosenMove;
-            pvLine.clear();
-            pvLine.push_back(chosenMove);
-            pvLine.insert(pvLine.end(), childPv.begin(), childPv.end());
+            pvTable[ply][ply] = chosenMove;
+            
+            for (int j = ply + 1; j < pvLength[ply + 1]; j++) {
+                pvTable[ply][j] = pvTable[ply + 1][j];
+            }
+
+            pvLength[ply] = pvLength[ply + 1];
         }
 
         if (alpha >= beta) {
@@ -621,6 +624,10 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
     SearchStack ss[MAX_PLY + 8] = {};
 
+    Move pvTable[MAX_PLY][MAX_PLY];
+    int pvLength[MAX_PLY];
+    memset(pvLength, 0, sizeof(pvLength));
+
     std::vector<uint64_t> searchHistory = positionHistory;
 
     reset_movestack();
@@ -664,15 +671,14 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
         int16_t beta = VALUE_INF;
         int delta = 9;
         const bool useAspiration = (iterativeDepth >= 4);
-        std::vector<Move> pvLine;
+
         if (useAspiration) {
             alpha = std::max<int16_t>(alpha, static_cast<int16_t>(score - delta));
             beta = std::min<int16_t>(beta, static_cast<int16_t>(score + delta));
         }
 
         while (true) {
-            pvLine.clear();
-            int16_t searchScore = negamax(board, iterativeDepth, alpha, beta, ply, ss, pvLine, searchHistory);
+            int16_t searchScore = negamax(board, iterativeDepth, alpha, beta, ply, ss, pvTable, pvLength, searchHistory);
 
             if (should_stop_search()) {
                 break;
@@ -703,8 +709,8 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             break;
         }
 
-        if (!pvLine.empty()) {
-            bestMoveSoFar = pvLine[0];
+        if (pvLength[0] > 0) {
+            bestMoveSoFar = pvTable[0][0];
         }
 
         long long elapsedMs = now_ms() - searchStartMs;
@@ -722,14 +728,14 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                       << " score cp " << score
                       << " pv ";
 
-            for (Move m : pvLine) {
-                std::cout << move_to_uci(m) << " ";
+            for (int i = 0; i < pvLength[0]; i++) {
+                std::cout << move_to_uci(pvTable[0][i]) << " ";
             }
             std::cout << std::endl;
         }
 
-        if (!pvLine.empty() && iterativeDepth > 1) {
-            Move currentBestMove = pvLine[0];
+        if (pvLength[0] > 0 && iterativeDepth > 1) {
+            Move currentBestMove = pvTable[0][0];
             
             // Move stability check
             if (currentBestMove == lastIterationBestMove) {
