@@ -8,6 +8,9 @@ void resetNodeCounter();
 long long getNodeCounter();
 void requestSearchStop();
 
+extern bool STM_Move_Stability;
+extern bool STM_Eval_Instability;
+
 struct SearchStack {
     Move singularMove;
     int cutOffCount;
@@ -21,9 +24,9 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 void setSoftNodeLimit(long long nodes); // 0 or negative = no limit
 
 enum TTFlag : uint8_t {
-    TT_EXACT, // Exact Score (PV Node)
-    TT_ALPHA, // Lower bound (Fail-High)
-    TT_BETA   // Upper bound (Fail-Low)
+    TT_EXACT,
+    TT_ALPHA,
+    TT_BETA
 };
 
 

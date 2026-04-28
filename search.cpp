@@ -16,6 +16,9 @@
 #define MAX_MOVES 256
 #define SEE_THRESHOLD -82
 
+bool STM_Move_Stability = false;
+bool STM_Eval_Instability = true;
+
 namespace {
 // Global stop flag — set by UCI 'stop' command to interrupt all threads.
 std::atomic<bool> stop_search_global{false};
@@ -751,10 +754,10 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
 
             // define the tm multiplier
             tmMultiplier = 1.0;
-            if (bestMoveStableDepths >= 3) {
+            if (STM_Move_Stability && bestMoveStableDepths >= 3) {
                 tmMultiplier *= 0.6; // move is stable. so use %60 
             }
-            if (evalUnstable) {
+            if (STM_Eval_Instability && evalUnstable) {
                 tmMultiplier *= 1.4; // eval is unstable. give %40 more time to think
             }
 
