@@ -16,8 +16,8 @@
 #define MAX_MOVES 256
 #define SEE_THRESHOLD -82
 
-bool STM_Move_Stability = false;
-bool STM_Eval_Instability = true;
+bool STM_Move_Stability = true;
+bool STM_Eval_Instability = false;
 
 namespace {
 // Global stop flag — set by UCI 'stop' command to interrupt all threads.
