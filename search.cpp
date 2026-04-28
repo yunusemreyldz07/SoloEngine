@@ -652,17 +652,12 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
     // for smart time management
     int bestMoveStableDepths = 0;
     Move lastIterationBestMove = 0;
-    int16_t lastIterationScore = 0;
     double tmMultiplier = 1.0;
 
     // Iterative Deepening
     for(int iterativeDepth = 1; iterativeDepth <= maxDepth; ++iterativeDepth) {
         resetSeldepth();
-
-        if (iterativeDepth > 1 && soft_limit_reached()) {
-            stop_search_local = true;
-            break;
-        }
+        
         if (should_stop_search()) break;
         
         int16_t alpha = -VALUE_INF;
@@ -743,23 +738,13 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
                 bestMoveStableDepths = 0; // 0 = Best move has changed
             }
 
-            // unstable eval check
-            bool evalUnstable = false;
-            if (iterativeDepth > 3 && std::abs(score - lastIterationScore) > 30) {
-                evalUnstable = true;
-            }
-
             // define the tm multiplier
             tmMultiplier = 1.0;
             if (bestMoveStableDepths >= 3) {
                 tmMultiplier *= 0.6; // move is stable. so use %60 
             }
-            if (evalUnstable) {
-                tmMultiplier *= 1.4; // eval is unstable. give %40 more time to think
-            }
 
             lastIterationBestMove = currentBestMove;
-            lastIterationScore = score;
         }
 
         // dynamic soft limit calculation
@@ -768,9 +753,11 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
         
         long long adjustedSoftTime = (long long)(soft_time_limit_ms * tmMultiplier);
         
-        // Do not let soft limit pass hard limit (just for security)
-        if (adjustedSoftTime > hard_time_limit_ms - 20) {
-            adjustedSoftTime = hard_time_limit_ms - 20; 
+        long long maxSafeTime = hard_time_limit_ms - 20;
+        if (maxSafeTime < 1) maxSafeTime = 1;
+
+        if (adjustedSoftTime > maxSafeTime) {
+            adjustedSoftTime = maxSafeTime; 
         }
 
         // stop searching
@@ -779,10 +766,7 @@ Move getBestMove(Board& board, int maxDepth, int movetimeMs, const std::vector<u
             break;
         }
 
-        if (soft_limit_reached()) {
-            stop_search_local = true;
-            break;
-        }
+
 
         if (soft_node_limit_reached()) {
             stop_search_local = true;
