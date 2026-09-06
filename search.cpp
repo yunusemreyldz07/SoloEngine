@@ -105,6 +105,7 @@ void setSoftNodeLimit(long long nodes) {
 int LMR_TABLE[256][256];
 float LMR_BASE = 0.77f;
 float LMR_DIVISION = 2.32f;
+constexpr int LMR_HISTORY_DIVISOR = 16384;
 
 // Killer moves table: per-thread so datagen threads don't corrupt each other
 thread_local Move killerMoves[MAX_PLY][2];
@@ -580,6 +581,17 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
             }
         }
 
+        // Read history before makeMove changes the side and mailbox
+        int lmrHistoryAdjustment = 0;
+        if (!firstMove && depth > 1 && is_quiet(chosenMove)
+            && LMR_TABLE[std::min(depth, 255)][std::min(moveIndex, 255)] > 0) {
+            const int from = move_from(chosenMove);
+            const int to = move_to(chosenMove);
+            const int history = get_history_score(board.stm, from, to)
+                              + get_conhist_score(board.mailbox[from] - 1, to, ply);
+            lmrHistoryAdjustment = std::clamp(history / LMR_HISTORY_DIVISOR, -1, 1);
+        }
+
         moveStack[ply] = {board.mailbox[move_from(chosenMove)] - 1, move_to(chosenMove)};
         board.makeMove(chosenMove);
 
@@ -605,6 +617,7 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
                 int lmrTableMovesSearched = std::min(moveIndex, 255);
                 reduction = LMR_TABLE[lmrTableDepth][lmrTableMovesSearched]; // Increase reduction with depth
                 if (isKiller) reduction--; // Reduce killer moves less
+                reduction -= lmrHistoryAdjustment; // Good history: search one ply deeper
                 if (reduction < 0) reduction = 0;
                 if (reduction > depth - 1) reduction = depth - 1;
                 if (depth - 1 - reduction < 1) reduction = depth - 2; // Ensure we dont search negative depth
