@@ -19,6 +19,10 @@ void MovePicker::score_captures() {
         int attackerValue = PIECE_VALUES_MP[piece_type(piece_at_sq(board, from))];
 
         int score = victimValue * 10 - attackerValue;
+        
+        if (is_capture(move)) {
+            score += get_capture_history(board, move);
+        }
 
         if (ttMove != 0 && move == ttMove) {
             score += SCORE_TT_MOVE;

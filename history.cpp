@@ -7,9 +7,32 @@ int conhistTable[12][64][12][64]; // [prevPiece][prevTo][currPiece][currTo]
 thread_local MoveInfo moveStack[MAX_PLY];
 constexpr int HISTORY_MAX = 16384;
 
+namespace {
+int captureHistory[12][64][6]; // [moving piece][destination][victim type]
+
+int& capture_history_entry(const Board& board, Move move) {
+    const int piece = board.mailbox[move_from(move)] - 1;
+    const int to = move_to(move);
+    const int victim = move_flags(move) == FLAG_EN_PASSANT
+                     ? PAWN : piece_type(board.mailbox[to]);
+    return captureHistory[piece][to][victim - 1];
+}
+}
+
+int get_capture_history(const Board& board, Move move) {
+    return capture_history_entry(board, move);
+}
+
+void reward_capture_history(const Board& board, Move move, int depth) {
+    const int bonus = std::min(10 + 200 * depth, 4096);
+    int& entry = capture_history_entry(board, move);
+    entry += bonus - entry * bonus / HISTORY_MAX;
+}
+
 void clear_history() {
     std::memset(historyTable, 0, sizeof(historyTable));
     std::memset(conhistTable, 0, sizeof(conhistTable));
+    std::memset(captureHistory, 0, sizeof(captureHistory));
 }
 
 void reset_movestack() {

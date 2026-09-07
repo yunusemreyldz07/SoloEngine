@@ -18,5 +18,7 @@ void reset_movestack();
 void update_history(const Board& board, int color, int fromSq, int toSq, int depth, const Move badQuiets[256], const int& badQuietCount, int ply);
 int get_history_score(int color, int fromSq, int toSq);
 int get_conhist_score(int piece, int to, int ply);
+int get_capture_history(const Board& board, Move move);
+void reward_capture_history(const Board& board, Move move, int depth);
 
 #endif
