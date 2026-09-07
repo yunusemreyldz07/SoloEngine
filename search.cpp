@@ -439,7 +439,11 @@ int16_t negamax(Board& board, int depth, int16_t alpha, int16_t beta, int ply, S
     }
 
     // Null Move Pruning
-    if (!rootNode && !ss->singularMove && !ss->skipNullMove && !inCheck && depth >= 3 && !pvNode && ttAdjustedEval >= beta) {
+    // Avoid null move cutoffs when our only material is king and pawns
+    const bool hasNonPawnMaterial = ((board.piece[KNIGHT - 1] | board.piece[BISHOP - 1]
+                                   | board.piece[ROOK - 1] | board.piece[QUEEN - 1])
+                                   & board.color[board.stm]) != 0;
+    if (!rootNode && !ss->singularMove && !ss->skipNullMove && !inCheck && depth >= 3 && !pvNode && ttAdjustedEval >= beta && hasNonPawnMaterial) {
         const int prevEnPassant = board.enPassant;
         const uint64_t prevHash = board.hash;
 
