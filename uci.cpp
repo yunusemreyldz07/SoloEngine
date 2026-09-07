@@ -245,6 +245,7 @@ int handle_uci_commands(int argc, char* argv[]){
             std::cout << "option name Hash type spin default 128 min 1 max 2048" << std::endl;
             std::cout << "option name Threads type spin default 1 min 1 max 8" << std::endl;
             std::cout << "option name Use_NNUE type check default true" << std::endl;
+            std::cout << "option name EvalFile type string default <embedded>" << std::endl;
             std::cout << "uciok" << std::endl;
         }
         
@@ -282,6 +283,19 @@ int handle_uci_commands(int argc, char* argv[]){
                 ttTable.resize(mb);
                 ttTable.clear();
                 std::cout << "info string set Hash to " << mb << " MB, entries " << ttTable.count() << std::endl;
+            } else if (name == "EvalFile") {
+                stop_and_join_search();
+                if (load_nnue(value == "<embedded>" ? "" : value)) {
+                    ttTable.clear();
+                    clear_history();
+                    const size_t ply = board.undoStack.size();
+                    for (size_t i = 0; i <= ply; ++i) board.accValid[i] = false;
+                    RefreshAccumulator(board, &board.accStack[ply][0], &board.accStack[ply][1]);
+                    board.accValid[ply] = true;
+                    std::cout << "info string NNUE loaded" << std::endl;
+                } else {
+                    std::cout << "info string NNUE load failed; previous network retained" << std::endl;
+                }
             } else if (name == "Use_NNUE") {
                 USE_NNUE = (value == "true");
                 if (USE_NNUE) {

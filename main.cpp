@@ -18,7 +18,10 @@ int main(int argc, char* argv[]) {
     init_all();
     initLMRtables();
     if (USE_NNUE) {
-        load_nnue();
+        if (!load_nnue()) {
+            std::cerr << "Invalid embedded NNUE network" << std::endl;
+            return 1;
+        }
     }
     handle_uci_commands(argc, argv);
 }

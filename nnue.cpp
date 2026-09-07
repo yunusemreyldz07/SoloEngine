@@ -5,6 +5,8 @@
 #include <array>
 #include "board.h"
 #include <algorithm>
+#include <fstream>
+#include <vector>
 
 constexpr int INPUT_SIZE = 768;
 constexpr int HIDDEN_SIZE = 512;
@@ -16,8 +18,9 @@ constexpr int HIDDEN_SIZE = 512;
 alignas(64) int16_t hiddenWeight[INPUT_SIZE * HIDDEN_SIZE]; 
 alignas(64) int16_t hiddenBias[HIDDEN_SIZE];
 
-alignas(64) int16_t outputWeight[HIDDEN_SIZE * 2]; 
-int16_t outputBias;
+alignas(64) int16_t outputWeight[NNUE_OUTPUT_BUCKETS][HIDDEN_SIZE * 2];
+int16_t outputBias[NNUE_OUTPUT_BUCKETS];
+static int loadedOutputBuckets = 1;
 
 
 
@@ -118,19 +121,50 @@ int makeFeatureIndex(int piece_type, int piece_color, int square, int perspectiv
     return (pieceIdx * 64) + sq;
 }
 
-void load_nnue() {
+bool load_nnue(const std::string& filename) {
+    std::vector<unsigned char> fileData;
+    const unsigned char* data = nnue_data;
+    size_t size = sizeof(nnue_data);
+    if (!filename.empty()) {
+        std::ifstream file(filename, std::ios::binary | std::ios::ate);
+        if (!file) return false;
+        const auto length = file.tellg();
+        if (length <= 0 || length > 1024 * 1024) return false;
+        fileData.resize(static_cast<size_t>(length));
+        file.seekg(0);
+        if (!file.read(reinterpret_cast<char*>(fileData.data()), length)) return false;
+        data = fileData.data();
+        size = fileData.size();
+    }
+    constexpr size_t hiddenBytes = sizeof(hiddenWeight) + sizeof(hiddenBias);
+    constexpr size_t oldSize = hiddenBytes + (HIDDEN_SIZE * 2 + 1) * sizeof(int16_t);
+    constexpr size_t newSize = hiddenBytes + sizeof(outputWeight) + sizeof(outputBias);
+    int buckets;
+    if (size == oldSize || size == (oldSize + 63) / 64 * 64) buckets = 1;
+    else if (size == newSize || size == (newSize + 63) / 64 * 64) buckets = NNUE_OUTPUT_BUCKETS;
+    else return false;
+
+    // The fast squared activation assumes activation * output weight fits i16.
+    // Bullet's AdamW clipping (-1.98..1.98 with QB=64) satisfies this.
+    for (size_t i = 0; i < buckets * HIDDEN_SIZE * 2; ++i) {
+        int16_t weight;
+        std::memcpy(&weight, data + hiddenBytes + i * sizeof(weight), sizeof(weight));
+        if (weight < -128 || weight > 128) return false;
+    }
     size_t offset = 0;
 
-    std::memcpy(hiddenWeight, nnue_data + offset, sizeof(hiddenWeight));
+    std::memcpy(hiddenWeight, data + offset, sizeof(hiddenWeight));
     offset += sizeof(hiddenWeight);
 
-    std::memcpy(hiddenBias, nnue_data + offset, sizeof(hiddenBias));
+    std::memcpy(hiddenBias, data + offset, sizeof(hiddenBias));
     offset += sizeof(hiddenBias);
 
-    std::memcpy(outputWeight, nnue_data + offset, sizeof(outputWeight));
-    offset += sizeof(outputWeight);
-
-    std::memcpy(&outputBias, nnue_data + offset, sizeof(outputBias));
+    const size_t weightsBytes = buckets * sizeof(outputWeight[0]);
+    std::memcpy(outputWeight, data + offset, weightsBytes);
+    offset += weightsBytes;
+    std::memcpy(outputBias, data + offset, buckets * sizeof(outputBias[0]));
+    loadedOutputBuckets = buckets;
+    return true;
 }
 
 void RefreshAccumulator(const Board& board, Accumulator* acc_white, Accumulator* acc_black) {
@@ -155,7 +189,10 @@ void RefreshAccumulator(const Board& board, Accumulator* acc_white, Accumulator*
     }
 }
 
-int evaluate_nnue(const Accumulator& acc_white, const Accumulator& acc_black, int side_to_move) {
+int evaluate_nnue(const Accumulator& acc_white, const Accumulator& acc_black, int side_to_move, int pieceCount) {
+    // Same mapping as Bullet MaterialCount<8>, kings included.
+    const int bucket = loadedOutputBuckets == 1 ? 0 : std::clamp((pieceCount - 2) / 4, 0, 7);
+    const int16_t* weights = outputWeight[bucket];
     const Accumulator& us = (side_to_move == WHITE) ? acc_white : acc_black;
     const Accumulator& them = (side_to_move == WHITE) ? acc_black : acc_white;
 
@@ -163,16 +200,16 @@ int evaluate_nnue(const Accumulator& acc_white, const Accumulator& acc_black, in
 
     for (int i = 0; i < HIDDEN_SIZE; i++) {
         int16_t v_us = std::clamp(us[i], (int16_t)0, (int16_t)255);
-        int16_t vw_us = v_us * outputWeight[i];
+        int16_t vw_us = v_us * weights[i];
         raw_sum += v_us * vw_us;
 
         int16_t v_them = std::clamp(them[i], (int16_t)0, (int16_t)255);
-        int16_t vw_them = v_them * outputWeight[HIDDEN_SIZE + i];
+        int16_t vw_them = v_them * weights[HIDDEN_SIZE + i];
         raw_sum += v_them * vw_them;
     }
 
     // Turning it into a real chess score (QA=255, QB=64, Scale=400)
-    int finalScore = ((raw_sum / 255) + outputBias) * 400 / 16320; // 255 * 64 = 16320
+    int finalScore = ((raw_sum / 255) + outputBias[bucket]) * 400 / 16320; // 255 * 64 = 16320
     
     return finalScore;
 }

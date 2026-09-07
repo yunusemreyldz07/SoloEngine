@@ -437,7 +437,8 @@ int evaluate_board(const Board& board) {
         Board& b = const_cast<Board&>(board);
         int ply = b.undoStack.size();
         b.ensureAccumulator(ply);
-        return evaluate_nnue(b.accStack[ply][0], b.accStack[ply][1], b.stm);
+        return evaluate_nnue(b.accStack[ply][0], b.accStack[ply][1], b.stm,
+                             popcount(b.color[WHITE] | b.color[BLACK]));
     } else {
         return evaluate_classical(board);
     }
