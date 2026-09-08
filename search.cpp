@@ -275,9 +275,9 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply, SearchStack*
             continue;
         }
 
-        // QS Futility pruning: if the move is so bad that even with after adding the margin we are still below alpha, we can skip it. Only applies to quiet moves.
+        // QS Futility pruning: if the move is so bad that even with after adding the margin we are still below alpha, we can skip it
         int qsFutilityMargin = staticEval + 100;
-        if (qsFutilityMargin < alpha) {
+        if (qsFutilityMargin < alpha && !isInCheck) {
             continue;
         }
 
