@@ -17,6 +17,8 @@
 
 #define MAX_MOVES 256
 #define SEE_THRESHOLD -82
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 namespace {
 // Global stop flag — set by UCI 'stop' command to interrupt all threads.
@@ -259,7 +261,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply, SearchStack*
 
         bestEval = standPat;
     }
-    const int staticEval = ttHit ? ttEntry.score : evaluate_board(board);
+    const int staticEval = ttHit ? ttEntry.score : bestEval;
 
     const Move ttMove = ttHit ? ttEntry.bestMove : 0;
     MovePicker mp(board, ttHit ? ttEntry.bestMove : 0, 0, 0, 0, 
@@ -277,7 +279,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply, SearchStack*
 
         // QS Futility pruning: if the move is so bad that even with after adding the margin we are still below alpha, we can skip it
         int qsFutilityMargin = staticEval + 100;
-        if (qsFutilityMargin < alpha && !isInCheck && !staticExchangeEvaluation(board, captureMove, -8)) {
+        if (qsFutilityMargin < alpha && !isInCheck && !staticExchangeEvaluation(board, captureMove, 1) && captureMove != ttMove) {
             continue;
         }
 
