@@ -259,7 +259,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply, SearchStack*
 
         bestEval = standPat;
     }
-    const int staticEval = ttHit ? ttEntry.score : evaluate_board(board);
+    const int staticEval = evaluate_board(board);
 
     const Move ttMove = ttHit ? ttEntry.bestMove : 0;
     MovePicker mp(board, ttHit ? ttEntry.bestMove : 0, 0, 0, 0, 
