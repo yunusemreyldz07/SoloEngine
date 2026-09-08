@@ -259,6 +259,7 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply, SearchStack*
 
         bestEval = standPat;
     }
+    const int staticEval = ttHit ? ttEntry.score : evaluate_board(board);
 
     const Move ttMove = ttHit ? ttEntry.bestMove : 0;
     MovePicker mp(board, ttHit ? ttEntry.bestMove : 0, 0, 0, 0, 
@@ -271,6 +272,12 @@ int16_t qsearch(Board& board, int16_t alpha, int16_t beta, int ply, SearchStack*
     while ((captureMove = mp.next_move()) != 0) {
 
         if (captureMove != ttMove && !staticExchangeEvaluation(board, captureMove, 0) && !isInCheck) { // SEE QS PRUNING
+            continue;
+        }
+
+        // QS Futility pruning: if the move is so bad that even with after adding the margin we are still below alpha, we can skip it. Only applies to quiet moves.
+        int qsFutilityMargin = staticEval + 100;
+        if (qsFutilityMargin < alpha) {
             continue;
         }
 
